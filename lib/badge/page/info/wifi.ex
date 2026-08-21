@@ -1,0 +1,199 @@
+defmodule Badge.Page.Info.Wifi do
+  @moduledoc """
+  Joining a network from the badge: scan, pick, type a passphrase, connect.
+
+  Up and down are consumed so they never reach the carousel; left and right
+  are left alone in list mode so sliding between sub-pages keeps working, and
+  consumed in passphrase mode so typing cannot fling you sideways.
+
+  Escape is consumed only in passphrase mode, to back out to the list. At the
+  top level it is ignored, so the router still reaches the home grid.
+  """
+
+  use Badge.Page
+
+  alias Badge.Field
+  alias Badge.Network
+  alias Badge.Page.Info
+  alias Badge.Readout
+  alias Badge.Theme
+  alias Badge.Wifi
+
+  @accent Theme.accent()
+  @fg Theme.fg()
+  @dim Theme.dim()
+  @bg Theme.bg()
+
+  # WPA2's maximum passphrase length.
+  @capacity 63
+
+  @rows 6
+  @row_x 8
+  @cursor_x 0
+  @help_y 216
+
+  @impl true
+  def title, do: "Wifi"
+
+  @impl true
+  def init do
+    %{
+      mode: :list,
+      cursor: 0,
+      networks: [],
+      scan_id: 0,
+      field: Field.new(@capacity),
+      chosen: nil,
+      status: %{radio: :disabled, scanning: false, scan_id: 0}
+    }
+  end
+
+  @impl true
+  def tick(state) do
+    status = Wifi.status()
+
+    case status.scan_id == state.scan_id do
+      true ->
+        %{state | status: status}
+
+      false ->
+        %{state | status: status, scan_id: status.scan_id, networks: Wifi.networks(), cursor: 0}
+    end
+  end
+
+  @impl true
+  def handle_key(event, %{mode: :passphrase} = state), do: passphrase_key(event, state)
+  def handle_key(event, state), do: list_key(event, state)
+
+  # List mode: up and down are ours, left and right belong to the carousel.
+  defp list_key({:move, :up}, state), do: {:ok, move(state, -1)}
+  defp list_key({:move, :down}, state), do: {:ok, move(state, 1)}
+
+  defp list_key({:char, char}, state) when char == ?s or char == ?S do
+    Wifi.scan()
+
+    {:ok, state}
+  end
+
+  defp list_key({:edit, :newline}, %{networks: []} = state), do: {:ok, state}
+
+  defp list_key({:edit, :newline}, state), do: {:ok, choose(state, selected(state))}
+
+  defp list_key(_event, _state), do: :ignore
+
+  # Passphrase mode: escape backs out, and the arrows are swallowed so typing stays put.
+  defp passphrase_key({:nav, :home}, state), do: {:ok, to_list(state)}
+  defp passphrase_key({:move, _direction}, state), do: {:ok, state}
+
+  defp passphrase_key({:char, char}, state) do
+    {:ok, %{state | field: Field.insert(state.field, char)}}
+  end
+
+  defp passphrase_key({:edit, :backspace}, state) do
+    {:ok, %{state | field: Field.backspace(state.field)}}
+  end
+
+  defp passphrase_key({:edit, :newline}, state) do
+    Wifi.connect(state.chosen.ssid, Field.value(state.field))
+
+    {:ok, to_list(state)}
+  end
+
+  defp passphrase_key(_event, state), do: {:ok, state}
+
+  defp choose(state, network) do
+    case Network.secured?(network) do
+      false ->
+        Wifi.connect(network.ssid, "")
+
+        state
+
+      true ->
+        %{state | mode: :passphrase, chosen: network, field: Field.new(@capacity)}
+    end
+  end
+
+  defp to_list(state) do
+    %{state | mode: :list, chosen: nil, field: Field.new(@capacity)}
+  end
+
+  defp selected(state), do: :lists.nth(state.cursor + 1, state.networks)
+
+  defp move(%{networks: []} = state, _delta), do: state
+
+  defp move(state, delta) do
+    %{state | cursor: clamp(state.cursor + delta, length(state.networks) - 1)}
+  end
+
+  defp clamp(index, _last) when index < 0, do: 0
+  defp clamp(index, last) when index > last, do: last
+  defp clamp(index, _last), do: index
+
+  @impl true
+  def render(%{mode: :passphrase} = state) do
+    [
+      {:text, @row_x, Info.content_top(), :default16px, @dim, @bg, "join"},
+      {:text, 120, Info.content_top(), :default16px, @fg, @bg, state.chosen.ssid},
+      {:text, @row_x, Info.content_top() + 26, :default16px, @accent, @bg,
+       Field.masked(state.field) <> "_"},
+      help("Enter join   Esc back")
+    ]
+  end
+
+  def render(state) do
+    status_row(state) ++ [help(list_help(state))] ++ rows(state)
+  end
+
+  defp status_row(state) do
+    Readout.rows([{"wifi", radio(state.status.radio)}], Info.content_top())
+  end
+
+  defp radio(:connected), do: "connected"
+  defp radio(:connecting), do: "connecting"
+  defp radio(_radio), do: "off"
+
+  defp list_help(%{networks: []}), do: "s to scan for networks"
+  defp list_help(_state), do: "up/down pick   Enter join   s rescan"
+
+  defp rows(%{status: %{scanning: true}}) do
+    [{:text, @row_x, first_row(), :default16px, @dim, @bg, "scanning..."}]
+  end
+
+  defp rows(%{networks: []}), do: []
+
+  defp rows(state) do
+    visible = window(state.networks, first_visible(state), @rows, [])
+
+    network_items(visible, first_visible(state), state.cursor, first_row(), [])
+  end
+
+  defp first_row, do: Info.content_top() + Readout.pitch() + 8
+
+  # Scrolls only once the cursor would fall off the bottom.
+  defp first_visible(%{cursor: cursor}) when cursor < @rows, do: 0
+  defp first_visible(%{cursor: cursor}), do: cursor - @rows + 1
+
+  defp window(_networks, _skip, 0, acc), do: :lists.reverse(acc)
+  defp window([], _skip, _left, acc), do: :lists.reverse(acc)
+
+  defp window([_network | rest], skip, left, acc) when skip > 0,
+    do: window(rest, skip - 1, left, acc)
+
+  defp window([network | rest], _skip, left, acc), do: window(rest, 0, left - 1, [network | acc])
+
+  defp network_items([], _index, _cursor, _y, acc), do: :lists.reverse(acc)
+
+  defp network_items([network | rest], index, cursor, y, acc) do
+    colour = if index == cursor, do: @accent, else: @fg
+    marker = if index == cursor, do: ">", else: " "
+
+    items = [
+      {:text, @row_x, y, :default16px, colour, @bg, Network.label(network)},
+      {:text, @cursor_x, y, :default16px, @accent, @bg, marker}
+    ]
+
+    network_items(rest, index + 1, cursor, y + Readout.pitch(), items ++ acc)
+  end
+
+  defp help(text), do: {:text, @row_x, @help_y, :default16px, @dim, @bg, text}
+end

@@ -15,13 +15,14 @@ defmodule Badge.Page.Info do
 
   alias Badge.Page.Info.Power
   alias Badge.Page.Info.Sensors
+  alias Badge.Page.Info.Wifi
   alias Badge.Theme
 
   @fg Theme.fg()
   @dim Theme.dim()
   @bg Theme.bg()
 
-  @subpages [Sensors, Power]
+  @subpages [Sensors, Power, Wifi]
   @count length(@subpages)
 
   @char_w 8
@@ -110,7 +111,7 @@ defmodule Badge.Page.Info do
   end
 
   defp strip_label([module | rest], index, position, acc) do
-    strip_label(rest, index, position + 1, [name(module, index, position), " . " | acc])
+    strip_label(rest, index, position + 1, [name(module, index, position), " | " | acc])
   end
 
   defp name(module, index, index), do: "[" <> module.title() <> "]"

@@ -13,6 +13,7 @@ defmodule Badge.Wifi do
   use GenServer
 
   alias Badge.Clock
+  alias Badge.Network
   alias Badge.Nvs
 
   @compile {:no_warn_undefined, :network}
@@ -32,6 +33,24 @@ defmodule Badge.Wifi do
     GenServer.call(__MODULE__, :status)
   end
 
+  @doc "Starts a scan for nearby networks; results arrive asynchronously."
+  @spec scan() :: :ok
+  def scan do
+    GenServer.cast(__MODULE__, :scan)
+  end
+
+  @doc "Joins a network, saving the credentials only once it works."
+  @spec connect(binary, binary) :: :ok
+  def connect(ssid, psk) do
+    GenServer.cast(__MODULE__, {:connect, ssid, psk})
+  end
+
+  @doc "Networks seen by the last completed scan, strongest first."
+  @spec networks() :: [map]
+  def networks do
+    GenServer.call(__MODULE__, :networks)
+  end
+
   @doc "Title bar icon for a radio state."
   @spec icon(atom) :: atom
   def icon(:connected), do: :wifi
@@ -43,7 +62,12 @@ defmodule Badge.Wifi do
       radio: :disabled,
       synced: false,
       offset: Clock.offset_minutes(Nvs.get(:utc_offset_m)),
-      backoff: @first_backoff
+      backoff: @first_backoff,
+      started: false,
+      scanning: false,
+      networks: [],
+      scan_id: 0,
+      pending: nil
     }
 
     {:ok, state, {:continue, :start_radio}}
@@ -58,17 +82,55 @@ defmodule Badge.Wifi do
 
         {:noreply, state}
 
-      {ssid, psk} ->
+      {ssid, _psk} ->
         :io.format(~c"Wifi: connecting to ~s~n", [ssid])
-        start_radio(ssid, psk)
+        started = ensure_started(state)
+        :network.sta_connect()
 
-        {:noreply, %{state | radio: :connecting}}
+        {:noreply, %{started | radio: :connecting}}
     end
   end
 
   @impl true
   def handle_call(:status, _from, state) do
-    {:reply, %{radio: state.radio, synced: state.synced, offset: state.offset}, state}
+    status = %{
+      radio: state.radio,
+      synced: state.synced,
+      offset: state.offset,
+      scanning: state.scanning,
+      scan_id: state.scan_id
+    }
+
+    {:reply, status, state}
+  end
+
+  def handle_call(:networks, _from, state) do
+    {:reply, state.networks, state}
+  end
+
+  @impl true
+  def handle_cast(:scan, %{scanning: true} = state), do: {:noreply, state}
+
+  def handle_cast(:scan, state) do
+    started = ensure_started(state)
+
+    case :network.wifi_scan() do
+      :ok ->
+        {:noreply, %{started | scanning: true}}
+
+      {:error, reason} ->
+        :io.format(~c"Wifi: scan refused, ~p~n", [reason])
+
+        {:noreply, started}
+    end
+  end
+
+  def handle_cast({:connect, ssid, psk}, state) do
+    :io.format(~c"Wifi: joining ~s~n", [ssid])
+    started = ensure_started(state)
+    :network.sta_connect(ssid: ssid, psk: psk)
+
+    {:noreply, %{started | radio: :connecting, pending: {ssid, psk}}}
   end
 
   @impl true
@@ -81,7 +143,20 @@ defmodule Badge.Wifi do
   def handle_info({:got_ip, info}, state) do
     :io.format(~c"Wifi: got ip ~p~n", [info])
 
-    {:noreply, %{state | radio: :connected}}
+    {:noreply, %{save(state) | radio: :connected}}
+  end
+
+  def handle_info({:scan_results, {_count, found}}, state) do
+    networks = Network.usable(found)
+    :io.format(~c"Wifi: scan found ~p networks~n", [length(networks)])
+
+    {:noreply, %{state | scanning: false, networks: networks, scan_id: state.scan_id + 1}}
+  end
+
+  def handle_info({:scan_results, {:error, reason}}, state) do
+    :io.format(~c"Wifi: scan failed, ~p~n", [reason])
+
+    {:noreply, %{state | scanning: false, scan_id: state.scan_id + 1}}
   end
 
   def handle_info(:disconnected, state) do
@@ -103,6 +178,17 @@ defmodule Badge.Wifi do
     {:noreply, %{state | synced: true}}
   end
 
+  # Credentials are only stored once they are known to work.
+  defp save(%{pending: nil} = state), do: state
+
+  defp save(%{pending: {ssid, psk}} = state) do
+    Nvs.put(:wifi_ssid, ssid)
+    Nvs.put(:wifi_psk, psk)
+    :io.format(~c"Wifi: saved ~s~n", [ssid])
+
+    %{state | pending: nil}
+  end
+
   defp credentials do
     case {Nvs.get(:wifi_ssid), Nvs.get(:wifi_psk)} do
       {nil, _psk} -> nil
@@ -111,23 +197,38 @@ defmodule Badge.Wifi do
     end
   end
 
-  # The callbacks run inside :network's process, so they only ever post a message back.
-  defp start_radio(ssid, psk) do
+  defp ensure_started(%{started: true} = state), do: state
+
+  # Managed mode brings the driver up without associating, so scanning works
+  # before any credentials exist.
+  defp ensure_started(state) do
     wifi = self()
 
+    sta =
+      [
+        :managed,
+        {:scan_done, wifi},
+        {:connected, fn -> send(wifi, :connected) end},
+        {:got_ip, fn info -> send(wifi, {:got_ip, info}) end},
+        {:disconnected, fn -> send(wifi, :disconnected) end}
+      ] ++ configured_credentials()
+
     :network.start(
-      sta: [
-        ssid: ssid,
-        psk: psk,
-        connected: fn -> send(wifi, :connected) end,
-        got_ip: fn info -> send(wifi, {:got_ip, info}) end,
-        disconnected: fn -> send(wifi, :disconnected) end
-      ],
+      sta: sta,
       sntp: [
         host: @sntp_host,
         synchronized: fn timeval -> send(wifi, {:synchronized, timeval}) end
       ]
     )
+
+    %{state | started: true}
+  end
+
+  defp configured_credentials do
+    case credentials() do
+      nil -> []
+      {ssid, psk} -> [{:ssid, ssid}, {:psk, psk}]
+    end
   end
 
   # Sleeps in a linked process rather than using Process.send_after/3.

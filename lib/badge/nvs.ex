@@ -2,8 +2,8 @@ defmodule Badge.Nvs do
   @moduledoc """
   Reads provisioned settings out of the `:badge` NVS namespace.
 
-  Values are written by `tools/provision_wifi.py` and never by the firmware,
-  so this module is read-only.
+  Values are written either by `tools/provision_wifi.py` or by the wifi
+  settings page once a connection succeeds.
   """
 
   @compile {:no_warn_undefined, :esp}
@@ -18,5 +18,11 @@ defmodule Badge.Nvs do
       :undefined -> nil
       value -> value
     end
+  end
+
+  @doc "Stores a value for a provisioned key."
+  @spec put(atom, binary) :: :ok | {:error, term}
+  def put(key, value) do
+    :esp.nvs_set_binary(@namespace, key, value)
   end
 end
