@@ -24,8 +24,6 @@ defmodule Badge.Page.Home do
   @cols_x [0, 107, 214]
   @rows_y [@top, @top + @cell_h + 2]
 
-  @icon_size Icons.size()
-  @icon_dx div(@cell_w - @icon_size, 2)
   @icon_dy 22
   @label_dy 64
   @char_w 8
@@ -64,7 +62,8 @@ defmodule Badge.Page.Home do
   defp cell_items([{_key, module} | pages], [{x, y} | origins], acc) do
     label = module.title()
 
-    icon = Icons.item(module.icon(), x + @icon_dx, y + @icon_dy)
+    {icon_w, _icon_h} = Icons.size(module.icon())
+    icon = Icons.item(module.icon(), x + div(@cell_w - icon_w, 2), y + @icon_dy)
 
     text =
       {:text, x + div(@cell_w - @char_w * byte_size(label), 2), y + @label_dy, :default16px, @fg,
