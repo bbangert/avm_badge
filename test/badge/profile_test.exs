@@ -52,33 +52,51 @@ defmodule Badge.ProfileTest do
     end
 
     test "the name is not repeated below the rule" do
-      refute "Gus" in Profile.lines(with_values(%{name: "Gus"}))
+      assert Profile.lines(with_values(%{name: "Gus"})) == []
     end
 
     test "fields keep their declared order" do
-      profile = with_values(%{name: "G", company: "C", email: "E", note: "N"})
+      profile = with_values(%{name: "G", company: "C", email: "E", links: "L"})
 
-      assert Profile.lines(profile) == ["C", "E", "N"]
+      assert Profile.lines(profile) == [{:company, "C"}, {:email, "E"}, {:link, "L"}]
     end
 
-    test "handles carry their marker" do
-      assert Profile.lines(with_values(%{github: "gusrs"})) == ["gh gusrs"]
-      assert Profile.lines(with_values(%{bluesky: "a.b"})) == ["@a.b"]
+    test "handles carry an icon instead of a text marker" do
+      assert Profile.lines(with_values(%{github: "gusrs"})) == [{:github, "gusrs"}]
+      assert Profile.lines(with_values(%{bluesky: "a.b"})) == [{:bluesky, "a.b"}]
+      assert Profile.lines(with_values(%{mastodon: "a@b.c"})) == [{:mastodon, "a@b.c"}]
+      assert Profile.lines(with_values(%{email: "a@b.c"})) == [{:email, "a@b.c"}]
+    end
+
+    test "every icon a field asks for actually exists" do
+      for key <- Profile.keys(), Profile.icon(key) != nil do
+        assert Profile.icon(key) in Badge.Icons.names()
+      end
+    end
+
+    test "the name and its own line carry no icon" do
+      assert Profile.icon(:name) == nil
+    end
+
+    test "every field but the name has one, so the badge reads as a list" do
+      for key <- Profile.keys(), key != Profile.required() do
+        assert Profile.icon(key) != nil
+      end
     end
 
     test "several links become several lines" do
       lines = Profile.lines(with_values(%{links: "one.example two.example three.example"}))
 
-      assert lines == ["one.example", "two.example", "three.example"]
+      assert lines == [{:link, "one.example"}, {:link, "two.example"}, {:link, "three.example"}]
     end
 
     test "a single link is still one line" do
-      assert Profile.lines(with_values(%{links: "one.example"})) == ["one.example"]
+      assert Profile.lines(with_values(%{links: "one.example"})) == [{:link, "one.example"}]
     end
 
     test "extra spaces between links do not make empty lines" do
       assert Profile.lines(with_values(%{links: "  a.example   b.example  "})) ==
-               ["a.example", "b.example"]
+               [{:link, "a.example"}, {:link, "b.example"}]
     end
   end
 end

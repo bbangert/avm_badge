@@ -10,6 +10,7 @@ defmodule Badge.Page.Name do
 
   alias Badge.Field
   alias Badge.Font
+  alias Badge.Icons
   alias Badge.Profile
   alias Badge.Text
   alias Badge.Theme
@@ -17,6 +18,7 @@ defmodule Badge.Page.Name do
   @accent Theme.accent()
   @fg Theme.fg()
   @dim Theme.dim()
+  @muted Theme.muted()
   @bg Theme.bg()
 
   @margin 16
@@ -37,7 +39,11 @@ defmodule Badge.Page.Name do
   @rule_h 2
   @rule_w 200
 
-  @detail_pitch 18
+  @detail_pitch 20
+  @icon_w 16
+
+  # Every detail line starts at the same x, icon or not, so they stay aligned.
+  @detail_x @margin + @icon_w + 6
   @hint_y 216
 
   @alert Theme.alert()
@@ -195,11 +201,15 @@ defmodule Badge.Page.Name do
 
   defp detail_items(_lines, y, acc) when y + @detail_pitch > @hint_y, do: :lists.reverse(acc)
 
-  defp detail_items([line | rest], y, acc) do
-    item = {:text, @margin, y, :default16px, @fg, @bg, line}
+  defp detail_items([{icon, text} | rest], y, acc) do
+    item = {:text, @detail_x, y, :default16px, @muted, @bg, text}
 
-    detail_items(rest, y + @detail_pitch, [item | acc])
+    detail_items(rest, y + @detail_pitch, [item | acc] ++ badge_icon(icon, y))
   end
+
+  # The icon sits a little above the text baseline so the two line up by eye.
+  defp badge_icon(nil, _y), do: []
+  defp badge_icon(icon, y), do: [Icons.item(icon, @margin, y)]
 
   defp rows([], _position, _state, _y, acc), do: :lists.reverse(acc)
 

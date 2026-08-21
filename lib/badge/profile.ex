@@ -9,15 +9,15 @@ defmodule Badge.Profile do
 
   alias Badge.Nvs
 
-  # {key, label, capacity, prefix shown on the badge}
+  # {key, label, capacity, icon shown beside it on the badge}
   @fields [
-    {:name, "Name", 18, ""},
-    {:company, "Company", 30, ""},
-    {:email, "Email", 34, ""},
-    {:github, "GitHub", 28, "gh "},
-    {:bluesky, "Bluesky", 30, "@"},
-    {:links, "Links", 36, ""},
-    {:note, "Note", 36, ""}
+    {:name, "Name", 18, nil},
+    {:company, "Company", 30, :company},
+    {:email, "Email", 32, :email},
+    {:github, "GitHub", 26, :github},
+    {:mastodon, "Mastodon", 30, :mastodon},
+    {:bluesky, "Bluesky", 30, :bluesky},
+    {:links, "Link", 32, :link}
   ]
 
   @required :name
@@ -37,9 +37,9 @@ defmodule Badge.Profile do
   @spec label(atom) :: binary
   def label(key), do: lookup(@fields, key, 1, "")
 
-  @doc "What a value is prefixed with on the badge itself."
-  @spec prefix(atom) :: binary
-  def prefix(key), do: lookup(@fields, key, 3, "")
+  @doc "The icon shown beside a value on the badge, or nil for a plain line."
+  @spec icon(atom) :: atom | nil
+  def icon(key), do: lookup(@fields, key, 3, nil)
 
   @doc "The one field that must be filled in."
   def required, do: @required
@@ -71,14 +71,14 @@ defmodule Badge.Profile do
   end
 
   @doc """
-  The lines the badge shows under the rule.
+  The lines the badge shows under the rule, as `{icon, text}`.
 
   Links are split on spaces, so one field can hold several and each gets a
-  line of its own.
+  line of its own, all carrying the same icon.
   """
-  @spec lines(map) :: [binary]
+  @spec lines(map) :: [{atom | nil, binary}]
   def lines(profile) do
-    :lists.flatten(for key <- keys(), key != @required, do: field_lines(profile, key))
+    :lists.append(for key <- keys(), key != @required, do: field_lines(profile, key))
   end
 
   @doc "Reads the stored profile."
@@ -94,16 +94,14 @@ defmodule Badge.Profile do
   end
 
   defp field_lines(profile, :links) do
-    profile
-    |> Map.get(:links, "")
-    |> split_words()
+    for link <- split_words(Map.get(profile, :links, "")), do: {icon(:links), link}
   end
 
   defp field_lines(profile, key) do
     value = Map.get(profile, key, "")
 
     case present?(value) do
-      true -> [prefix(key) <> value]
+      true -> [{icon(key), value}]
       false -> []
     end
   end

@@ -20,6 +20,14 @@ defmodule Badge.Page.NameTest do
 
   defp editing(overrides \\ %{name: "Gus"}), do: press(showing(overrides), {:char, ?e})
 
+  defp luminance(colour) do
+    r = div(colour, 0x10000)
+    g = div(rem(colour, 0x10000), 0x100)
+    b = rem(colour, 0x100)
+
+    (r * 30 + g * 59 + b * 11) |> div(100)
+  end
+
   defp type(state, text) do
     :lists.foldl(&press(&2, {:char, &1}), state, :erlang.binary_to_list(text))
   end
@@ -116,17 +124,60 @@ defmodule Badge.Page.NameTest do
       assert "gus@example.com" in bodies
     end
 
+    test "sit below the name in the hierarchy, so the name reads first" do
+      state = showing(%{name: "Gus", company: "Protolux"})
+
+      [name_colour] =
+        for {:text, _x, _y, :dogica, colour, _b, _body} <- Name.render(state), do: colour
+
+      [detail_colour] =
+        for {:text, _x, _y, :default16px, colour, _b, "Protolux"} <- Name.render(state),
+            do: colour
+
+      assert name_colour == Theme.fg()
+      assert detail_colour == Theme.muted()
+      assert luminance(detail_colour) < luminance(name_colour)
+    end
+
+    test "are still brighter than the chrome, so they do not read as a hint" do
+      assert luminance(Theme.muted()) > luminance(Theme.dim())
+    end
+
     test "leaves out what has not" do
       bodies = texts(showing(%{name: "Gus"}))
 
       assert bodies == ["Gus", "E to edit"]
     end
 
-    test "marks the handles so they read as handles" do
-      bodies = texts(showing(%{name: "Gus", github: "gusrs", bluesky: "gus.example"}))
+    test "handles are shown with an icon rather than a text marker" do
+      state = showing(%{name: "Gus", github: "gusrs", bluesky: "gus.example"})
+      bodies = texts(state)
 
-      assert "gh gusrs" in bodies
-      assert "@gus.example" in bodies
+      assert "gusrs" in bodies
+      assert "gus.example" in bodies
+
+      icons = for {:image, _x, _y, _bg, _img} <- Name.render(state), do: :icon
+
+      assert length(icons) == 2
+    end
+
+    test "every detail line starts at the same x, whatever its icon" do
+      state = showing(%{name: "Gus", github: "gusrs", links: "a.example", company: "Protolux"})
+
+      xs =
+        for {:text, x, _y, :default16px, _c, _b, body} <- Name.render(state),
+            body in ["gusrs", "a.example", "Protolux"],
+            do: x
+
+      assert length(xs) == 3
+      assert length(:lists.usort(xs)) == 1
+    end
+
+    test "each link gets its own icon, not just the first" do
+      state = showing(%{name: "Gus", links: "a.example b.example"})
+      icons = for {:image, _x, _y, _bg, _img} <- Name.render(state), do: :icon
+
+      assert length(icons) == 2
     end
 
     test "gives each link its own line" do
@@ -142,9 +193,9 @@ defmodule Badge.Page.NameTest do
         company: "A",
         email: "B",
         github: "C",
-        bluesky: "D",
-        links: "E F G H I J",
-        note: "K"
+        mastodon: "D",
+        bluesky: "E",
+        links: "F G H I J K"
       }
 
       for {:text, _x, y, _f, _c, _b, _body} <- Name.render(showing(full)) do
@@ -171,6 +222,7 @@ defmodule Badge.Page.NameTest do
           case item do
             {:rect, x, y, _w, _h, _c} -> {x, y}
             {:text, x, y, _f, _c, _b, _body} -> {x, y}
+            {:image, x, y, _bg, _img} -> {x, y}
           end
 
         assert x >= 0
@@ -240,7 +292,7 @@ defmodule Badge.Page.NameTest do
 
     test "a value longer than the column is cut to fit" do
       long = :erlang.list_to_binary(:lists.duplicate(40, ?x))
-      state = press(showing(%{name: "Gus", note: long}), {:char, ?e})
+      state = press(showing(%{name: "Gus", links: long}), {:char, ?e})
 
       for {:text, 88, _y, _f, _c, _b, body} <- Name.render(state) do
         assert byte_size(body) <= 28
