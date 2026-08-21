@@ -69,13 +69,20 @@ defmodule Badge.Page.Temp do
   end
 
   def render(%{samples: samples}) do
-    low = :lists.min(samples)
-    high = :lists.max(samples)
+    {low, high} = extent(samples)
     {floor, ceiling} = span(low, high)
 
     [readout(:lists.last(samples)), footer(low, high, length(samples)), baseline()] ++
       bars(samples, floor, ceiling, @plot_x, [])
   end
+
+  # Hand-rolled rather than :lists.min/1 and :lists.max/1, which ExAtomVM's checker rejects.
+  defp extent([first | rest]), do: extent(rest, first, first)
+
+  defp extent([], low, high), do: {low, high}
+  defp extent([value | rest], low, high) when value < low, do: extent(rest, value, high)
+  defp extent([value | rest], low, high) when value > high, do: extent(rest, low, value)
+  defp extent([_value | rest], low, high), do: extent(rest, low, high)
 
   # Widens a narrow span symmetrically so one degree of quantisation does not fill the plot.
   defp span(low, high) do

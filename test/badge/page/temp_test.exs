@@ -97,6 +97,22 @@ defmodule Badge.Page.TempTest do
       assert hd(heights) < 100
     end
 
+    test "the scale spans the extremes whatever order they arrive in" do
+      rising = samples(Temp.init(), [18, 22, 30])
+      falling = samples(Temp.init(), [30, 22, 18])
+
+      footer = fn state ->
+        [body] =
+          for {:text, _x, _y, :default16px, _fg, _bg, body} <- Temp.render(state), do: body
+
+        body
+      end
+
+      assert :binary.match(footer.(rising), "min 18") != :nomatch
+      assert :binary.match(footer.(rising), "max 30") != :nomatch
+      assert footer.(falling) == footer.(rising)
+    end
+
     test "a rising reading produces rising bars" do
       state = samples(Temp.init(), [20, 25, 30])
 
