@@ -17,6 +17,7 @@ defmodule Badge.Pixels do
 
   import Bitwise
 
+  alias Badge.Color
   alias Badge.Hardware
 
   @device :pixels
@@ -92,7 +93,7 @@ defmodule Badge.Pixels do
 
     for(
       i <- 0..(count - 1),
-      do: hsv_to_rgb(rem(phase + i * div(360, count), 360), 255, @brightness)
+      do: Color.hsv_to_rgb(rem(phase + i * div(360, count), 360), 255, @brightness)
     )
     |> then(&show(spi, &1))
   end
@@ -120,23 +121,4 @@ defmodule Badge.Pixels do
   end
 
   defp expand(bits), do: elem(@nibble_pairs, bits &&& 0x03)
-
-  # Integer HSV: hue 0..359, saturation and value 0..255.
-  defp hsv_to_rgb(h, s, v) do
-    sector = div(h, 60)
-    offset = div(rem(h, 60) * 255, 60)
-
-    p = div(v * (255 - s), 255)
-    q = div(v * (255 - div(s * offset, 255)), 255)
-    t = div(v * (255 - div(s * (255 - offset), 255)), 255)
-
-    sector_rgb(sector, v, p, q, t)
-  end
-
-  defp sector_rgb(0, v, p, _q, t), do: {v, t, p}
-  defp sector_rgb(1, v, p, q, _t), do: {q, v, p}
-  defp sector_rgb(2, v, p, _q, t), do: {p, v, t}
-  defp sector_rgb(3, v, p, q, _t), do: {p, q, v}
-  defp sector_rgb(4, v, p, _q, t), do: {t, p, v}
-  defp sector_rgb(_, v, p, q, _t), do: {v, p, q}
 end
