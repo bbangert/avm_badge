@@ -10,7 +10,9 @@ defmodule Badge.Page.Name do
 
   alias Badge.Field
   alias Badge.Font
+  alias Badge.Identity
   alias Badge.Icons
+  alias Badge.Peers
   alias Badge.Profile
   alias Badge.Text
   alias Badge.Theme
@@ -56,7 +58,10 @@ defmodule Badge.Page.Name do
   @value_x 88
   @value_columns div(Theme.width() - @value_x - 8, @char_w)
 
-  @screens 2
+  @screens 4
+
+  @ok Theme.ok()
+  @muted_rows 6
 
   # The big-name screen, and what it falls back to when a name will not fit.
   @big_font :w95fa
@@ -80,6 +85,9 @@ defmodule Badge.Page.Name do
       mode: :show,
       screen: 0,
       profile: Profile.blank(),
+      peers: [],
+      chip: "",
+      sharing: false,
       cursor: 0,
       field: nil,
       loaded: false,
@@ -97,7 +105,14 @@ defmodule Badge.Page.Name do
   defp load(state) do
     profile = Profile.load()
 
-    %{state | profile: profile, saved: profile, loaded: true}
+    %{
+      state
+      | profile: profile,
+        saved: profile,
+        peers: Peers.load(),
+        chip: Identity.format(Identity.chip_id()),
+        loaded: true
+    }
   end
 
   # Written once the editor is closed, not on every keystroke.
@@ -117,6 +132,11 @@ defmodule Badge.Page.Name do
 
   defp show_key({:char, char}, state) when char == ?e or char == ?E do
     {:ok, %{state | mode: :fields, cursor: 0}}
+  end
+
+  # Sharing has nothing behind it yet, so this only remembers the answer.
+  defp show_key({:edit, :newline}, %{screen: 2} = state) do
+    {:ok, %{state | sharing: not state.sharing}}
   end
 
   defp show_key({:move, :right}, state), do: {:ok, turn(state, 1)}
@@ -197,6 +217,10 @@ defmodule Badge.Page.Name do
 
   def render(%{screen: 1, profile: profile}), do: big_screen(profile) ++ dots(1)
 
+  def render(%{screen: 2} = state), do: share_screen(state) ++ dots(2)
+
+  def render(%{screen: 3} = state), do: peers_screen(state) ++ dots(3)
+
   def render(%{profile: profile} = state) do
     lines = Text.wrap(Profile.display_name(profile), @name_columns)
     rule_y = @name_y + length(lines) * @name_pitch + 6
@@ -231,6 +255,51 @@ defmodule Badge.Page.Name do
     item = {:text, x, y, font, @fg, @bg, line}
 
     big_lines(rest, font, height, y + height, [item | acc])
+  end
+
+  # Sharing over IR is not built yet; the switch is here so the shape of it is.
+  defp share_screen(state) do
+    [
+      centred("Share", Theme.content_top() + 16, @fg),
+      centred(state.chip, Theme.content_top() + 44, @dim),
+      centred(
+        sharing_text(state.sharing),
+        Theme.content_top() + 84,
+        sharing_colour(state.sharing)
+      ),
+      centred("over IR, once that is built", Theme.content_top() + 110, @dim),
+      centred("Enter to turn " <> opposite(state.sharing), @hint_y, @dim)
+    ]
+  end
+
+  defp sharing_text(true), do: "sharing is on"
+  defp sharing_text(false), do: "sharing is off"
+
+  defp sharing_colour(true), do: @ok
+  defp sharing_colour(false), do: @muted
+
+  defp opposite(true), do: "off"
+  defp opposite(false), do: "on"
+
+  defp peers_screen(%{peers: peers}) do
+    count = Peers.count(peers)
+
+    [
+      centred("Collected", Theme.content_top() + 16, @fg),
+      centred(:erlang.integer_to_binary(count) <> collected(count), Theme.content_top() + 44, @ok)
+    ] ++ peer_rows(peers, @muted_rows, Theme.content_top() + 80, [])
+  end
+
+  defp collected(1), do: " badge"
+  defp collected(_count), do: " badges"
+
+  defp peer_rows([], _left, _y, acc), do: :lists.reverse(acc)
+  defp peer_rows(_peers, 0, _y, acc), do: :lists.reverse(acc)
+
+  defp peer_rows([peer | rest], left, y, acc) do
+    name = Profile.display_name(Map.get(peer, :profile, %{}))
+
+    peer_rows(rest, left - 1, y + @detail_pitch, [centred(name, y, @muted) | acc])
   end
 
   # Which screen you are on, so paging is discoverable without a label.

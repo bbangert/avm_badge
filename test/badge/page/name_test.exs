@@ -307,6 +307,108 @@ defmodule Badge.Page.NameTest do
     end
   end
 
+  describe "the share screen" do
+    defp sharing(overrides \\ %{}) do
+      %{screen(showing(Map.merge(%{name: "Gus"}, overrides)), 2) | chip: "A1B2C3D4E5F6"}
+    end
+
+    test "shows this badge's own chip id" do
+      assert "A1B2C3D4E5F6" in texts(sharing())
+    end
+
+    test "starts switched off" do
+      refute showing(%{name: "Gus"}).sharing
+      assert Enum.any?(texts(sharing()), &(:binary.match(&1, "off") != :nomatch))
+    end
+
+    test "enter turns it on and off again" do
+      on = press(sharing(), {:edit, :newline})
+
+      assert on.sharing
+      assert Enum.any?(texts(on), &(:binary.match(&1, "sharing is on") != :nomatch))
+      refute press(on, {:edit, :newline}).sharing
+    end
+
+    test "on reads as a good state, off as a quiet one" do
+      colour = fn state ->
+        [c] =
+          for {:text, _x, _y, _f, c, _b, body} <- Name.render(state),
+              :binary.match(body, "sharing is") != :nomatch,
+              do: c
+
+        c
+      end
+
+      assert colour.(press(sharing(), {:edit, :newline})) == Theme.ok()
+      refute colour.(sharing()) == Theme.ok()
+    end
+
+    test "says the radio side is not built yet, rather than pretending" do
+      assert Enum.any?(
+               texts(sharing()),
+               &(:binary.match(&1, "not built") != :nomatch or
+                   :binary.match(&1, "once that is built") != :nomatch)
+             )
+    end
+
+    test "enter belongs to the share screen alone" do
+      for other <- [0, 1, 3] do
+        assert Name.handle_key({:edit, :newline}, screen(showing(%{name: "Gus"}), other)) ==
+                 :ignore
+      end
+
+      assert {:ok, _toggled} = Name.handle_key({:edit, :newline}, sharing())
+    end
+  end
+
+  describe "the collected screen" do
+    defp collected(peers) do
+      %{screen(showing(%{name: "Gus"}), 3) | peers: peers}
+    end
+
+    defp peer(n, name) do
+      %{id: <<0, 0, 0, 0, 0, n>>, profile: Map.put(Profile.blank(), :name, name)}
+    end
+
+    test "an empty collection says none" do
+      assert Enum.any?(texts(collected([])), &(:binary.match(&1, "0 badges") != :nomatch))
+    end
+
+    test "one badge is singular" do
+      assert Enum.any?(
+               texts(collected([peer(1, "A")])),
+               &(:binary.match(&1, "1 badge") != :nomatch)
+             )
+    end
+
+    test "counts what has been collected" do
+      peers = for n <- 1..5, do: peer(n, "P")
+
+      assert Enum.any?(texts(collected(peers)), &(:binary.match(&1, "5 badges") != :nomatch))
+    end
+
+    test "names the badges collected" do
+      bodies = texts(collected([peer(1, "Ada"), peer(2, "Grace")]))
+
+      assert "Ada" in bodies
+      assert "Grace" in bodies
+    end
+
+    test "shows only as many as fit, rather than overflowing" do
+      peers = for n <- 1..40, do: peer(n, "P")
+
+      for {:text, _x, y, _f, _c, _b, _body} <- Name.render(collected(peers)) do
+        assert y < Theme.height()
+      end
+    end
+
+    test "a peer with no name still lists rather than blanking the row" do
+      bare = %{id: <<0, 0, 0, 0, 0, 9>>, profile: %{}}
+
+      assert Profile.placeholder() in texts(collected([bare]))
+    end
+  end
+
   describe "opening the editor" do
     test "E opens it, and so does a capital E" do
       assert editing().mode == :fields
