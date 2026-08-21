@@ -1,9 +1,9 @@
-defmodule Badge.Page.Info.WifiTest do
+defmodule Badge.Page.Settings.WifiTest do
   use ExUnit.Case, async: true
 
   alias Badge.Field
-  alias Badge.Page.Info
-  alias Badge.Page.Info.Wifi
+  alias Badge.Page.Settings
+  alias Badge.Page.Settings.Wifi
   alias Badge.Theme
 
   defp ap(ssid, rssi, authmode \\ :wpa2_psk) do
@@ -40,7 +40,7 @@ defmodule Badge.Page.Info.WifiTest do
   defp status_colour(state) do
     [colour] =
       for {:text, x, y, _f, colour, _bg, _body} <- Wifi.render(state),
-          y == Info.content_top(),
+          y == Settings.content_top(),
           x > 8,
           do: colour
 
@@ -53,7 +53,7 @@ defmodule Badge.Page.Info.WifiTest do
 
   describe "identity" do
     test "names itself for the tab strip" do
-      assert Wifi.title() == "Wifi"
+      assert Wifi.title() == "WiFi"
     end
 
     test "starts in list mode" do
@@ -322,7 +322,7 @@ defmodule Badge.Page.Info.WifiTest do
       state = listing([ap("First", -50), ap("Second", -60)])
 
       for {:text, _x, y, _f, _fg, _bg, _body} <- Wifi.render(state) do
-        assert y >= Info.content_top()
+        assert y >= Settings.content_top()
         assert y < Theme.height()
       end
     end
@@ -379,7 +379,7 @@ defmodule Badge.Page.Info.WifiTest do
     test "the status value ends flush with the right margin too" do
       [status_end] =
         for {:text, x, y, _f, _c, _b, body} <- Wifi.render(with_radio(:connected)),
-            y == Info.content_top(),
+            y == Settings.content_top(),
             x > 8,
             do: x + 8 * byte_size(body)
 

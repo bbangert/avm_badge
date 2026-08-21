@@ -11,7 +11,7 @@ defmodule Badge.Pages do
     {:square, Badge.Page.Text},
     {:triangle, Badge.Page.Tilt},
     {:cross, Badge.Page.Temp},
-    {:circle, Badge.Page.Info},
+    {:circle, Badge.Page.Settings},
     {:clover, Badge.Page.Led},
     {:diamond, Badge.Page.Name}
   ]

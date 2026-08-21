@@ -1,4 +1,4 @@
-defmodule Badge.Page.Info do
+defmodule Badge.Page.Settings do
   @moduledoc """
   Board status, as a carousel of sub-pages moved between with left and right.
 
@@ -7,15 +7,16 @@ defmodule Badge.Page.Info do
   a sub-page own the arrows when it needs them.
 
   Sub-page state persists while you slide sideways, because moving between
-  sub-pages is not leaving the page. Leaving Info entirely still resets
+  sub-pages is not leaving the page. Leaving Settings entirely still resets
   everything, since `Badge.UI` calls `init/0` on every entry.
   """
 
   use Badge.Page
 
-  alias Badge.Page.Info.Power
-  alias Badge.Page.Info.Sensors
-  alias Badge.Page.Info.Wifi
+  alias Badge.Page.Settings.Display
+  alias Badge.Page.Settings.Sudo
+  alias Badge.Page.Settings.Update
+  alias Badge.Page.Settings.Wifi
   alias Badge.Theme
 
   @dim Theme.dim()
@@ -24,7 +25,7 @@ defmodule Badge.Page.Info do
 
   @separator " | "
 
-  @subpages [Sensors, Power, Wifi]
+  @subpages [Display, Wifi, Update, Sudo]
   @count length(@subpages)
 
   @char_w 8
@@ -35,7 +36,7 @@ defmodule Badge.Page.Info do
   @content_top @rule_y + 8
 
   @impl true
-  def title, do: "Info"
+  def title, do: "Settings"
 
   @impl true
   def icon, do: :circle

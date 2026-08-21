@@ -1,4 +1,4 @@
-defmodule Badge.Page.Info.Wifi do
+defmodule Badge.Page.Settings.Wifi do
   @moduledoc """
   Joining a network from the badge: scan, pick, type a passphrase, connect.
 
@@ -16,7 +16,7 @@ defmodule Badge.Page.Info.Wifi do
   alias Badge.Icons
   alias Badge.Keyboard
   alias Badge.Network
-  alias Badge.Page.Info
+  alias Badge.Page.Settings
   alias Badge.Readout
   alias Badge.Theme
   alias Badge.Wifi
@@ -50,13 +50,13 @@ defmodule Badge.Page.Info.Wifi do
   # Held, not tapped, so the passphrase is only visible while you ask for it.
   @view_key ~c"Fn"
 
-  @name_y Info.content_top() + 8
-  @prompt_y Info.content_top() + 46
-  @hint_y Info.content_top() + 68
-  @field_y Info.content_top() + 106
+  @name_y Settings.content_top() + 8
+  @prompt_y Settings.content_top() + 46
+  @hint_y Settings.content_top() + 68
+  @field_y Settings.content_top() + 106
 
   @impl true
-  def title, do: "Wifi"
+  def title, do: "WiFi"
 
   @impl true
   def init do
@@ -209,7 +209,7 @@ defmodule Badge.Page.Info.Wifi do
   end
 
   defp status_row(%{status: %{radio: radio}}) do
-    Readout.right_row("wifi", radio(radio), Info.content_top(), status_colour(radio))
+    Readout.right_row("wifi", radio(radio), Settings.content_top(), status_colour(radio))
   end
 
   defp status_colour(:failed), do: @alert
@@ -237,7 +237,7 @@ defmodule Badge.Page.Info.Wifi do
     network_items(visible, first_visible(state), state, first_row(), [])
   end
 
-  defp first_row, do: Info.content_top() + Readout.pitch() + 8
+  defp first_row, do: Settings.content_top() + Readout.pitch() + 8
 
   # Scrolls only once the cursor would fall off the bottom.
   defp first_visible(%{cursor: cursor}) when cursor < @rows, do: 0
