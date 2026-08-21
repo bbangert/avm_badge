@@ -9,7 +9,7 @@ defmodule Badge.Pages do
 
   @pages [
     {:square, Badge.Page.Text},
-    {:triangle, nil},
+    {:triangle, Badge.Page.Tilt},
     {:cross, Badge.Page.Temp},
     {:circle, Badge.Page.Info},
     {:clover, Badge.Page.Led},
