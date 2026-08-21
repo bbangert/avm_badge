@@ -1,4 +1,4 @@
-defmodule Badge.Page.Info do
+defmodule Badge.Page.Settings do
   @moduledoc """
   Board status, as a carousel of sub-pages moved between with left and right.
 
@@ -7,24 +7,25 @@ defmodule Badge.Page.Info do
   a sub-page own the arrows when it needs them.
 
   Sub-page state persists while you slide sideways, because moving between
-  sub-pages is not leaving the page. Leaving Info entirely still resets
+  sub-pages is not leaving the page. Leaving Settings entirely still resets
   everything, since `Badge.UI` calls `init/0` on every entry.
   """
 
   use Badge.Page
 
-  alias Badge.Page.Info.Power
-  alias Badge.Page.Info.Sensors
-  alias Badge.Page.Info.Wifi
+  alias Badge.Page.Settings.Display
+  alias Badge.Page.Settings.Sudo
+  alias Badge.Page.Settings.Update
+  alias Badge.Page.Settings.Wifi
   alias Badge.Theme
 
   @dim Theme.dim()
   @bg Theme.bg()
   @select Theme.select()
 
-  @separator " | "
+  @margin 8
 
-  @subpages [Sensors, Power, Wifi]
+  @subpages [Display, Wifi, Update, Sudo]
   @count length(@subpages)
 
   @char_w 8
@@ -35,7 +36,7 @@ defmodule Badge.Page.Info do
   @content_top @rule_y + 8
 
   @impl true
-  def title, do: "Info"
+  def title, do: "Settings"
 
   @impl true
   def icon, do: :circle
@@ -93,37 +94,37 @@ defmodule Badge.Page.Info do
   defp replace([_old | rest], 0, value, acc), do: :lists.reverse([value | acc]) ++ rest
   defp replace([keep | rest], n, value, acc), do: replace(rest, n - 1, value, [keep | acc])
 
-  # Colour marks the active tab; the separators stay dim throughout.
+  # Justified: the first tab sits on the left margin, the last on the right,
+  # and the slack is shared evenly between them. Colour marks the active one,
+  # so no separators are needed.
   defp strip(state) do
     titles = for module <- @subpages, do: module.title()
-    left = div(Theme.width() - @char_w * strip_width(titles), 2)
 
-    tab_items(titles, 0, state.index, left, []) ++
-      [{:rect, 8, @rule_y, Theme.width() - 16, 1, @dim}]
+    tab_items(titles, 0, state.index, length(titles), slack(titles), 0, []) ++
+      [{:rect, @margin, @rule_y, Theme.width() - 2 * @margin, 1, @dim}]
   end
 
-  defp strip_width(titles) do
-    names = :lists.foldl(fn title, total -> total + byte_size(title) end, 0, titles)
+  defp slack(titles) do
+    text = :lists.foldl(fn title, total -> total + @char_w * byte_size(title) end, 0, titles)
 
-    names + byte_size(@separator) * (length(titles) - 1)
+    Theme.width() - 2 * @margin - text
   end
 
-  defp tab_items([], _position, _index, _x, acc), do: :lists.reverse(acc)
+  defp tab_items([], _position, _index, _count, _slack, _used, acc), do: :lists.reverse(acc)
 
-  # The last tab has nothing after it, so it contributes no separator.
-  defp tab_items([title], position, index, x, acc) do
-    :lists.reverse([tab(title, position, index, x) | acc])
-  end
+  defp tab_items([title | rest], position, index, count, slack, used, acc) do
+    x = @margin + used + gap_before(position, count, slack)
+    next = used + @char_w * byte_size(title)
 
-  defp tab_items([title | rest], position, index, x, acc) do
-    next = x + @char_w * byte_size(title)
-    separator = {:text, next, @strip_y, :default16px, @dim, @bg, @separator}
-
-    tab_items(rest, position + 1, index, next + @char_w * byte_size(@separator), [
-      separator,
+    tab_items(rest, position + 1, index, count, slack, next, [
       tab(title, position, index, x) | acc
     ])
   end
+
+  # Interpolated rather than accumulated, so rounding cannot drift the last tab
+  # off the right margin.
+  defp gap_before(_position, count, _slack) when count < 2, do: 0
+  defp gap_before(position, count, slack), do: div(position * slack, count - 1)
 
   defp tab(title, position, index, x) do
     {:text, x, @strip_y, :default16px, tab_colour(position, index), @bg, title}
