@@ -188,17 +188,17 @@ defmodule Badge.Wifi do
     {:noreply, %{save(state) | radio: :connected}}
   end
 
+  def handle_info({:scan_results, {:error, reason}}, state) do
+    :io.format(~c"Wifi: scan failed, ~p~n", [reason])
+
+    {:noreply, %{state | scanning: false, scan_id: state.scan_id + 1}}
+  end
+
   def handle_info({:scan_results, {_count, found}}, state) do
     networks = Network.usable(found)
     :io.format(~c"Wifi: scan found ~p networks~n", [length(networks)])
 
     {:noreply, %{state | scanning: false, networks: networks, scan_id: state.scan_id + 1}}
-  end
-
-  def handle_info({:scan_results, {:error, reason}}, state) do
-    :io.format(~c"Wifi: scan failed, ~p~n", [reason])
-
-    {:noreply, %{state | scanning: false, scan_id: state.scan_id + 1}}
   end
 
   # A drop right after an explicit join means the passphrase was wrong; a drop on a

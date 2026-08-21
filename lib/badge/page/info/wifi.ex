@@ -273,10 +273,8 @@ defmodule Badge.Page.Info.Wifi do
   defp signal_icon(network), do: elem(@signal_icons, Network.level(network))
 
   defp row_colour(%{ssid: ssid}, _index, %{status: %{radio: :connected, ssid: ssid}}), do: @joined
-  defp signal_icon(network), do: elem(@signal_icons, Network.level(network))
 
   defp row_colour(_network, index, %{cursor: index}), do: @select
-  defp signal_icon(network), do: elem(@signal_icons, Network.level(network))
 
   defp row_colour(_network, _index, _state), do: @fg
 

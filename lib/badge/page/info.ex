@@ -18,9 +18,11 @@ defmodule Badge.Page.Info do
   alias Badge.Page.Info.Wifi
   alias Badge.Theme
 
-  @fg Theme.fg()
   @dim Theme.dim()
   @bg Theme.bg()
+  @select Theme.select()
+
+  @separator " | "
 
   @subpages [Sensors, Power, Wifi]
   @count length(@subpages)
@@ -91,29 +93,42 @@ defmodule Badge.Page.Info do
   defp replace([_old | rest], 0, value, acc), do: :lists.reverse([value | acc]) ++ rest
   defp replace([keep | rest], n, value, acc), do: replace(rest, n - 1, value, [keep | acc])
 
-  # The active title is bracketed; the chevrons show the carousel wraps.
+  # Colour marks the active tab; the separators stay dim throughout.
   defp strip(state) do
-    label = strip_label(@subpages, state.index, 0, [])
+    titles = for module <- @subpages, do: module.title()
+    left = div(Theme.width() - @char_w * strip_width(titles), 2)
 
-    [
-      {:text, div(Theme.width() - @char_w * byte_size(label), 2), @strip_y, :default16px, @fg,
-       @bg, label},
-      {:rect, 8, @rule_y, Theme.width() - 16, 1, @dim}
-    ]
+    tab_items(titles, 0, state.index, left, []) ++
+      [{:rect, 8, @rule_y, Theme.width() - 16, 1, @dim}]
   end
 
-  defp strip_label([], _index, _position, acc) do
-    "< " <> :erlang.list_to_binary(:lists.reverse(acc)) <> " >"
+  defp strip_width(titles) do
+    names = :lists.foldl(fn title, total -> total + byte_size(title) end, 0, titles)
+
+    names + byte_size(@separator) * (length(titles) - 1)
   end
 
-  defp strip_label([module | rest], index, position, []) do
-    strip_label(rest, index, position + 1, [name(module, index, position)])
+  defp tab_items([], _position, _index, _x, acc), do: :lists.reverse(acc)
+
+  # The last tab has nothing after it, so it contributes no separator.
+  defp tab_items([title], position, index, x, acc) do
+    :lists.reverse([tab(title, position, index, x) | acc])
   end
 
-  defp strip_label([module | rest], index, position, acc) do
-    strip_label(rest, index, position + 1, [name(module, index, position), " | " | acc])
+  defp tab_items([title | rest], position, index, x, acc) do
+    next = x + @char_w * byte_size(title)
+    separator = {:text, next, @strip_y, :default16px, @dim, @bg, @separator}
+
+    tab_items(rest, position + 1, index, next + @char_w * byte_size(@separator), [
+      separator,
+      tab(title, position, index, x) | acc
+    ])
   end
 
-  defp name(module, index, index), do: "[" <> module.title() <> "]"
-  defp name(module, _index, _position), do: " " <> module.title() <> " "
+  defp tab(title, position, index, x) do
+    {:text, x, @strip_y, :default16px, tab_colour(position, index), @bg, title}
+  end
+
+  defp tab_colour(position, position), do: @select
+  defp tab_colour(_position, _index), do: @dim
 end

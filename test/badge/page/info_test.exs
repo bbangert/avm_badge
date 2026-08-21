@@ -14,10 +14,17 @@ defmodule Badge.Page.InfoTest do
     next
   end
 
-  defp strip(state) do
-    [body | _rest] = for {:text, _x, _y, _f, _fg, _bg, body} <- Info.render(state), do: body
+  defp tabs(state) do
+    for {:text, _x, y, _f, colour, _bg, body} <- Info.render(state),
+        y == Theme.content_top(),
+        body != " | ",
+        do: {body, colour}
+  end
 
-    body
+  defp active(state) do
+    [title] = for {title, colour} <- tabs(state), colour == Theme.select(), do: title
+
+    title
   end
 
   defp titles, do: for(module <- Info.subpages(), do: module.title())
@@ -56,27 +63,30 @@ defmodule Badge.Page.InfoTest do
       assert left(right(Info.init())) == Info.init()
     end
 
-    test "the strip brackets the active sub-page and only that one" do
-      state = Info.init()
+    test "exactly one tab is highlighted, and it is the active one" do
       [first | _rest] = titles()
 
-      assert :binary.match(strip(state), "[" <> first <> "]") != :nomatch
+      assert active(Info.init()) == first
+    end
 
-      for other <- tl(titles()) do
-        assert :binary.match(strip(state), "[" <> other <> "]") == :nomatch
-      end
+    test "every other tab is dim" do
+      dim = for {title, colour} <- tabs(Info.init()), colour == Theme.dim(), do: title
+
+      assert dim == tl(titles())
     end
 
     test "the strip names every sub-page wherever you are" do
-      for title <- titles() do
-        assert :binary.match(strip(Info.init()), title) != :nomatch
-      end
+      assert for({title, _colour} <- tabs(Info.init()), do: title) == titles()
     end
 
-    test "the strip follows the carousel" do
+    test "the highlight follows the carousel" do
       [_first, second | _rest] = titles()
 
-      assert :binary.match(strip(right(Info.init())), "[" <> second <> "]") != :nomatch
+      assert active(right(Info.init())) == second
+    end
+
+    test "the highlight wraps with the carousel" do
+      assert active(left(Info.init())) == :lists.last(titles())
     end
   end
 
@@ -125,9 +135,12 @@ defmodule Badge.Page.InfoTest do
   describe "render/1" do
     test "draws the strip above everything a sub-page draws" do
       ys = for {:text, _x, y, _f, _fg, _bg, _body} <- Info.render(Info.init()), do: y
+      {strip, content} = :lists.partition(fn y -> y == Theme.content_top() end, ys)
 
-      assert hd(ys) == Theme.content_top()
-      assert Enum.all?(tl(ys), fn y -> y >= Info.content_top() end)
+      # The strip is several items now: a tab each, and a separator between.
+      assert length(strip) == 2 * length(Info.subpages()) - 1
+      assert content != []
+      assert Enum.all?(content, fn y -> y >= Info.content_top() end)
     end
 
     test "the strip clears the sub-page content area" do
@@ -147,8 +160,18 @@ defmodule Badge.Page.InfoTest do
       end
     end
 
-    test "the strip fits the panel" do
-      assert 8 * byte_size(strip(Info.init())) <= Theme.width()
+    test "the strip fits the panel and does not overlap itself" do
+      placed =
+        for {:text, x, y, _f, _c, _bg, body} <- Info.render(Info.init()),
+            y == Theme.content_top(),
+            do: {x, x + 8 * byte_size(body)}
+
+      assert Enum.all?(placed, fn {left, right} -> left >= 0 and right <= Theme.width() end)
+
+      sorted = :lists.sort(placed)
+      pairs = :lists.zip(sorted, tl(sorted) ++ [{Theme.width(), Theme.width()}])
+
+      assert Enum.all?(pairs, fn {{_l, right}, {next_left, _r}} -> right <= next_left end)
     end
 
     test "emits no background rect, since the router supplies it" do
