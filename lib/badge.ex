@@ -24,6 +24,7 @@ defmodule Badge do
     children = [
       {Badge.UI, display_spi},
       {Badge.Keyboard, :ok},
+      {Badge.Wifi, :ok},
       {Badge.Pixels, pixel_spi},
       {Badge.Sensors, :ok},
       {Badge.Power, :ok}
