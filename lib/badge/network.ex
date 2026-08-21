@@ -45,10 +45,6 @@ defmodule Badge.Network do
   @spec security(map) :: binary
   def security(%{authmode: authmode}), do: security_name(authmode)
 
-  @doc "Signal strength as text, until the strength icons land."
-  @spec signal(map) :: binary
-  def signal(%{rssi: rssi}), do: :erlang.integer_to_binary(rssi)
-
   @doc "Signal strength bucketed into four levels, strongest first."
   @spec level(map) :: 0..3
   def level(%{rssi: rssi}) when rssi >= -55, do: 3

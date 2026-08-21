@@ -19,7 +19,15 @@ defmodule Badge.ThemeTest do
     end
 
     test "tokens are distinct" do
-      colours = [Theme.bg(), Theme.fg(), Theme.dim(), Theme.accent(), Theme.ok(), Theme.alert()]
+      colours = [
+        Theme.bg(),
+        Theme.fg(),
+        Theme.dim(),
+        Theme.accent(),
+        Theme.ok(),
+        Theme.alert(),
+        Theme.select()
+      ]
 
       assert length(colours) == length(:lists.usort(colours))
     end

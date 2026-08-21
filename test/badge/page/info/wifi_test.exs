@@ -326,6 +326,39 @@ defmodule Badge.Page.Info.WifiTest do
     end
   end
 
+  describe "cursor colour" do
+    test "the highlighted row is the select colour" do
+      state = listing([ap("Home", -50), ap("Other", -60)])
+
+      [colour] =
+        for {:text, 8, _y, _f, colour, _bg, body} <- Wifi.render(state),
+            body == "Home",
+            do: colour
+
+      assert colour == Theme.select()
+    end
+
+    test "the marker matches the row it points at" do
+      state = listing([ap("Home", -50)])
+
+      [marker] =
+        for {:text, 0, _y, _f, colour, _bg, ">"} <- Wifi.render(state), do: colour
+
+      assert marker == Theme.select()
+    end
+
+    test "an unselected row is plain" do
+      state = listing([ap("Home", -50), ap("Other", -60)])
+
+      [colour] =
+        for {:text, 8, _y, _f, colour, _bg, body} <- Wifi.render(state),
+            body == "Other",
+            do: colour
+
+      assert colour == Theme.fg()
+    end
+  end
+
   describe "status colour" do
     test "a failed join is red" do
       assert status_colour(with_radio(:failed)) == Theme.alert()

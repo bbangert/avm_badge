@@ -13,6 +13,7 @@ defmodule Badge.Page.Info.Wifi do
   use Badge.Page
 
   alias Badge.Field
+  alias Badge.Icons
   alias Badge.Network
   alias Badge.Page.Info
   alias Badge.Readout
@@ -25,6 +26,7 @@ defmodule Badge.Page.Info.Wifi do
   # The network currently joined, distinct from the cursor highlight.
   @joined Theme.ok()
   @alert Theme.alert()
+  @select Theme.select()
   @dim Theme.dim()
   @bg Theme.bg()
 
@@ -38,6 +40,10 @@ defmodule Badge.Page.Info.Wifi do
 
   # Signal sits between the name and the security column, both ending flush right.
   @signal_right 272
+  @signal_x @signal_right - 16
+
+  # Indexed by Badge.Network.level/1; a tuple so no atom is built at runtime.
+  @signal_icons {:signal_0, :signal_1, :signal_2, :signal_3}
 
   @impl true
   def title, do: "Wifi"
@@ -210,22 +216,27 @@ defmodule Badge.Page.Info.Wifi do
     marker = if index == state.cursor, do: ">", else: " "
 
     colour = row_colour(network, index, state)
-    signal = Network.signal(network)
     security = Network.security(network)
 
     items = [
       {:text, @row_x, y, :default16px, colour, @bg, Network.name(network)},
-      {:text, @signal_right - 8 * byte_size(signal), y, :default16px, colour, @bg, signal},
+      Icons.item(signal_icon(network), @signal_x, y),
       {:text, Readout.right_x(security), y, :default16px, colour, @bg, security},
-      {:text, @cursor_x, y, :default16px, @accent, @bg, marker}
+      {:text, @cursor_x, y, :default16px, @select, @bg, marker}
     ]
 
     network_items(rest, index + 1, state, y + Readout.pitch(), items ++ acc)
   end
 
   # The network you are on reads green whether or not the cursor is on it.
+  defp signal_icon(network), do: elem(@signal_icons, Network.level(network))
+
   defp row_colour(%{ssid: ssid}, _index, %{status: %{radio: :connected, ssid: ssid}}), do: @joined
-  defp row_colour(_network, index, %{cursor: index}), do: @accent
+  defp signal_icon(network), do: elem(@signal_icons, Network.level(network))
+
+  defp row_colour(_network, index, %{cursor: index}), do: @select
+  defp signal_icon(network), do: elem(@signal_icons, Network.level(network))
+
   defp row_colour(_network, _index, _state), do: @fg
 
   defp help(text, colour), do: {:text, @row_x, @help_y, :default16px, colour, @bg, text}

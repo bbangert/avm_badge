@@ -24,6 +24,9 @@ defmodule Badge.Theme do
   def ok, do: 0x4CD964
   def alert, do: 0xFF3B30
 
+  # Whatever the cursor is currently on.
+  def select, do: 0x5AC8FA
+
   def width, do: Hardware.display_width()
   def height, do: Hardware.display_height()
 
