@@ -7,7 +7,21 @@ defmodule Badge.Page.NameTest do
   alias Badge.Theme
 
   defp showing(overrides) do
-    %{profile: Map.merge(Profile.blank(), overrides), loaded: true}
+    %{Name.init() | profile: Map.merge(Profile.blank(), overrides), loaded: true}
+  end
+
+  defp press(state, event) do
+    {:ok, next} = Name.handle_key(event, state)
+    next
+  end
+
+  defp press(state, _event, 0), do: state
+  defp press(state, event, n), do: press(press(state, event), event, n - 1)
+
+  defp editing(overrides \\ %{name: "Gus"}), do: press(showing(overrides), {:char, ?e})
+
+  defp type(state, text) do
+    :lists.foldl(&press(&2, {:char, &1}), state, :erlang.binary_to_list(text))
   end
 
   defp texts(state), do: for({:text, _x, _y, _f, _c, _b, body} <- Name.render(state), do: body)
@@ -160,6 +174,149 @@ defmodule Badge.Page.NameTest do
           end
 
         assert x >= 0
+        assert y >= Theme.content_top()
+        assert y < Theme.height()
+      end
+    end
+  end
+
+  describe "opening the editor" do
+    test "E opens it, and so does a capital E" do
+      assert editing().mode == :fields
+      assert press(showing(%{name: "Gus"}), {:char, ?E}).mode == :fields
+    end
+
+    test "the badge itself ignores escape, so the router still goes home" do
+      assert Name.handle_key({:nav, :home}, showing(%{name: "Gus"})) == :ignore
+    end
+
+    test "other keys on the badge are left alone" do
+      assert Name.handle_key({:char, ?z}, showing(%{name: "Gus"})) == :ignore
+      assert Name.handle_key({:move, :up}, showing(%{name: "Gus"})) == :ignore
+    end
+  end
+
+  describe "the field list" do
+    test "lists every field with its label" do
+      bodies = texts(editing())
+
+      for key <- Profile.keys() do
+        assert Profile.label(key) in bodies
+      end
+    end
+
+    test "starts on the first field" do
+      assert Name.selected(editing()) == hd(Profile.keys())
+    end
+
+    test "up and down move, and stop at the ends" do
+      assert Name.selected(press(editing(), {:move, :down})) == :lists.nth(2, Profile.keys())
+      assert Name.selected(press(editing(), {:move, :up})) == hd(Profile.keys())
+      assert Name.selected(press(editing(), {:move, :down}, 20)) == :lists.last(Profile.keys())
+    end
+
+    test "escape leaves the editor rather than the page" do
+      assert press(editing(), {:nav, :home}).mode == :show
+    end
+
+    test "an empty required field is called out in the alert colour" do
+      blank = press(showing(%{}), {:char, ?e})
+
+      colours =
+        for {:text, 88, _y, _f, colour, _b, _body} <- Name.render(blank), do: colour
+
+      assert Theme.alert() in colours
+    end
+
+    test "a filled required field is not" do
+      colours = for {:text, 88, _y, _f, colour, _b, _body} <- Name.render(editing()), do: colour
+
+      refute Theme.alert() in colours
+    end
+
+    test "an empty field shows a placeholder rather than nothing" do
+      assert "-" in texts(editing())
+    end
+
+    test "a value longer than the column is cut to fit" do
+      long = :erlang.list_to_binary(:lists.duplicate(40, ?x))
+      state = press(showing(%{name: "Gus", note: long}), {:char, ?e})
+
+      for {:text, 88, _y, _f, _c, _b, body} <- Name.render(state) do
+        assert byte_size(body) <= 28
+      end
+    end
+  end
+
+  describe "typing in a field" do
+    test "enter opens the highlighted field, prefilled" do
+      state = press(editing(), {:edit, :newline})
+
+      assert state.mode == :typing
+      assert :binary.match(hd(texts(state)) <> Enum.join(texts(state)), "Gus") != :nomatch
+    end
+
+    test "characters and backspace edit it" do
+      state = editing() |> press({:edit, :newline}) |> press({:edit, :backspace}) |> type("s")
+
+      assert Badge.Field.value(state.field) == "Gus"
+    end
+
+    test "spaces are allowed, since names and links need them" do
+      state = editing() |> press({:edit, :newline}) |> type(" Ross")
+
+      assert Badge.Field.value(state.field) == "Gus Ross"
+    end
+
+    test "enter commits the value back to the profile" do
+      state =
+        editing() |> press({:edit, :newline}) |> type(" Ross") |> press({:edit, :newline})
+
+      assert state.mode == :fields
+      assert Map.get(state.profile, :name) == "Gus Ross"
+    end
+
+    test "escape cancels, leaving the value as it was" do
+      state = editing() |> press({:edit, :newline}) |> type(" Ross") |> press({:nav, :home})
+
+      assert state.mode == :fields
+      assert Map.get(state.profile, :name) == "Gus"
+    end
+
+    test "the field cannot grow past its capacity" do
+      long = :erlang.list_to_binary(:lists.duplicate(60, ?x))
+      state = editing() |> press({:edit, :newline}) |> type(long)
+
+      assert Badge.Field.value(state.field) |> byte_size() <= Profile.capacity(:name)
+    end
+
+    test "the entry screen names the field and says what the keys do" do
+      bodies = texts(editing() |> press({:edit, :newline}))
+
+      assert Profile.label(:name) in bodies
+      assert Enum.any?(bodies, &(:binary.match(&1, "Esc cancel") != :nomatch))
+    end
+
+    test "editing a different field edits that one" do
+      state =
+        editing()
+        |> press({:move, :down})
+        |> press({:edit, :newline})
+        |> type("Protolux")
+        |> press({:edit, :newline})
+
+      assert Map.get(state.profile, :company) == "Protolux"
+      assert Map.get(state.profile, :name) == "Gus"
+    end
+  end
+
+  describe "every editor screen" do
+    test "stays inside the panel" do
+      states = [editing(), press(editing(), {:edit, :newline})]
+
+      for state <- states, {:text, x, y, _f, _c, _b, body} <- Name.render(state) do
+        assert x >= 0
+        assert x + 8 * byte_size(body) <= Theme.width()
         assert y >= Theme.content_top()
         assert y < Theme.height()
       end
