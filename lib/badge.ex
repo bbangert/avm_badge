@@ -2,9 +2,10 @@ defmodule Badge do
   @moduledoc """
   Firmware entry point.
 
-  Opens both SPI buses and passes them to the supervised children as
-  arguments; children only add devices to an already-open bus, they never
-  open one themselves.
+  Opens both SPI buses and the display port, and passes them to the supervised
+  children as arguments; children only add devices to an already-open bus, and
+  never open a bus or a port themselves. A child that opened its own would leak
+  it every time the supervisor restarted the child.
 
   Two buses are used: the panel and the LED chain need different MOSI pins
   and clock rates.
@@ -18,11 +19,19 @@ defmodule Badge do
   def start do
     :io.format(~c"Badge: starting~n")
 
+    # TEMPORARY for bench testing: drops any collected badges left in NVS, so
+    # each boot starts from nothing. Remove before merging.
+    Badge.Nvs.delete(:peers)
+
     display_spi = open_display_spi()
     pixel_spi = open_pixel_spi()
 
+    # Opened here, not in the child, so a Badge.UI restart reuses the display
+    # instead of orphaning its framebuffer.
+    display = Badge.UI.open_display(display_spi)
+
     children = [
-      {Badge.UI, display_spi},
+      {Badge.UI, display},
       {Badge.Backlight, :ok},
       {Badge.Keyboard, :ok},
       {Badge.Wifi, :ok},

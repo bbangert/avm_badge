@@ -33,6 +33,9 @@ defmodule Badge.Pixels do
   @tick 20
   @hue_step 3
 
+  # Long enough to catch the eye across a table, short enough not to linger.
+  @flash_ticks div(600, @tick)
+
   def start_link(spi) do
     GenServer.start_link(__MODULE__, spi, name: __MODULE__)
   end
@@ -47,6 +50,17 @@ defmodule Badge.Pixels do
     GenServer.cast(__MODULE__, {:mode, mode})
   end
 
+  @doc """
+  Shows a colour briefly, then goes back to whatever was set before.
+
+  The countdown rides the animation tick that is already running, so a flash
+  costs no timer and cannot outlive the chain going quiet.
+  """
+  @spec flash(non_neg_integer) :: :ok
+  def flash(hue) do
+    GenServer.cast(__MODULE__, {:flash, hue, @flash_ticks})
+  end
+
   @impl true
   def init(spi) do
     :io.format(~c"Pixels: ~p LEDs on GPIO ~p at ~p Hz~n", [
@@ -55,7 +69,7 @@ defmodule Badge.Pixels do
       Hardware.pixel_clock_hz()
     ])
 
-    {:ok, %{spi: spi, phase: 0, mode: :rainbow, last: nil}, {:continue, :self_test}}
+    {:ok, %{spi: spi, phase: 0, mode: :rainbow, last: nil, flash: nil}, {:continue, :self_test}}
   end
 
   # Runs the self-test after init/1 returns, not during it.
@@ -72,6 +86,10 @@ defmodule Badge.Pixels do
     {:noreply, %{state | mode: mode}}
   end
 
+  def handle_cast({:flash, hue, ticks}, state) do
+    {:noreply, %{state | flash: {hue, ticks}}}
+  end
+
   @impl true
   def handle_info(:tick, state) do
     next = paint(state)
@@ -81,6 +99,16 @@ defmodule Badge.Pixels do
     send(self(), :tick)
 
     {:noreply, next}
+  end
+
+  # A flash outranks the mode until its ticks run out, then the mode resumes
+  # on its own because `last` no longer matches.
+  defp paint(%{flash: {_hue, 0}} = state), do: paint(%{state | flash: nil})
+
+  defp paint(%{flash: {hue, left}} = state) do
+    lit = hold(state, Color.hsv_to_rgb(hue, 255, @brightness))
+
+    %{lit | flash: {hue, left - 1}}
   end
 
   defp paint(%{mode: :rainbow, spi: spi, phase: phase} = state) do

@@ -12,7 +12,9 @@ defmodule Badge.Page.Name do
   alias Badge.Font
   alias Badge.Identity
   alias Badge.Icons
+  alias Badge.Ir.Link
   alias Badge.Peers
+  alias Badge.Pixels
   alias Badge.Profile
   alias Badge.Text
   alias Badge.Theme
@@ -61,7 +63,17 @@ defmodule Badge.Page.Name do
   @screens 4
 
   @ok Theme.ok()
+  @warn Theme.warn()
   @muted_rows 6
+
+  # What meeting a badge looks like, on the panel and on the LED chain.
+  @met_name_y 130
+  @met_note_y 154
+  @met_count_y 186
+
+  @new_hue 120
+  @known_hue 200
+  @renamed_hue 45
 
   # The big-name screen, and what it falls back to when a name will not fit.
   @big_font :w95fa
@@ -72,6 +84,12 @@ defmodule Badge.Page.Name do
 
   @entry_label_y Theme.content_top() + 30
   @entry_value_y Theme.content_top() + 70
+
+  # Sharing repaints whenever a badge is heard; the editor wants the cursor to
+  # keep up, and only one of those two can have the panel.
+  @impl true
+  def refresh(%{sharing: true}), do: 333
+  def refresh(_state), do: 100
 
   @impl true
   def title, do: "Name"
@@ -88,6 +106,10 @@ defmodule Badge.Page.Name do
       peers: [],
       chip: "",
       sharing: false,
+      link: nil,
+      announced: nil,
+      met: nil,
+      top: 0,
       cursor: 0,
       field: nil,
       loaded: false,
@@ -97,7 +119,7 @@ defmodule Badge.Page.Name do
 
   # Hardware is only touched here, never from a key handler.
   @impl true
-  def tick(state), do: state |> load() |> persist()
+  def tick(state), do: state |> load() |> link() |> persist()
 
   # The saved profile arrives on the first tick, so init/0 stays pure.
   defp load(%{loaded: true} = state), do: state
@@ -114,6 +136,77 @@ defmodule Badge.Page.Name do
         loaded: true
     }
   end
+
+  # Sharing is a flag the key handler flips; the link process is opened and
+  # closed here so hardware stays out of key handling.
+  defp link(%{sharing: true, link: nil} = state) do
+    %{state | link: Link.start(), announced: nil, met: nil}
+  end
+
+  defp link(%{sharing: false, link: nil} = state), do: state
+
+  defp link(%{sharing: false} = state) do
+    Link.stop(state.link)
+
+    %{state | link: nil, announced: nil, met: nil}
+  end
+
+  defp link(state), do: state
+
+  # Badges reach Badge.UI, not the page, so they arrive through here.
+  #
+  # A badge held in front of this one beacons about once a second. Reacting to
+  # every frame would strobe the LEDs and rewrite NVS continuously, so nothing
+  # happens until the chip id or the name actually changes.
+  @impl true
+  def handle_info({:ir_peer, mac, name}, %{announced: {mac, name}}), do: :ignore
+
+  def handle_info({:ir_peer, mac, name}, %{link: link} = state) when link != nil do
+    {:ok, meet(state, mac, name, greeting(state.peers, mac, name))}
+  end
+
+  # A badge already in flight when sharing was switched off.
+  def handle_info(_message, _state), do: :ignore
+
+  @doc """
+  What hearing this badge means: unknown, known already, or known under a
+  different name because they have edited their profile since.
+  """
+  @spec greeting([map], binary, binary) :: :new | :known | :renamed
+  def greeting(peers, mac, name) do
+    case Peers.find(peers, mac) do
+      nil -> :new
+      peer -> same_name(Profile.display_name(Map.get(peer, :profile, %{})), name)
+    end
+  end
+
+  defp same_name(name, name), do: :known
+  defp same_name(_stored, _heard), do: :renamed
+
+  # Only a change is worth the flash write; hearing a badge again is free.
+  defp meet(state, mac, name, :known) do
+    Pixels.flash(@known_hue)
+
+    %{state | announced: {mac, name}, met: {name, :known}}
+  end
+
+  defp meet(state, mac, name, greeting) do
+    peers = Peers.add(state.peers, mac, %{name: name})
+    save_peers(peers)
+    Pixels.flash(hue(greeting))
+
+    %{state | peers: peers, announced: {mac, name}, met: {name, greeting}}
+  end
+
+  # TEMPORARY for bench testing: collected badges are held in memory only, so
+  # every reset starts from an empty list. Restore Peers.save/1 before merging.
+  defp save_peers(_peers), do: :ok
+
+  defp hue(:new), do: @new_hue
+  defp hue(:renamed), do: @renamed_hue
+
+  @impl true
+  def leave(state), do: Link.stop(state.link)
 
   # Written once the editor is closed, not on every keystroke.
   defp persist(%{mode: mode} = state) when mode != :show, do: state
@@ -134,16 +227,29 @@ defmodule Badge.Page.Name do
     {:ok, %{state | mode: :fields, cursor: 0}}
   end
 
-  # Sharing has nothing behind it yet, so this only remembers the answer.
+  # Only flips the flag; tick/1 starts or stops the probe from it.
   defp show_key({:edit, :newline}, %{screen: 2} = state) do
     {:ok, %{state | sharing: not state.sharing}}
   end
+
+  defp show_key({:move, :down}, %{screen: 3} = state), do: {:ok, scroll(state, 1)}
+  defp show_key({:move, :up}, %{screen: 3} = state), do: {:ok, scroll(state, -1)}
 
   defp show_key({:move, :right}, state), do: {:ok, turn(state, 1)}
   defp show_key({:move, :left}, state), do: {:ok, turn(state, -1)}
   defp show_key(_event, _state), do: :ignore
 
-  defp turn(state, delta), do: %{state | screen: rem(state.screen + delta + @screens, @screens)}
+  defp turn(state, delta) do
+    %{state | screen: rem(state.screen + delta + @screens, @screens), top: 0}
+  end
+
+  @doc "Moves the window over the collected list, without running off either end."
+  @spec scroll(map, integer) :: map
+  def scroll(%{peers: peers, top: top} = state, delta) do
+    last = max(Peers.count(peers) - @muted_rows, 0)
+
+    %{state | top: min(max(top + delta, 0), last)}
+  end
 
   @doc "How many badge screens there are to page through."
   def screens, do: @screens
@@ -257,37 +363,85 @@ defmodule Badge.Page.Name do
     big_lines(rest, font, height, y + height, [item | acc])
   end
 
-  # Sharing over IR is not built yet; the switch is here so the shape of it is.
+  # Sharing runs the bring-up probe rather than a link: the traces show the
+  # LED blinking and what the phototransistor makes of it, on the panel so
+  # the badge can be carried to the light being tested.
+  defp share_screen(%{sharing: true} = state) do
+    [
+      centred("Share", Theme.content_top() + 16, @fg),
+      centred(state.chip, Theme.content_top() + 44, @dim),
+      centred(sharing_text(true), Theme.content_top() + 84, @ok),
+      centred("Enter to turn off", @hint_y, @dim)
+    ] ++ met_lines(state.met, Peers.count(state.peers))
+  end
+
   defp share_screen(state) do
     [
       centred("Share", Theme.content_top() + 16, @fg),
       centred(state.chip, Theme.content_top() + 44, @dim),
-      centred(
-        sharing_text(state.sharing),
-        Theme.content_top() + 84,
-        sharing_colour(state.sharing)
-      ),
-      centred("over IR, once that is built", Theme.content_top() + 110, @dim),
-      centred("Enter to turn " <> opposite(state.sharing), @hint_y, @dim)
+      centred(sharing_text(false), Theme.content_top() + 84, @muted),
+      centred("collect other badges over IR", Theme.content_top() + 110, @dim),
+      centred("Enter to turn on", @hint_y, @dim)
     ]
   end
+
+  # Before anyone has been heard there is nothing to report but the count.
+  defp met_lines(nil, count) do
+    [
+      centred("hold another badge up to this one", @met_name_y, @dim),
+      collected_line(count)
+    ]
+  end
+
+  defp met_lines({name, greeting}, count) do
+    [
+      centred(name, @met_name_y, @fg),
+      centred(note(greeting), @met_note_y, colour(greeting)),
+      collected_line(count)
+    ]
+  end
+
+  defp note(:new), do: "added to your badges"
+  defp note(:known), do: "already in your badges"
+  defp note(:renamed), do: "name updated"
+
+  defp colour(:new), do: @ok
+  defp colour(:known), do: @select
+  defp colour(:renamed), do: @warn
+
+  defp collected_line(count) do
+    centred(:erlang.integer_to_binary(count) <> collected(count) <> " collected", @met_count_y, @dim)
+  end
+
 
   defp sharing_text(true), do: "sharing is on"
   defp sharing_text(false), do: "sharing is off"
 
-  defp sharing_colour(true), do: @ok
-  defp sharing_colour(false), do: @muted
 
-  defp opposite(true), do: "off"
-  defp opposite(false), do: "on"
-
-  defp peers_screen(%{peers: peers}) do
+  defp peers_screen(%{peers: peers, top: top}) do
     count = Peers.count(peers)
 
     [
       centred("Collected", Theme.content_top() + 16, @fg),
       centred(:erlang.integer_to_binary(count) <> collected(count), Theme.content_top() + 44, @ok)
-    ] ++ peer_rows(peers, @muted_rows, Theme.content_top() + 80, [])
+    ] ++
+      peer_rows(drop(peers, top), @muted_rows, Theme.content_top() + 80, []) ++
+      scroll_hint(count, top)
+  end
+
+  # There is no Enum.drop on AtomVM, and the list is at most @limit long.
+  defp drop(peers, 0), do: peers
+  defp drop([], _n), do: []
+  defp drop([_peer | rest], n), do: drop(rest, n - 1)
+
+  # Only says so when there is something off-screen in that direction.
+  defp scroll_hint(count, _top) when count <= @muted_rows, do: []
+
+  defp scroll_hint(count, top) do
+    shown = min(top + @muted_rows, count)
+    range = :erlang.integer_to_binary(top + 1) <> "-" <> :erlang.integer_to_binary(shown)
+
+    [centred(range <> " of " <> :erlang.integer_to_binary(count) <> "   up/down", @hint_y, @dim)]
   end
 
   defp collected(1), do: " badge"

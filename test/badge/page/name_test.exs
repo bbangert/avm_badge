@@ -3,6 +3,7 @@ defmodule Badge.Page.NameTest do
 
   alias Badge.Font
   alias Badge.Page.Name
+  alias Badge.Peers
   alias Badge.Profile
   alias Badge.Theme
 
@@ -343,12 +344,162 @@ defmodule Badge.Page.NameTest do
       refute colour.(sharing()) == Theme.ok()
     end
 
-    test "says the radio side is not built yet, rather than pretending" do
+    test "says what turning it on will do" do
+      assert Enum.any?(texts(sharing()), &(:binary.match(&1, "IR") != :nomatch))
+    end
+
+    defp met(greeting, name \\ "Pat") do
+      %{sharing() | sharing: true, link: self(), met: {name, greeting}}
+    end
+
+    defp colour_of(state, text) do
+      [c] =
+        for {:text, _x, _y, _f, c, _b, body} <- Name.render(state),
+            :binary.match(body, text) != :nomatch,
+            do: c
+
+      c
+    end
+
+    test "before anyone is heard it says what to do" do
       assert Enum.any?(
-               texts(sharing()),
-               &(:binary.match(&1, "not built") != :nomatch or
-                   :binary.match(&1, "once that is built") != :nomatch)
+               texts(%{sharing() | sharing: true}),
+               &(:binary.match(&1, "hold another badge") != :nomatch)
              )
+    end
+
+    test "a new badge reads as saved, in the good colour" do
+      assert "Pat" in texts(met(:new))
+      assert colour_of(met(:new), "added to your badges") == Theme.ok()
+    end
+
+    test "a badge already collected says so, in its own colour" do
+      assert colour_of(met(:known), "already in your badges") == Theme.select()
+      refute colour_of(met(:known), "already in your badges") == Theme.ok()
+    end
+
+    test "a renamed badge is distinct from both new and known" do
+      assert colour_of(met(:renamed), "name updated") == Theme.warn()
+    end
+
+    test "the panel slows down while the link is feeding it" do
+      assert Name.refresh(%{sharing() | sharing: true}) == 333
+      assert Name.refresh(sharing()) == 100
+    end
+  end
+
+  describe "deciding what a heard badge means" do
+    defp known(pairs) do
+      Enum.reduce(pairs, [], fn {id, name}, acc -> Peers.add(acc, id, %{name: name}) end)
+    end
+
+    test "an unheard chip id is new" do
+      assert Name.greeting([], "aaaaaa", "Pat") == :new
+      assert Name.greeting(known([{"bbbbbb", "Gus"}]), "aaaaaa", "Pat") == :new
+    end
+
+    test "the same chip id under the same name is already known" do
+      assert Name.greeting(known([{"aaaaaa", "Pat"}]), "aaaaaa", "Pat") == :known
+    end
+
+    test "the same chip id under a new name is a rename, not a new badge" do
+      assert Name.greeting(known([{"aaaaaa", "Pat"}]), "aaaaaa", "Patricia") == :renamed
+    end
+
+    test "a rename replaces rather than duplicating" do
+      peers = known([{"aaaaaa", "Pat"}])
+      renamed = Peers.add(peers, "aaaaaa", %{name: "Patricia"})
+
+      assert Peers.count(renamed) == 1
+      assert Profile.display_name(Peers.find(renamed, "aaaaaa").profile) == "Patricia"
+    end
+  end
+
+  describe "ticking" do
+    test "a loaded, idle page ticks to a map, not something render cannot use" do
+      profile = Map.put(Profile.blank(), :name, "Gus")
+
+      state = %{
+        Name.init()
+        | loaded: true,
+          mode: :show,
+          profile: profile,
+          saved: profile
+      }
+
+      ticked = Name.tick(state)
+
+      assert is_map(ticked)
+      assert is_list(Name.render(ticked))
+    end
+  end
+
+  describe "hearing a badge" do
+    test "the same badge beaconing again changes nothing" do
+      state = %{sharing() | sharing: true, link: self(), announced: {"aaaaaa", "Pat"}}
+
+      assert Name.handle_info({:ir_peer, "aaaaaa", "Pat"}, state) == :ignore
+    end
+
+    test "a badge already collected is reported without rewriting the list" do
+      peers = [%{id: "aaaaaa", profile: %{name: "Pat"}}]
+      state = %{sharing() | sharing: true, link: self(), peers: peers}
+
+      {:ok, next} = Name.handle_info({:ir_peer, "aaaaaa", "Pat"}, state)
+
+      assert next.met == {"Pat", :known}
+      assert next.peers == peers
+      assert next.announced == {"aaaaaa", "Pat"}
+    end
+
+    test "a badge arriving after sharing stopped is dropped" do
+      assert Name.handle_info({:ir_peer, "aaaaaa", "Pat"}, sharing()) == :ignore
+    end
+  end
+
+  describe "scrolling the collected list" do
+    defp with_peers(n) do
+      peers = for i <- 1..n, do: %{id: <<i::48>>, profile: %{name: "Badge #{i}"}}
+
+      %{screen(showing(%{name: "Gus"}), 3) | peers: peers}
+    end
+
+    test "a list that fits does not scroll" do
+      assert Name.scroll(with_peers(3), 1).top == 0
+    end
+
+    test "scrolling stops at the last full window" do
+      assert Name.scroll(with_peers(10), 99).top == 4
+    end
+
+    test "scrolling stops at the top" do
+      assert Name.scroll(with_peers(10), -99).top == 0
+    end
+
+    test "the window shows the names it has scrolled to" do
+      scrolled = Name.scroll(with_peers(10), 2)
+
+      assert "Badge 3" in texts(scrolled)
+      refute "Badge 1" in texts(scrolled)
+    end
+
+    test "a short list says nothing about scrolling" do
+      refute Enum.any?(texts(with_peers(3)), &(:binary.match(&1, "of 3") != :nomatch))
+    end
+
+    test "a long list says where you are in it" do
+      assert Enum.any?(texts(with_peers(10)), &(:binary.match(&1, "1-6 of 10") != :nomatch))
+    end
+
+    test "up and down belong to the collected screen alone" do
+      assert Name.handle_key({:move, :down}, screen(showing(%{name: "Gus"}), 1)) == :ignore
+      assert press(with_peers(10), {:move, :down}).top == 1
+    end
+
+    test "paging away from the list starts it at the top again" do
+      scrolled = Name.scroll(with_peers(10), 3)
+
+      assert press(scrolled, {:move, :right}).top == 0
     end
 
     test "enter belongs to the share screen alone" do

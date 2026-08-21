@@ -72,8 +72,16 @@ defmodule Badge.UI do
     GenServer.cast(__MODULE__, {:key, event})
   end
 
-  @impl true
-  def init(spi) do
+  @doc """
+  Opens the AtomGL port and loads the fonts.
+
+  Called once by `Badge`, not from `init/1`, so that restarting this process
+  reuses the display rather than opening a second one. Each port carries a
+  framebuffer; orphaning one costs about 32 kB, which is enough to turn a
+  single restart into an out-of-memory reboot on a badge running wifi.
+  """
+  @spec open_display(term) :: port
+  def open_display(spi) do
     port = :erlang.open_port({:spawn, "display"}, display_opts(spi))
 
     :port.call(port, {:register_font, :dogica, @font_dogica})
@@ -82,6 +90,11 @@ defmodule Badge.UI do
 
     :io.format(~c"UI: AtomGL port open, ~p slots~n", [length(Pages.all())])
 
+    port
+  end
+
+  @impl true
+  def init(port) do
     state = %{
       port: port,
       page: Home,
@@ -232,8 +245,12 @@ defmodule Badge.UI do
   end
 
   defp render(%{port: port, page: page, page_state: page_state, status: status}) do
-    :port.call(port, {:update, page.render(page_state) ++ chrome(page.title(), status)})
+    items = page.render(page_state) ++ chrome(page.title(), status)
+
+    :port.call(port, {:update, items})
   end
+
+
 
   # Z-order runs tail to head: background last.
   defp chrome(title, status) do

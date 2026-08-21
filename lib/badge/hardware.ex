@@ -44,4 +44,11 @@ defmodule Badge.Hardware do
 
   # SC7A20 INT1, routed for a data-ready interrupt.
   def accel_int_pin, do: 12
+
+  # IR link. These are UART0's default pins, so the console has to be driven
+  # off them before either is usable; configuring them takes the IO MUX back.
+  # LED is active low, and the phototransistor idles high, so beam-present
+  # reads low at both ends and standard UART polarity works without inverting.
+  def ir_led, do: 43
+  def ir_sense, do: 44
 end
