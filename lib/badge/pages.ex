@@ -13,7 +13,7 @@ defmodule Badge.Pages do
     {:cross, Badge.Page.Temp},
     {:circle, Badge.Page.Info},
     {:clover, Badge.Page.Led},
-    {:diamond, nil}
+    {:diamond, Badge.Page.Name}
   ]
 
   @doc "Every slot, in button order."
