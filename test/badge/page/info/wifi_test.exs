@@ -190,6 +190,53 @@ defmodule Badge.Page.Info.WifiTest do
       assert shows?(listing([]), "off")
     end
 
+    test "says so when a join failed, rather than sitting on connecting" do
+      state = %{
+        listing([])
+        | status: %{radio: :failed, ssid: "HomeNet", scanning: false, scan_id: 0}
+      }
+
+      assert shows?(state, "failed")
+    end
+
+    test "offers forgetting the saved network" do
+      assert shows?(listing([]), "forget")
+    end
+
+    test "the joined network is coloured differently from the cursor" do
+      networks = [ap("HomeNet", -50), ap("Other", -60)]
+
+      joined = %{
+        listing(networks)
+        | cursor: 1,
+          status: %{radio: :connected, ssid: "HomeNet", scanning: false, scan_id: 0}
+      }
+
+      colours =
+        for {:text, 8, _y, _f, colour, _bg, body} <- Wifi.render(joined),
+            :binary.match(body, "HomeNet") != :nomatch or :binary.match(body, "Other") != :nomatch,
+            do: colour
+
+      assert length(colours) == 2
+      assert length(:lists.usort(colours)) == 2
+    end
+
+    test "no network is specially coloured while disconnected" do
+      networks = [ap("HomeNet", -50), ap("Other", -60)]
+
+      state = %{
+        listing(networks)
+        | status: %{radio: :connecting, ssid: "HomeNet", scanning: false, scan_id: 0}
+      }
+
+      colours =
+        for {:text, 8, _y, _f, colour, _bg, body} <- Wifi.render(state),
+            :binary.match(body, "Net") != :nomatch or :binary.match(body, "Other") != :nomatch,
+            do: colour
+
+      assert Theme.fg() in colours
+    end
+
     test "draws below the tab strip and inside the panel" do
       state = listing([ap("First", -50), ap("Second", -60)])
 

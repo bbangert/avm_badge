@@ -21,6 +21,9 @@ defmodule Badge.Page.Info.Wifi do
 
   @accent Theme.accent()
   @fg Theme.fg()
+
+  # The network currently joined, distinct from the cursor highlight.
+  @joined 0x4CD964
   @dim Theme.dim()
   @bg Theme.bg()
 
@@ -44,7 +47,7 @@ defmodule Badge.Page.Info.Wifi do
       scan_id: 0,
       field: Field.new(@capacity),
       chosen: nil,
-      status: %{radio: :disabled, scanning: false, scan_id: 0}
+      status: %{radio: :disabled, ssid: nil, scanning: false, scan_id: 0}
     }
   end
 
@@ -71,6 +74,12 @@ defmodule Badge.Page.Info.Wifi do
 
   defp list_key({:char, char}, state) when char == ?s or char == ?S do
     Wifi.scan()
+
+    {:ok, state}
+  end
+
+  defp list_key({:char, char}, state) when char == ?c or char == ?C do
+    Wifi.forget()
 
     {:ok, state}
   end
@@ -150,10 +159,11 @@ defmodule Badge.Page.Info.Wifi do
 
   defp radio(:connected), do: "connected"
   defp radio(:connecting), do: "connecting"
+  defp radio(:failed), do: "failed - check passphrase"
   defp radio(_radio), do: "off"
 
-  defp list_help(%{networks: []}), do: "s to scan for networks"
-  defp list_help(_state), do: "up/down pick   Enter join   s rescan"
+  defp list_help(%{networks: []}), do: "s scan   c forget saved network"
+  defp list_help(_state), do: "Enter join   s rescan   c forget"
 
   defp rows(%{status: %{scanning: true}}) do
     [{:text, @row_x, first_row(), :default16px, @dim, @bg, "scanning..."}]
@@ -164,7 +174,7 @@ defmodule Badge.Page.Info.Wifi do
   defp rows(state) do
     visible = window(state.networks, first_visible(state), @rows, [])
 
-    network_items(visible, first_visible(state), state.cursor, first_row(), [])
+    network_items(visible, first_visible(state), state, first_row(), [])
   end
 
   defp first_row, do: Info.content_top() + Readout.pitch() + 8
@@ -181,19 +191,24 @@ defmodule Badge.Page.Info.Wifi do
 
   defp window([network | rest], _skip, left, acc), do: window(rest, 0, left - 1, [network | acc])
 
-  defp network_items([], _index, _cursor, _y, acc), do: :lists.reverse(acc)
+  defp network_items([], _index, _state, _y, acc), do: :lists.reverse(acc)
 
-  defp network_items([network | rest], index, cursor, y, acc) do
-    colour = if index == cursor, do: @accent, else: @fg
-    marker = if index == cursor, do: ">", else: " "
+  defp network_items([network | rest], index, state, y, acc) do
+    marker = if index == state.cursor, do: ">", else: " "
 
     items = [
-      {:text, @row_x, y, :default16px, colour, @bg, Network.label(network)},
+      {:text, @row_x, y, :default16px, row_colour(network, index, state), @bg,
+       Network.label(network)},
       {:text, @cursor_x, y, :default16px, @accent, @bg, marker}
     ]
 
-    network_items(rest, index + 1, cursor, y + Readout.pitch(), items ++ acc)
+    network_items(rest, index + 1, state, y + Readout.pitch(), items ++ acc)
   end
+
+  # The network you are on reads green whether or not the cursor is on it.
+  defp row_colour(%{ssid: ssid}, _index, %{status: %{radio: :connected, ssid: ssid}}), do: @joined
+  defp row_colour(_network, index, %{cursor: index}), do: @accent
+  defp row_colour(_network, _index, _state), do: @fg
 
   defp help(text), do: {:text, @row_x, @help_y, :default16px, @dim, @bg, text}
 end

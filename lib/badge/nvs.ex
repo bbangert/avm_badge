@@ -25,4 +25,10 @@ defmodule Badge.Nvs do
   def put(key, value) do
     :esp.nvs_set_binary(@namespace, key, value)
   end
+
+  @doc "Removes a provisioned key."
+  @spec delete(atom) :: :ok | {:error, term}
+  def delete(key) do
+    :esp.nvs_erase_key(@namespace, key)
+  end
 end

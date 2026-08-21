@@ -23,6 +23,12 @@ defmodule Badge.Wifi do
   @first_backoff 1_000
   @max_backoff 30_000
 
+  # Dropped this many times right after an explicit join, and the passphrase is wrong.
+  @max_attempts 3
+
+  # A join that goes silent rather than dropping still has to report something.
+  @join_timeout 20_000
+
   def start_link(_arg) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
@@ -51,6 +57,29 @@ defmodule Badge.Wifi do
     GenServer.call(__MODULE__, :networks)
   end
 
+  @doc """
+  What a dropped connection means, given the current state.
+
+  `:stay` when the radio was switched off deliberately — disconnecting fires
+  this callback too, and without it the badge would reconnect to the network
+  it was just told to forget.
+  """
+  @spec on_disconnect(map) :: :stay | :give_up | :retry_join | :retry
+  def on_disconnect(%{radio: :disabled}), do: :stay
+
+  def on_disconnect(%{pending: {_ssid, _psk}, attempts: attempts})
+      when attempts + 1 >= @max_attempts,
+      do: :give_up
+
+  def on_disconnect(%{pending: {_ssid, _psk}}), do: :retry_join
+  def on_disconnect(_state), do: :retry
+
+  @doc "Forgets the saved network and drops the connection."
+  @spec forget() :: :ok
+  def forget do
+    GenServer.cast(__MODULE__, :forget)
+  end
+
   @doc "Title bar icon for a radio state."
   @spec icon(atom) :: atom
   def icon(:connected), do: :wifi
@@ -63,6 +92,8 @@ defmodule Badge.Wifi do
       synced: false,
       offset: Clock.offset_minutes(Nvs.get(:utc_offset_m)),
       backoff: @first_backoff,
+      ssid: Nvs.get(:wifi_ssid),
+      attempts: 0,
       started: false,
       scanning: false,
       networks: [],
@@ -95,6 +126,7 @@ defmodule Badge.Wifi do
   def handle_call(:status, _from, state) do
     status = %{
       radio: state.radio,
+      ssid: state.ssid,
       synced: state.synced,
       offset: state.offset,
       scanning: state.scanning,
@@ -129,15 +161,25 @@ defmodule Badge.Wifi do
     :io.format(~c"Wifi: joining ~s~n", [ssid])
     started = ensure_started(state)
     :network.sta_connect(ssid: ssid, psk: psk)
+    after_delay(@join_timeout, {:join_timeout, ssid})
 
-    {:noreply, %{started | radio: :connecting, pending: {ssid, psk}}}
+    {:noreply, %{started | radio: :connecting, ssid: ssid, pending: {ssid, psk}, attempts: 0}}
+  end
+
+  def handle_cast(:forget, state) do
+    Nvs.delete(:wifi_ssid)
+    Nvs.delete(:wifi_psk)
+    disconnect(state)
+    :io.format(~c"Wifi: forgot the saved network~n")
+
+    {:noreply, %{state | radio: :disabled, ssid: nil, pending: nil, attempts: 0}}
   end
 
   @impl true
   def handle_info(:connected, state) do
     :io.format(~c"Wifi: associated~n")
 
-    {:noreply, %{state | radio: :connected, backoff: @first_backoff}}
+    {:noreply, %{state | radio: :connected, backoff: @first_backoff, attempts: 0}}
   end
 
   def handle_info({:got_ip, info}, state) do
@@ -159,12 +201,23 @@ defmodule Badge.Wifi do
     {:noreply, %{state | scanning: false, scan_id: state.scan_id + 1}}
   end
 
-  def handle_info(:disconnected, state) do
-    :io.format(~c"Wifi: dropped, retrying in ~pms~n", [state.backoff])
-    retry_after(state.backoff)
+  # A drop right after an explicit join means the passphrase was wrong; a drop on a
+  # saved network means the access point went away, so that one retries forever.
+  def handle_info(:disconnected, state), do: dropped(on_disconnect(state), state)
 
-    {:noreply, %{state | radio: :connecting}}
+  # Our own sta_disconnect/0 fires this callback; reconnecting here would undo a forget.
+  def handle_info(:retry, %{radio: :disabled} = state), do: {:noreply, state}
+
+  def handle_info(
+        {:join_timeout, ssid},
+        %{ssid: ssid, radio: :connecting, pending: {_s, _p}} = state
+      ) do
+    :io.format(~c"Wifi: ~s did not answer, giving up~n", [ssid])
+
+    {:noreply, %{state | radio: :failed, pending: nil, attempts: 0}}
   end
+
+  def handle_info({:join_timeout, _ssid}, state), do: {:noreply, state}
 
   def handle_info(:retry, state) do
     :network.sta_connect()
@@ -231,13 +284,39 @@ defmodule Badge.Wifi do
     end
   end
 
+  defp dropped(:stay, state), do: {:noreply, state}
+
+  defp dropped(:give_up, %{pending: {ssid, _psk}} = state) do
+    :io.format(~c"Wifi: could not join ~s, giving up~n", [ssid])
+
+    {:noreply, %{state | radio: :failed, pending: nil, attempts: 0}}
+  end
+
+  defp dropped(:retry_join, state) do
+    retry_after(state.backoff)
+
+    {:noreply, %{state | radio: :connecting, attempts: state.attempts + 1}}
+  end
+
+  defp dropped(:retry, state) do
+    :io.format(~c"Wifi: dropped, retrying in ~pms~n", [state.backoff])
+    retry_after(state.backoff)
+
+    {:noreply, %{state | radio: :connecting}}
+  end
+
+  defp retry_after(delay), do: after_delay(delay, :retry)
+
   # Sleeps in a linked process rather than using Process.send_after/3.
-  defp retry_after(delay) do
+  defp after_delay(delay, message) do
     wifi = self()
 
     spawn_link(fn ->
       Process.sleep(delay)
-      send(wifi, :retry)
+      send(wifi, message)
     end)
   end
+
+  defp disconnect(%{started: false}), do: :ok
+  defp disconnect(_state), do: :network.sta_disconnect()
 end
