@@ -1,0 +1,77 @@
+# AtomVM badge firmware
+
+Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
+6x13 GPIO keyboard matrix, SK6812 NeoPixels. Runs on AtomVM, not the BEAM.
+
+## Commands
+
+- `mix test` — 34 host tests, no board needed
+- `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
+  pass `--port`
+- `ls /dev/cu.usbmodem*` — board re-enumerates, path changes between sessions
+- Board resets after flashing, so chain flash and read to catch boot output:
+  `( mix atomvm.esp32.flash >/dev/null 2>&1; stty -f <port> 115200 raw -echo; timeout 25 cat <port> )`
+- Never run unbounded `cat`/`screen` on the port — it blocks the next flash
+- Base image rebuild (rare): `. $IDF_PATH/export.sh; idf.py build` in
+  `AtomVM/src/platforms/esp32`, then flash `0x10000` only — app lives at
+  `0x250000` and survives
+
+## AtomVM is not the BEAM
+
+- **No `String` module.** Only the `String.Chars` protocol. Text is charlists or
+  binaries.
+- **`Enum` is a subset.** No `with_index`, `take`, `drop`, `sort`, `zip`,
+  `uniq`, `sum`, `max`, `min`. `count/1` exists; **`count/2` does not**. Use
+  `:lists` (complete) for anything missing.
+- **Module attributes run on the host compiler** — full Elixir is legal inside
+  them; only runtime code is constrained.
+- **`Process.send_after/3` costs ~6.6 ms per call** (spawns two processes plus a
+  synchronous `gen_server:call` to a singleton). Loop with `Process.sleep/1` in
+  a process that receives nothing else.
+- **`:port.call/2` blocks** waiting for a reply even when the driver pre-acks.
+- **FreeRTOS tick is 10 ms** (`CONFIG_FREERTOS_HZ=100`) — the floor for any
+  sleep or timer.
+- **SPI `peripheral:` must be a string** (`"spi2"`), not an atom, or
+  `:spi.open/1` throws `{bardarg,...}`.
+- **`:erlang.get/1` returns `:undefined`**, not `nil` — `||` defaults don't
+  work.
+- **Charlists cost 2 machine words per character.** Large ones in messages cause
+  OOM reboots; prefer binaries.
+- Use plain maps, not structs.
+- `mix atomvm.check` is the real compatibility gate and runs during flash. Host
+  tests passing proves nothing.
+
+## AtomGL display
+
+- `{:update, list}` **repaints the entire screen** — no damage rect. Cost is per
+  frame, not per change.
+- Updates are pre-acked at enqueue; the render queue is 32 deep and drops
+  oldest.
+- Z-order is tail-to-head: background rect **last**, cursor **first**.
+- `:default16px` (8x16) is the only built-in font.
+- Rotation 3 needs AtomGL branch `badge/st7789-rotation-3` (`4319810`) in the
+  base image. Without it the panel is **silently black** — no error anywhere in
+  Elixir.
+
+## Testing
+
+- Pure modules (`Keymap`, `TextBuffer`, `KeyRepeat`) are host-tested; hardware
+  modules are not.
+- Warnings that `:spi`, `:port`, `:gpio`, `GPIO` are undefined are expected on
+  host — not defects.
+- `@impl true` goes on the **first clause only** of a multi-clause callback; a
+  lint hook false-positives here.
+- Visual and interactive behaviour (panel content, typing feel, LED colour)
+  needs a human.
+- Measure on hardware before optimising — several plausible theories were wrong
+  this session.
+
+## Conventions
+
+- Commit subjects: capitalised, one line, no body, no `Co-Authored-By`.
+- Comments: at most one line, local clarification only. No rationale, no
+  measurements.
+- Docstrings: may be multi-line but concise — how to use it, not why it was
+  built that way.
+- Design rationale lives in `../docs/` (outside this repo), not in code.
+- Never discard uncommitted changes; report them instead.
