@@ -32,24 +32,6 @@ defmodule Badge.Page.InfoTest do
     end
   end
 
-  describe "percent/1" do
-    test "clamps at both rails" do
-      assert Info.percent(3000) == 0
-      assert Info.percent(3300) == 0
-      assert Info.percent(4200) == 100
-      assert Info.percent(4500) == 100
-    end
-
-    test "is monotonic across the working range" do
-      assert Info.percent(3500) < Info.percent(3800)
-      assert Info.percent(3800) < Info.percent(4100)
-    end
-
-    test "the midpoint is about half" do
-      assert_in_delta Info.percent(3750), 50, 2
-    end
-  end
-
   describe "render/1" do
     test "renders from a literal reading with no hardware" do
       state = Info.update(Info.init(), reading(%{}))

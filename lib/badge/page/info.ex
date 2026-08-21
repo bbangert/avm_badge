@@ -8,6 +8,7 @@ defmodule Badge.Page.Info do
 
   use Badge.Page
 
+  alias Badge.Battery
   alias Badge.Power
   alias Badge.Sensors
   alias Badge.Theme
@@ -26,10 +27,6 @@ defmodule Badge.Page.Info do
   @bar_y 190
   @bar_w 304
   @bar_h 14
-
-  # Li-ion working range for the percentage bar.
-  @mv_empty 3300
-  @mv_full 4200
 
   # Milli-g the accelerometer readout rounds to.
   @accel_quantum 10
@@ -57,21 +54,18 @@ defmodule Badge.Page.Info do
   @doc "Adopts a fresh reading map, rounding the axes that would otherwise jitter."
   def update(_state, reading), do: %{reading | accel: coarse(reading.accel)}
 
-  @doc "Battery charge as a percentage of the li-ion working range."
-  def percent(mv) when mv <= @mv_empty, do: 0
-  def percent(mv) when mv >= @mv_full, do: 100
-  def percent(mv), do: div((mv - @mv_empty) * 100, @mv_full - @mv_empty)
-
   @impl true
   def render(reading) do
     row_items(rows(reading), @row_ys, []) ++ battery_bar(reading.battery_mv)
   end
 
   defp read do
+    power = Power.status()
+
     %{
-      battery_mv: Power.battery_mv(),
-      vbus_mv: Power.vbus_mv(),
-      usb: Power.usb_present?(),
+      battery_mv: power.battery_mv,
+      vbus_mv: power.vbus_mv,
+      usb: power.usb,
       temp: Sensors.temperature(),
       accel: Sensors.acceleration(),
       uptime_s: div(:erlang.monotonic_time(:millisecond), 1000)
@@ -80,7 +74,8 @@ defmodule Badge.Page.Info do
 
   defp rows(reading) do
     [
-      {"battery", int(reading.battery_mv) <> " mV   " <> int(percent(reading.battery_mv)) <> "%"},
+      {"battery",
+       int(reading.battery_mv) <> " mV   " <> int(Battery.percent(reading.battery_mv)) <> "%"},
       {"vbus", int(reading.vbus_mv) <> " mV"},
       {"usb", usb(reading.usb)},
       {"temp", temp(reading.temp)},
@@ -102,7 +97,7 @@ defmodule Badge.Page.Info do
   # Fill first, frame second: the frame shows through as the unfilled remainder.
   defp battery_bar(mv) do
     [
-      {:rect, @bar_x, @bar_y, div(@bar_w * percent(mv), 100), @bar_h, @accent},
+      {:rect, @bar_x, @bar_y, div(@bar_w * Battery.percent(mv), 100), @bar_h, @accent},
       {:rect, @bar_x, @bar_y, @bar_w, @bar_h, @dim}
     ]
   end

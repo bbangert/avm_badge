@@ -36,6 +36,12 @@ defmodule Badge.Power do
     GenServer.call(__MODULE__, :vbus_mv)
   end
 
+  @doc "Battery voltage, VBUS voltage and USB presence in a single call."
+  @spec status() :: %{battery_mv: integer, vbus_mv: integer, usb: boolean}
+  def status do
+    GenServer.call(__MODULE__, :status)
+  end
+
   @doc "Whether USB power is present, from the VBUS reading."
   @spec usb_present?() :: boolean
   def usb_present? do
@@ -57,13 +63,26 @@ defmodule Badge.Power do
     send(self(), :tick)
     start_ticker()
 
-    {:ok, %{unit: unit, battery_chan: battery_chan, vbus_chan: vbus_chan, battery_mv: 0, vbus_mv: 0}}
+    {:ok,
+     %{unit: unit, battery_chan: battery_chan, vbus_chan: vbus_chan, battery_mv: 0, vbus_mv: 0}}
   end
 
   @impl true
   def handle_call(:battery_mv, _from, state), do: {:reply, state.battery_mv, state}
   def handle_call(:vbus_mv, _from, state), do: {:reply, state.vbus_mv, state}
-  def handle_call(:usb_present?, _from, state), do: {:reply, state.vbus_mv >= @usb_present_mv, state}
+
+  def handle_call(:usb_present?, _from, state),
+    do: {:reply, state.vbus_mv >= @usb_present_mv, state}
+
+  def handle_call(:status, _from, state) do
+    status = %{
+      battery_mv: state.battery_mv,
+      vbus_mv: state.vbus_mv,
+      usb: state.vbus_mv >= @usb_present_mv
+    }
+
+    {:reply, status, state}
+  end
 
   @impl true
   def handle_info(:tick, state) do
