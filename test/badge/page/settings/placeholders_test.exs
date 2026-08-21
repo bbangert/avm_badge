@@ -4,7 +4,7 @@ defmodule Badge.Page.Settings.PlaceholdersTest do
   alias Badge.Page.Settings
   alias Badge.Theme
 
-  @placeholders [Settings.Update, Settings.Sudo]
+  @placeholders [Settings.Update]
 
   describe "the tabs that are not built yet" do
     test "each names itself for the strip" do
