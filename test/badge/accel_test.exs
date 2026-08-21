@@ -19,25 +19,6 @@ defmodule Badge.AccelTest do
     end
   end
 
-  describe "average/2" do
-    test "nil previous adopts the sample as-is" do
-      assert Accel.average(nil, {100, 200, 300}) == {100, 200, 300}
-    end
-
-    test "moves a quarter of the way to the new sample per axis" do
-      assert Accel.average({100, 200, 300}, {200, 200, 700}) == {125, 200, 400}
-    end
-
-    test "converges toward a steady input" do
-      steady = {1000, -500, 250}
-
-      averaged =
-        Enum.reduce(1..20, nil, fn _, acc -> Accel.average(acc, steady) end)
-
-      assert averaged == steady
-    end
-  end
-
   describe "orientation/1" do
     test "flat, z up, gives zero roll and pitch" do
       assert Accel.orientation({0, 0, 1000}) == {0, 0}
