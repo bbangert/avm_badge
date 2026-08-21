@@ -27,7 +27,7 @@ defmodule Badge.Page.TiltTest do
     end
 
     test "repaints slowly, since a frame is a whole panel" do
-      assert Tilt.refresh() == 333
+      assert Tilt.refresh(Tilt.init()) == 333
     end
   end
 

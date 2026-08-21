@@ -35,7 +35,7 @@ defmodule Badge.Page.SettingsTest do
     end
 
     test "repaints slowly, since a frame is a whole panel" do
-      assert Settings.refresh() == 333
+      assert Settings.refresh(Settings.init()) == 333
     end
   end
 

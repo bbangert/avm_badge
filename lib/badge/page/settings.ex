@@ -43,7 +43,7 @@ defmodule Badge.Page.Settings do
 
   # Nothing here moves fast enough to be worth a full repaint ten times a second.
   @impl true
-  def refresh, do: 333
+  def refresh(_state), do: 333
 
   @doc "First y a sub-page may draw on."
   def content_top, do: @content_top

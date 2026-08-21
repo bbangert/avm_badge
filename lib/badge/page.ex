@@ -7,9 +7,9 @@ defmodule Badge.Page do
   the title bar and the background rect, so no page can get the z-order
   wrong or forget the background.
 
-  `use Badge.Page` supplies `handle_key/2`, `tick/1`, a 100 ms `refresh/0`
-  and a placeholder `icon/0` for pages that need none of them, all
-  overridable. Sub-pages inside a container never reach the home grid, so
+  `use Badge.Page` supplies `handle_key/2`, `tick/1`, a 100 ms `refresh/0`,
+  a placeholder `icon/0`, an ignoring `handle_info/2` and a no-op `leave/1`
+  for pages that need none of them, all overridable. Sub-pages inside a container never reach the home grid, so
   they leave `icon/0` alone.
   """
 
@@ -40,8 +40,30 @@ defmodule Badge.Page do
 
   A frame is a full-panel repaint, so a page whose data changes constantly
   should ask for a slower rate than one that only redraws on a keypress.
+  Asking for more than the panel can drain backs frames up in AtomGL's
+  queue, which shows up as free heap draining away rather than as dropped
+  frames. It takes the state so one page can hold different rates for
+  different screens.
   """
-  @callback refresh() :: pos_integer
+  @callback refresh(state) :: pos_integer
+
+  @doc """
+  Applies a message sent to `Badge.UI` by a process the page owns.
+
+  A page cannot receive for itself: `Badge.UI` is a `GenServer` and takes
+  every message out of the mailbox before anything else can look. So its
+  own process sends here, and ignoring a message is always safe.
+  """
+  @callback handle_info(term, state) :: {:ok, state} | :ignore
+
+  @doc """
+  Releases anything the page owns, just before `Badge.UI` switches away.
+
+  A page is not a process, so a page that spawned one or claimed a pin has
+  nowhere else to give it back. Re-entering the page it is already on is not
+  leaving, and does not call this.
+  """
+  @callback leave(state) :: :ok
 
   defmacro __using__(_opts) do
     quote do
@@ -54,12 +76,18 @@ defmodule Badge.Page do
       def tick(state), do: state
 
       @impl true
-      def refresh, do: 100
+      def refresh(_state), do: 100
 
       @impl true
       def icon, do: :square
 
-      defoverridable handle_key: 2, tick: 1, refresh: 0, icon: 0
+      @impl true
+      def handle_info(_message, _state), do: :ignore
+
+      @impl true
+      def leave(_state), do: :ok
+
+      defoverridable handle_key: 2, tick: 1, refresh: 1, icon: 0, leave: 1, handle_info: 2
     end
   end
 end

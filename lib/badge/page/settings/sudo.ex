@@ -26,7 +26,7 @@ defmodule Badge.Page.Settings.Sudo do
   # only when the picture does. A counter in state would look different on
   # every tick and repaint the panel ten times a second for five new frames.
   @impl true
-  def refresh, do: 100
+  def refresh(_state), do: 100
 
   @impl true
   def title, do: "Sudo Mode"

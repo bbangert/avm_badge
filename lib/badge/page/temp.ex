@@ -34,7 +34,7 @@ defmodule Badge.Page.Temp do
 
   # One sample lands per second, so three frames a second is already generous.
   @impl true
-  def refresh, do: 333
+  def refresh(_state), do: 333
 
   @impl true
   def title, do: "Temp"

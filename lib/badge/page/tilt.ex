@@ -52,7 +52,7 @@ defmodule Badge.Page.Tilt do
   @readout_y 218
 
   @impl true
-  def refresh, do: 333
+  def refresh(_state), do: 333
 
   @impl true
   def title, do: "Tilt"

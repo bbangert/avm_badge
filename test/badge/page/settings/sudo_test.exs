@@ -12,7 +12,7 @@ defmodule Badge.Page.Settings.SudoTest do
     end
 
     test "repaints promptly, so a new frame is not held back" do
-      assert Sudo.refresh() == 100
+      assert Sudo.refresh(Sudo.init()) == 100
     end
 
     test "holds each frame long enough to see" do

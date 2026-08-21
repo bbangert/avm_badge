@@ -152,14 +152,37 @@ defmodule Badge.UI do
       true ->
         render(next)
 
-        {:noreply, %{next | dirty: false, countdown: reload(next.page)}}
+        {:noreply, %{next | dirty: false, countdown: reload(next.page, next.page_state)}}
 
       false ->
         {:noreply, %{next | countdown: max(next.countdown - 1, 0)}}
     end
   end
 
-  defp reload(page), do: max(div(page.refresh(), @base_interval), 1) - 1
+  # A page's own process can only send to this GenServer, which owns the
+  # mailbox; anything it does not recognise is dropped rather than fatal.
+  def handle_info(message, state) do
+    case state.page.handle_info(message, state.page_state) do
+      {:ok, page_state} ->
+        dirty = state.dirty or page_state != state.page_state
+
+        {:noreply, %{state | page_state: page_state, dirty: dirty}}
+
+      :ignore ->
+        {:noreply, state}
+    end
+  end
+
+  # Bring-up instrumentation: a restart is otherwise silent, and the reason
+  # is the only thing that says which side of a link died first.
+  @impl true
+  def terminate(reason, _state) do
+    :io.format(~c"UI: terminating ~p~n", [reason])
+
+    :ok
+  end
+
+  defp reload(page, page_state), do: max(div(page.refresh(page_state), @base_interval), 1) - 1
 
   # Retries next tick while a source is down, rather than calling a process that is not there.
   defp refresh_status(%{status_countdown: 0} = state) do
@@ -203,6 +226,8 @@ defmodule Badge.UI do
   defp goto(%{page: page} = state, page), do: state
 
   defp goto(state, page) do
+    state.page.leave(state.page_state)
+
     %{state | page: page, page_state: page.init(), dirty: true, countdown: 0}
   end
 
