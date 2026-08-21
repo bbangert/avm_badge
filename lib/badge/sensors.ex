@@ -67,13 +67,12 @@ defmodule Badge.Sensors do
     :ok = I2C.write_bytes(i2c, @sc7a20_addr, @sc7a20_ctrl_reg4, @sc7a20_ctrl_reg4_bdu_2g)
     :ok = I2C.write_bytes(i2c, @sc7a20_addr, @sc7a20_ctrl_reg3, @sc7a20_ctrl_reg3_i1_zyxda)
 
-    # Clears any data-ready already latched before CTRL_REG3 routed it to
-    # INT1, so the pin starts low and the first sample is a rising edge
-    # rather than a level already high with nothing to trigger on.
-    _ = I2C.read_bytes(i2c, @sc7a20_addr, @sc7a20_out_x_l ||| @sc7a20_auto_increment, 6)
-
     gpio = GPIO.open()
     :ok = GPIO.set_int(gpio, @accel_int_pin, :rising)
+
+    # Clearing after arming, not before: a sample landing between the two would
+    # leave INT1 already high, and a rising-edge trigger never fires again.
+    _ = I2C.read_bytes(i2c, @sc7a20_addr, @sc7a20_out_x_l ||| @sc7a20_auto_increment, 6)
 
     :io.format(~c"Sensors: sc7a20 25Hz data-ready interrupt on GPIO~p, tmp103 every ~ps~n", [
       @accel_int_pin,
@@ -83,7 +82,7 @@ defmodule Badge.Sensors do
     send(self(), :temp_tick)
     start_temp_ticker()
 
-    {:ok, %{i2c: i2c, accel: nil, temp: :unavailable}}
+    {:ok, %{i2c: i2c, gpio: gpio, accel: nil, temp: :unavailable}}
   end
 
   @impl true
@@ -119,13 +118,6 @@ defmodule Badge.Sensors do
       end
 
     {roll, pitch} = Accel.orientation(state.accel || {0, 0, 0})
-
-    :io.format(~c"Sensors: accel=~p orientation=roll~p/pitch~p temp=~pC~n", [
-      state.accel || {0, 0, 0},
-      roll,
-      pitch,
-      temp
-    ])
 
     {:noreply, %{state | temp: temp}}
   end
