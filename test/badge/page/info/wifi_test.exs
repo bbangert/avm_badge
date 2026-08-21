@@ -183,6 +183,68 @@ defmodule Badge.Page.Info.WifiTest do
     end
   end
 
+  describe "passphrase screen" do
+    setup do
+      %{entered: press(listing([ap("CafeWiFi", -50)]), {:edit, :newline})}
+    end
+
+    test "says what to do and how to reveal", %{entered: entered} do
+      assert shows?(entered, "enter passphrase")
+      assert shows?(entered, "hold Fn to view")
+    end
+
+    test "everything is centred", %{entered: entered} do
+      for {:text, x, _y, _f, _c, _b, body} <- Wifi.render(entered) do
+        assert x == div(320 - 8 * byte_size(body), 2)
+      end
+    end
+
+    test "the entry is the select colour", %{entered: entered} do
+      typed = press(entered, {:char, ?a})
+
+      [colour] =
+        for {:text, _x, _y, _f, colour, _b, body} <- Wifi.render(typed),
+            :binary.match(body, "*") != :nomatch,
+            do: colour
+
+      assert colour == Theme.select()
+    end
+
+    test "hidden by default, revealed while held", %{entered: entered} do
+      typed = press(press(entered, {:char, ?h}), {:char, ?i})
+
+      refute shows?(typed, "hi")
+      assert shows?(typed, "**")
+
+      revealed = %{typed | show: true}
+
+      assert shows?(revealed, "hi")
+      refute shows?(revealed, "**")
+    end
+
+    test "revealing is forgotten on the way back to the list", %{entered: entered} do
+      revealed = %{entered | show: true}
+
+      refute press(revealed, {:nav, :home}).show
+    end
+
+    test "a fresh choice starts hidden" do
+      state = %{listing([ap("A", -50), ap("B", -60)]) | show: true}
+
+      assert press(state, {:edit, :newline}).show == false
+    end
+
+    test "nothing spills past the panel edges", %{entered: entered} do
+      typed =
+        :lists.foldl(fn c, acc -> press(acc, {:char, c}) end, entered, ~c"a-long-passphrase")
+
+      for {:text, x, _y, _f, _c, _b, body} <- Wifi.render(typed) do
+        assert x >= 0
+        assert x + 8 * byte_size(body) <= 320
+      end
+    end
+  end
+
   describe "render/1" do
     test "an empty list invites a scan" do
       assert shows?(listing([]), "scan")

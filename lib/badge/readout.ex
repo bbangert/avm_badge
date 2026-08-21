@@ -33,6 +33,10 @@ defmodule Badge.Readout do
     ]
   end
 
+  @doc "The x at which fixed-width text sits centred on the panel."
+  @spec centre_x(binary) :: integer
+  def centre_x(text), do: div(Theme.width() - @char_w * byte_size(text), 2)
+
   @doc "The x at which fixed-width text ends flush with the right margin."
   @spec right_x(binary) :: integer
   def right_x(text), do: Theme.width() - @label_x - @char_w * byte_size(text)

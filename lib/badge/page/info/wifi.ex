@@ -14,6 +14,7 @@ defmodule Badge.Page.Info.Wifi do
 
   alias Badge.Field
   alias Badge.Icons
+  alias Badge.Keyboard
   alias Badge.Network
   alias Badge.Page.Info
   alias Badge.Readout
@@ -45,6 +46,14 @@ defmodule Badge.Page.Info.Wifi do
   # Indexed by Badge.Network.level/1; a tuple so no atom is built at runtime.
   @signal_icons {:signal_0, :signal_1, :signal_2, :signal_3}
 
+  # Held, not tapped, so the passphrase is only visible while you ask for it.
+  @view_key ~c"Fn"
+
+  @name_y Info.content_top() + 8
+  @prompt_y Info.content_top() + 46
+  @hint_y Info.content_top() + 68
+  @field_y Info.content_top() + 106
+
   @impl true
   def title, do: "Wifi"
 
@@ -58,11 +67,16 @@ defmodule Badge.Page.Info.Wifi do
       field: Field.new(@capacity),
       chosen: nil,
       notice: nil,
+      show: false,
       status: %{radio: :disabled, ssid: nil, scanning: false, scan_id: 0}
     }
   end
 
   @impl true
+  def tick(%{mode: :passphrase} = state) do
+    %{state | show: Keyboard.holding?(@view_key)}
+  end
+
   def tick(state) do
     status = Wifi.status()
 
@@ -107,7 +121,14 @@ defmodule Badge.Page.Info.Wifi do
         %{state | notice: "enterprise networks need more than a passphrase"}
 
       Network.secured?(network) ->
-        %{state | mode: :passphrase, chosen: network, field: Field.new(@capacity), notice: nil}
+        %{
+          state
+          | mode: :passphrase,
+            chosen: network,
+            field: Field.new(@capacity),
+            notice: nil,
+            show: false
+        }
 
       true ->
         Wifi.connect(network.ssid, "")
@@ -137,7 +158,7 @@ defmodule Badge.Page.Info.Wifi do
   defp passphrase_key(_event, state), do: {:ok, state}
 
   defp to_list(state) do
-    %{state | mode: :list, chosen: nil, field: Field.new(@capacity)}
+    %{state | mode: :list, chosen: nil, field: Field.new(@capacity), show: false}
   end
 
   defp selected(state), do: :lists.nth(state.cursor + 1, state.networks)
@@ -155,11 +176,11 @@ defmodule Badge.Page.Info.Wifi do
   @impl true
   def render(%{mode: :passphrase} = state) do
     [
-      {:text, @row_x, Info.content_top(), :default16px, @dim, @bg, "join"},
-      {:text, 120, Info.content_top(), :default16px, @fg, @bg, state.chosen.ssid},
-      {:text, @row_x, Info.content_top() + 26, :default16px, @accent, @bg,
-       Field.masked(state.field) <> "_"},
-      help("Enter join   Esc back", @dim)
+      centred(state.chosen.ssid, @name_y, @fg),
+      centred("enter passphrase below", @prompt_y, @dim),
+      centred("hold Fn to view", @hint_y, @dim),
+      centred(entry(state), @field_y, @select),
+      centred("Enter join   Esc back", @help_y, @dim)
     ]
   end
 
@@ -240,6 +261,14 @@ defmodule Badge.Page.Info.Wifi do
   defp row_colour(_network, _index, _state), do: @fg
 
   defp help(text, colour), do: {:text, @row_x, @help_y, :default16px, colour, @bg, text}
+
+  defp centred(text, y, colour) do
+    {:text, Readout.centre_x(text), y, :default16px, colour, @bg, text}
+  end
+
+  # Held Fn reveals what was typed; otherwise only its length shows.
+  defp entry(%{show: true} = state), do: Field.value(state.field) <> "_"
+  defp entry(state), do: Field.masked(state.field) <> "_"
 
   # A notice is something the user needs to notice, so it is not dim.
   defp list_help_item(%{notice: nil} = state), do: help(list_help(state), @dim)
