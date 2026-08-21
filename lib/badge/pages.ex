@@ -12,7 +12,7 @@ defmodule Badge.Pages do
     {:triangle, nil},
     {:cross, Badge.Page.Temp},
     {:circle, Badge.Page.Info},
-    {:clover, nil},
+    {:clover, Badge.Page.Led},
     {:diamond, nil}
   ]
 

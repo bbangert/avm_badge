@@ -37,6 +37,16 @@ defmodule Badge.Pixels do
     GenServer.start_link(__MODULE__, spi, name: __MODULE__)
   end
 
+  @doc """
+  Sets what the chain displays.
+
+  `:rainbow` animates; `{:solid, hue}` and `:off` are static and are only
+  written to the chain once.
+  """
+  def set_mode(mode) do
+    GenServer.cast(__MODULE__, {:mode, mode})
+  end
+
   @impl true
   def init(spi) do
     :io.format(~c"Pixels: ~p LEDs on GPIO ~p at ~p Hz~n", [
@@ -45,7 +55,7 @@ defmodule Badge.Pixels do
       Hardware.pixel_clock_hz()
     ])
 
-    {:ok, %{spi: spi, phase: 0}, {:continue, :self_test}}
+    {:ok, %{spi: spi, phase: 0, mode: :rainbow, last: nil}, {:continue, :self_test}}
   end
 
   # Runs the self-test after init/1 returns, not during it.
@@ -58,14 +68,40 @@ defmodule Badge.Pixels do
   end
 
   @impl true
-  def handle_info(:tick, %{spi: spi, phase: phase} = state) do
-    frame(spi, phase)
+  def handle_cast({:mode, mode}, state) do
+    {:noreply, %{state | mode: mode}}
+  end
+
+  @impl true
+  def handle_info(:tick, state) do
+    next = paint(state)
 
     # Sleeps rather than using Process.send_after/3.
     Process.sleep(@tick)
     send(self(), :tick)
 
-    {:noreply, %{state | phase: rem(phase + @hue_step, 360)}}
+    {:noreply, next}
+  end
+
+  defp paint(%{mode: :rainbow, spi: spi, phase: phase} = state) do
+    frame(spi, phase)
+
+    %{state | phase: rem(phase + @hue_step, 360), last: nil}
+  end
+
+  defp paint(%{mode: {:solid, hue}} = state) do
+    hold(state, Color.hsv_to_rgb(hue, 255, @brightness))
+  end
+
+  defp paint(%{mode: :off} = state), do: hold(state, {0, 0, 0})
+
+  # A static mode would otherwise rewrite the chain fifty times a second.
+  defp hold(%{last: colour} = state, colour), do: state
+
+  defp hold(%{spi: spi} = state, colour) do
+    fill(spi, colour)
+
+    %{state | last: colour}
   end
 
   # Solid colours, in order, make byte-order and wiring faults visible.
