@@ -8,8 +8,7 @@ defmodule Badge.Page.HomeTest do
   defp assigned, do: for({_key, module} <- Pages.all(), module != nil, do: module)
 
   defp icons(items) do
-    for {:scaled_cropped_image, _x, _y, _w, _h, _bg, _sx, _sy, _xs, _ys, _o, _img} <- items,
-        do: :icon
+    for {:image, _x, _y, _bg, {:rgba8888, _w, _h, _data}} <- items, do: :icon
   end
 
   defp texts(items) do
@@ -59,7 +58,7 @@ defmodule Badge.Page.HomeTest do
           case item do
             {:rect, _x, y, _w, _h, _c} -> y
             {:text, _x, y, _f, _fg, _bg, _b} -> y
-            {:scaled_cropped_image, _x, y, _w, _h, _bg, _sx, _sy, _xs, _ys, _o, _i} -> y
+            {:image, _x, y, _bg, _img} -> y
           end
 
         assert y >= Theme.content_top()
@@ -73,7 +72,7 @@ defmodule Badge.Page.HomeTest do
           case item do
             {:rect, x, _y, w, _h, _c} -> {x, w}
             {:text, x, _y, _f, _fg, _bg, body} -> {x, byte_size(body) * 8}
-            {:scaled_cropped_image, x, _y, w, _h, _bg, _sx, _sy, _xs, _ys, _o, _i} -> {x, w}
+            {:image, x, _y, _bg, {:rgba8888, w, _h, _data}} -> {x, w}
           end
 
         assert x >= 0

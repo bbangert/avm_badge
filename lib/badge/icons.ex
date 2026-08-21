@@ -1,196 +1,94 @@
 defmodule Badge.Icons do
   @moduledoc """
-  Shape icons as `rgba8888` binaries, expanded from ASCII art by the host
-  compiler.
+  Converted artwork from `priv/icons`, baked into the module at compile time.
 
-  Art is 16x16; `#` is the accent colour and `.` is the background. Every
-  pixel is fully opaque, which keeps AtomGL on its no-blend fast path and
-  costs nothing visually because the page background is the same colour.
+  Files are named `<name>@<width>x<height>.rgba` and hold raw `rgba8888`
+  already composited onto black, every pixel fully opaque. That keeps AtomGL
+  on its no-blend fast path and costs nothing visually because the panel
+  background is black.
 
-  Icons draw at 32x32 through a 2x scale, so the stored art is a quarter
-  the size of the pixels on the panel.
+  Shapes are 32x32 and status icons are 16x16, so read `size/1` rather than
+  assuming. Regenerate the files with `tools/icons.py`.
   """
 
   alias Badge.Theme
 
-  @size 16
-  @scale 2
-
-  @accent Theme.accent()
   @bg Theme.bg()
 
-  @accent_px <<div(@accent, 0x10000), div(rem(@accent, 0x10000), 0x100), rem(@accent, 0x100),
-               0xFF>>
-  @bg_px <<div(@bg, 0x10000), div(rem(@bg, 0x10000), 0x100), rem(@bg, 0x100), 0xFF>>
+  @dir Path.expand("../../priv/icons", __DIR__)
+  @shapes [:square, :triangle, :cross, :circle, :clover, :diamond]
 
-  @art %{
-    square: """
-    ................
-    ................
-    ..############..
-    ..############..
-    ..##........##..
-    ..##........##..
-    ..##........##..
-    ..##........##..
-    ..##........##..
-    ..##........##..
-    ..##........##..
-    ..############..
-    ..############..
-    ................
-    ................
-    ................
-    """,
-    triangle: """
-    ................
-    .......##.......
-    .......##.......
-    ......####......
-    ......####......
-    .....######.....
-    .....######.....
-    ....########....
-    ....########....
-    ...##########...
-    ...##########...
-    ..############..
-    ..############..
-    .##############.
-    ................
-    ................
-    """,
-    cross: """
-    ................
-    .##..........##.
-    .###........###.
-    ..###......###..
-    ...###....###...
-    ....###..###....
-    .....######.....
-    ......####......
-    ......####......
-    .....######.....
-    ....###..###....
-    ...###....###...
-    ..###......###..
-    .###........###.
-    .##..........##.
-    ................
-    """,
-    circle: """
-    ................
-    .....######.....
-    ...##########...
-    ..####....####..
-    ..###......###..
-    .###........###.
-    .##..........##.
-    .##..........##.
-    .##..........##.
-    .##..........##.
-    .###........###.
-    ..###......###..
-    ..####....####..
-    ...##########...
-    .....######.....
-    ................
-    """,
-    clover: """
-    ................
-    ....###..###....
-    ...##########...
-    ...##########...
-    ...##########...
-    ....###..###....
-    ......####......
-    .....######.....
-    ....########....
-    .....######.....
-    ......####......
-    .......##.......
-    ......###.......
-    .....####.......
-    ................
-    ................
-    """,
-    diamond: """
-    ................
-    .......##.......
-    ......####......
-    .....######.....
-    ....########....
-    ...##########...
-    ..############..
-    .##############.
-    .##############.
-    ..############..
-    ...##########...
-    ....########....
-    .....######.....
-    ......####......
-    .......##.......
-    ................
-    """,
-    dot: """
-    ................
-    .....######.....
-    ...##########...
-    ..############..
-    ..############..
-    .##############.
-    .##############.
-    .##############.
-    .##############.
-    .##############.
-    .##############.
-    ..############..
-    ..############..
-    ...##########...
-    .....######.....
-    ................
-    """
-  }
+  File.dir?(@dir) || raise "no icon directory at #{@dir} — run tools/icons.py"
 
-  # Expanded on the host, where the full standard library is available.
-  @icons (for {name, art} <- @art, into: %{} do
-            rows = String.split(art, "\n", trim: true)
+  @files Enum.sort(Path.wildcard(Path.join(@dir, "*.rgba")))
 
-            length(rows) == @size ||
-              raise "icon #{name}: #{length(rows)} rows, expected #{@size}"
+  @files != [] || raise "no .rgba files in #{@dir} — run tools/icons.py"
 
-            Enum.each(rows, fn row ->
-              byte_size(row) == @size ||
-                raise "icon #{name}: a row is #{byte_size(row)} wide, expected #{@size}"
-            end)
+  for file <- @files do
+    @external_resource file
+  end
 
-            pixels =
-              for row <- rows, into: <<>> do
-                for <<char <- row>>, into: <<>> do
-                  case char do
-                    ?# -> @accent_px
-                    ?. -> @bg_px
+  # Parsed and checked on the host, where the full standard library is available.
+  @icons (for path <- @files, into: %{} do
+            base = Path.basename(path, ".rgba")
+
+            # Host-only: the names come from a directory in this repo, not from input.
+            {name, width, height} =
+              case String.split(base, "@") do
+                [name, dimensions] ->
+                  case String.split(dimensions, "x") do
+                    [width, height] ->
+                      {String.to_atom(name), String.to_integer(width), String.to_integer(height)}
+
+                    _ ->
+                      raise "icon #{base}: expected <name>@<width>x<height>.rgba"
                   end
-                end
+
+                _ ->
+                  raise "icon #{base}: expected <name>@<width>x<height>.rgba"
               end
 
-            {name, pixels}
+            data = File.read!(path)
+            expected = width * height * 4
+
+            byte_size(data) == expected ||
+              raise "icon #{base}: #{byte_size(data)} bytes, expected #{expected}"
+
+            {name, {width, height, data}}
           end)
 
-  @names Map.keys(@icons)
+  case @shapes -- Map.keys(@icons) do
+    [] -> :ok
+    missing -> raise "missing shape icons: #{Enum.join(missing, ", ")}"
+  end
 
-  @doc "The raw `rgba8888` binary for one icon, or nil if there is no such icon."
-  def binary(name), do: Map.get(@icons, name)
+  @names Enum.sort(Map.keys(@icons))
 
-  @doc "Every icon name."
+  @doc "Every icon name, sorted."
   def names, do: @names
 
-  @doc "Rendered size in pixels, after scaling."
-  def size, do: @size * @scale
+  @doc "The raw `rgba8888` binary for one icon, or nil if there is no such icon."
+  def binary(name)
 
-  @doc "A display item drawing `name` with its top-left corner at `x, y`."
+  for {name, {_width, _height, data}} <- @icons do
+    def binary(unquote(name)), do: unquote(data)
+  end
+
+  def binary(_name), do: nil
+
+  @doc "The icon's `{width, height}` in pixels, or nil if there is no such icon."
+  def size(name)
+
+  for {name, {width, height, _data}} <- @icons do
+    def size(unquote(name)), do: {unquote(width), unquote(height)}
+  end
+
+  def size(_name), do: nil
+
+  @doc "A display item drawing `name` at native size, top-left corner at `x, y`."
   def item(name, x, y) do
-    {:scaled_cropped_image, x, y, @size * @scale, @size * @scale, @bg, 0, 0, @scale, @scale, [],
-     {:rgba8888, @size, @size, Map.get(@icons, name)}}
+    {width, height} = size(name)
+
+    {:image, x, y, @bg, {:rgba8888, width, height, binary(name)}}
   end
 end

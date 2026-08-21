@@ -4,13 +4,20 @@ defmodule Badge.IconsTest do
   alias Badge.Icons
   alias Badge.Theme
 
-  @expected [:circle, :clover, :cross, :diamond, :dot, :square, :triangle]
+  @shapes [:circle, :clover, :cross, :diamond, :square, :triangle]
+  @status [
+    :battery_0,
+    :battery_100,
+    :battery_25,
+    :battery_50,
+    :battery_75,
+    :battery_charging,
+    :messages,
+    :wifi,
+    :wifi_slash
+  ]
 
-  defp accent_pixel do
-    accent = Theme.accent()
-
-    <<div(accent, 0x10000), div(rem(accent, 0x10000), 0x100), rem(accent, 0x100), 0xFF>>
-  end
+  defp pixels(name), do: for(<<px::binary-4 <- Icons.binary(name)>>, do: px)
 
   defp bg_pixel do
     bg = Theme.bg()
@@ -19,15 +26,43 @@ defmodule Badge.IconsTest do
   end
 
   describe "names/0" do
-    test "every shape key has an icon, plus the tilt marker" do
-      assert :lists.sort(Icons.names()) == @expected
+    test "is sorted" do
+      assert Icons.names() == :lists.sort(Icons.names())
+    end
+
+    test "holds every shape and every status icon" do
+      assert Icons.names() == :lists.sort(@shapes ++ @status)
+    end
+
+    test "the retired dot marker is gone" do
+      refute :dot in Icons.names()
+    end
+  end
+
+  describe "size/1" do
+    test "shapes are 32x32" do
+      for name <- @shapes do
+        assert Icons.size(name) == {32, 32}
+      end
+    end
+
+    test "status icons are 16x16" do
+      for name <- @status do
+        assert Icons.size(name) == {16, 16}
+      end
+    end
+
+    test "an unknown name is nil rather than a crash" do
+      assert Icons.size(:nonesuch) == nil
     end
   end
 
   describe "binary/1" do
-    test "every icon is exactly 16x16 rgba8888" do
+    test "every icon is exactly w * h * 4 bytes for its declared size" do
       for name <- Icons.names() do
-        assert byte_size(Icons.binary(name)) == 16 * 16 * 4
+        {w, h} = Icons.size(name)
+
+        assert byte_size(Icons.binary(name)) == w * h * 4
       end
     end
 
@@ -39,53 +74,47 @@ defmodule Badge.IconsTest do
       end
     end
 
-    test "only the accent and background colours appear" do
-      expected = :lists.usort([accent_pixel(), bg_pixel()])
-
-      for name <- Icons.names() do
-        pixels = for <<px::binary-4 <- Icons.binary(name)>>, do: px
-
-        assert :lists.usort(pixels) == expected
-      end
-    end
-
     test "an unknown name is nil rather than a crash" do
       assert Icons.binary(:nonesuch) == nil
     end
 
-    test "shapes are actually different from each other" do
+    test "icons are actually different from each other" do
       binaries = for name <- Icons.names(), do: Icons.binary(name)
 
       assert length(:lists.usort(binaries)) == length(binaries)
     end
 
     test "no icon is blank" do
-      lit = accent_pixel()
+      background = bg_pixel()
 
       for name <- Icons.names() do
-        pixels = for <<px::binary-4 <- Icons.binary(name)>>, do: px
-        on = :lists.filter(fn px -> px == lit end, pixels)
+        {w, h} = Icons.size(name)
+        lit = :lists.filter(fn px -> px != background end, pixels(name))
 
-        assert length(on) > 20
+        assert length(lit) > div(w * h, 20)
       end
     end
   end
 
   describe "item/3" do
-    test "is a scaled_cropped_image scaled 2x to 32px" do
-      assert {:scaled_cropped_image, 10, 20, 32, 32, bg, 0, 0, 2, 2, [],
-              {:rgba8888, 16, 16, binary}} = Icons.item(:square, 10, 20)
+    test "is an image at native size on the page background" do
+      assert {:image, 10, 20, bg, {:rgba8888, 32, 32, binary}} = Icons.item(:square, 10, 20)
 
       assert bg == Theme.bg()
       assert binary == Icons.binary(:square)
     end
 
-    test "size/0 matches the item bounding box" do
-      {:scaled_cropped_image, _x, _y, w, h, _bg, _sx, _sy, _xs, _ys, _opts, _img} =
-        Icons.item(:circle, 0, 0)
+    test "declared dimensions match size/1 for every icon" do
+      for name <- Icons.names() do
+        assert {:image, 0, 0, _bg, {:rgba8888, w, h, binary}} = Icons.item(name, 0, 0)
 
-      assert Icons.size() == w
-      assert Icons.size() == h
+        assert {w, h} == Icons.size(name)
+        assert byte_size(binary) == w * h * 4
+      end
+    end
+
+    test "a 16x16 status icon keeps its own size" do
+      assert {:image, 1, 2, _bg, {:rgba8888, 16, 16, _binary}} = Icons.item(:wifi, 1, 2)
     end
   end
 end
