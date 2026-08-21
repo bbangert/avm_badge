@@ -2,9 +2,7 @@ defmodule Badge.Page.Text do
   @moduledoc """
   Typing surface over `Badge.TextBuffer`.
 
-  Holds the buffer that `Badge.Screen` used to own. Geometry is the content
-  area below the title bar, so this page is two rows shorter than the old
-  full-screen editor.
+  Geometry is the content area below the title bar: 39 columns by 12 rows.
   """
 
   use Badge.Page
