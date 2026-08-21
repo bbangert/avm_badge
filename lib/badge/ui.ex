@@ -99,8 +99,17 @@ defmodule Badge.UI do
   end
 
   @impl true
+  # Offered to the page first so a container can back out a level; ignoring it goes Home.
   def handle_cast({:key, {:nav, :home}}, state) do
-    {:noreply, goto(state, Home)}
+    case state.page.handle_key({:nav, :home}, state.page_state) do
+      {:ok, page_state} ->
+        dirty = state.dirty or page_state != state.page_state
+
+        {:noreply, %{state | page_state: page_state, dirty: dirty}}
+
+      :ignore ->
+        {:noreply, goto(state, Home)}
+    end
   end
 
   def handle_cast({:key, {:nav, key}}, state) do

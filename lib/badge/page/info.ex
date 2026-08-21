@@ -1,41 +1,38 @@
 defmodule Badge.Page.Info do
   @moduledoc """
-  Board status: battery, USB, temperature, orientation and uptime.
+  Board status, as a carousel of sub-pages moved between with left and right.
 
-  The page state is the reading map itself, so `render/1` can be driven
-  from a literal in tests.
+  Sub-pages are ordinary `Badge.Page` modules. Keys reach the active one
+  first; only what it ignores becomes carousel movement, which is what lets
+  a sub-page own the arrows when it needs them.
+
+  Sub-page state persists while you slide sideways, because moving between
+  sub-pages is not leaving the page. Leaving Info entirely still resets
+  everything, since `Badge.UI` calls `init/0` on every entry.
   """
 
   use Badge.Page
 
-  alias Badge.Battery
-  alias Badge.Power
-  alias Badge.Sensors
+  alias Badge.Page.Info.Power
+  alias Badge.Page.Info.Sensors
+  alias Badge.Page.Info.Wifi
   alias Badge.Theme
 
-  @accent Theme.accent()
-  @fg Theme.fg()
   @dim Theme.dim()
   @bg Theme.bg()
+  @select Theme.select()
 
-  @label_x 8
-  @value_x 120
-  @top 34
-  @pitch 18
+  @separator " | "
 
-  @bar_x 8
-  @bar_y 190
-  @bar_w 304
-  @bar_h 14
+  @subpages [Sensors, Power, Wifi]
+  @count length(@subpages)
 
-  # Milli-g the accelerometer readout rounds to.
-  @accel_quantum 10
+  @char_w 8
+  @strip_y Theme.content_top()
+  @rule_y @strip_y + 22
 
-  @row_ys for i <- 0..5, do: @top + i * @pitch
-
-  # Nothing here moves fast enough to be worth a full repaint ten times a second.
-  @impl true
-  def refresh, do: 333
+  # First y a sub-page may draw on, below the tab strip and its rule.
+  @content_top @rule_y + 8
 
   @impl true
   def title, do: "Info"
@@ -43,77 +40,95 @@ defmodule Badge.Page.Info do
   @impl true
   def icon, do: :circle
 
+  # Nothing here moves fast enough to be worth a full repaint ten times a second.
+  @impl true
+  def refresh, do: 333
+
+  @doc "First y a sub-page may draw on."
+  def content_top, do: @content_top
+
+  @doc "The sub-pages, in carousel order."
+  def subpages, do: @subpages
+
   @impl true
   def init do
-    %{battery_mv: 0, vbus_mv: 0, usb: false, temp: :unavailable, accel: {0, 0, 0}, uptime_s: 0}
+    %{index: 0, states: for(module <- @subpages, do: module.init())}
   end
 
   @impl true
-  def tick(state), do: update(state, read())
+  def handle_key(event, state) do
+    case active(state).handle_key(event, active_state(state)) do
+      {:ok, sub_state} -> {:ok, put_active(state, sub_state)}
+      :ignore -> carousel(event, state)
+    end
+  end
 
-  @doc "Adopts a fresh reading map, rounding the axes that would otherwise jitter."
-  def update(_state, reading), do: %{reading | accel: coarse(reading.accel)}
+  # Only the visible sub-page ticks; a hidden one would poll sensors nobody is looking at.
+  @impl true
+  def tick(state) do
+    put_active(state, active(state).tick(active_state(state)))
+  end
 
   @impl true
-  def render(reading) do
-    row_items(rows(reading), @row_ys, []) ++ battery_bar(reading.battery_mv)
+  def render(state) do
+    strip(state) ++ active(state).render(active_state(state))
   end
 
-  defp read do
-    power = Power.status()
+  defp carousel({:move, :right}, state), do: {:ok, step(state, 1)}
+  defp carousel({:move, :left}, state), do: {:ok, step(state, -1)}
+  defp carousel(_event, _state), do: :ignore
 
-    %{
-      battery_mv: power.battery_mv,
-      vbus_mv: power.vbus_mv,
-      usb: power.usb,
-      temp: Sensors.temperature(),
-      accel: Sensors.acceleration(),
-      uptime_s: div(:erlang.monotonic_time(:millisecond), 1000)
-    }
+  defp step(state, delta) do
+    %{state | index: rem(state.index + delta + @count, @count)}
   end
 
-  defp rows(reading) do
-    [
-      {"battery",
-       int(reading.battery_mv) <> " mV   " <> int(Battery.percent(reading.battery_mv)) <> "%"},
-      {"vbus", int(reading.vbus_mv) <> " mV"},
-      {"usb", usb(reading.usb)},
-      {"temp", temp(reading.temp)},
-      {"accel", accel(reading.accel)},
-      {"uptime", int(reading.uptime_s) <> " s"}
-    ]
+  defp active(%{index: index}), do: :lists.nth(index + 1, @subpages)
+
+  defp active_state(%{index: index, states: states}), do: :lists.nth(index + 1, states)
+
+  defp put_active(%{index: index, states: states} = state, sub_state) do
+    %{state | states: replace(states, index, sub_state, [])}
   end
 
-  # Labels and row positions threaded together, since Enum.with_index/1 is absent on AtomVM.
-  defp row_items([], [], acc), do: :lists.reverse(acc)
+  defp replace([_old | rest], 0, value, acc), do: :lists.reverse([value | acc]) ++ rest
+  defp replace([keep | rest], n, value, acc), do: replace(rest, n - 1, value, [keep | acc])
 
-  defp row_items([{label, value} | rest], [y | ys], acc) do
-    label_item = {:text, @label_x, y, :default16px, @dim, @bg, label}
-    value_item = {:text, @value_x, y, :default16px, @fg, @bg, value}
+  # Colour marks the active tab; the separators stay dim throughout.
+  defp strip(state) do
+    titles = for module <- @subpages, do: module.title()
+    left = div(Theme.width() - @char_w * strip_width(titles), 2)
 
-    row_items(rest, ys, [value_item, label_item | acc])
+    tab_items(titles, 0, state.index, left, []) ++
+      [{:rect, 8, @rule_y, Theme.width() - 16, 1, @dim}]
   end
 
-  # Fill first, frame second: the frame shows through as the unfilled remainder.
-  defp battery_bar(mv) do
-    [
-      {:rect, @bar_x, @bar_y, div(@bar_w * Battery.percent(mv), 100), @bar_h, @accent},
-      {:rect, @bar_x, @bar_y, @bar_w, @bar_h, @dim}
-    ]
+  defp strip_width(titles) do
+    names = :lists.foldl(fn title, total -> total + byte_size(title) end, 0, titles)
+
+    names + byte_size(@separator) * (length(titles) - 1)
   end
 
-  defp usb(true), do: "present"
-  defp usb(false), do: "absent"
+  defp tab_items([], _position, _index, _x, acc), do: :lists.reverse(acc)
 
-  defp temp(:unavailable), do: "--"
-  defp temp(degrees), do: int(degrees) <> " C"
+  # The last tab has nothing after it, so it contributes no separator.
+  defp tab_items([title], position, index, x, acc) do
+    :lists.reverse([tab(title, position, index, x) | acc])
+  end
 
-  defp accel({x, y, z}), do: int(x) <> " " <> int(y) <> " " <> int(z)
+  defp tab_items([title | rest], position, index, x, acc) do
+    next = x + @char_w * byte_size(title)
+    separator = {:text, next, @strip_y, :default16px, @dim, @bg, @separator}
 
-  defp int(value), do: :erlang.integer_to_binary(value)
+    tab_items(rest, position + 1, index, next + @char_w * byte_size(@separator), [
+      separator,
+      tab(title, position, index, x) | acc
+    ])
+  end
 
-  # The EMA jitters by a few milli-g at rest; unrounded it would dirty the page every tick.
-  defp coarse({x, y, z}), do: {round_to(x), round_to(y), round_to(z)}
+  defp tab(title, position, index, x) do
+    {:text, x, @strip_y, :default16px, tab_colour(position, index), @bg, title}
+  end
 
-  defp round_to(value), do: div(value, @accel_quantum) * @accel_quantum
+  defp tab_colour(position, position), do: @select
+  defp tab_colour(_position, _index), do: @dim
 end

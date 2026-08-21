@@ -14,7 +14,11 @@ defmodule Badge.IconsTest do
     :battery_charging,
     :messages,
     :wifi,
-    :wifi_slash
+    :wifi_slash,
+    :signal_0,
+    :signal_1,
+    :signal_2,
+    :signal_3
   ]
 
   defp pixels(name), do: for(<<px::binary-4 <- Icons.binary(name)>>, do: px)

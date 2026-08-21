@@ -20,6 +20,10 @@ defmodule Badge.Icons do
 
   File.dir?(@dir) || raise "no icon directory at #{@dir} — run tools/icons.py"
 
+  # The directory itself, so adding or removing an icon recompiles this module.
+  # Per-file @external_resource cannot track a file that does not exist yet.
+  @external_resource @dir
+
   @files Enum.sort(Path.wildcard(Path.join(@dir, "*.rgba")))
 
   @files != [] || raise "no .rgba files in #{@dir} — run tools/icons.py"

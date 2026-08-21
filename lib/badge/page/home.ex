@@ -40,10 +40,6 @@ defmodule Badge.Page.Home do
   @impl true
   def title, do: "Badge"
 
-  # Required by the behaviour; Home is not in the registry, so nothing draws this.
-  @impl true
-  def icon, do: :square
-
   @impl true
   def init, do: :ok
 

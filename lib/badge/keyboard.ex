@@ -126,6 +126,22 @@ defmodule Badge.Keyboard do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
+  @doc """
+  Whether a key is held down right now, by its layout label.
+
+  Presses are delivered as events; this answers the other question, for a
+  page that wants a key held rather than tapped.
+  """
+  @spec holding?(charlist) :: boolean
+  def holding?(label) do
+    GenServer.call(__MODULE__, {:holding?, label})
+  end
+
+  @impl true
+  def handle_call({:holding?, label}, _from, state) do
+    {:reply, :lists.member(label, state.held), state}
+  end
+
   @impl true
   def init(:ok) do
     :io.format(~c"Keyboard: 6 rows x 13 cols, no diodes~n")
