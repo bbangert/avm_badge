@@ -89,10 +89,13 @@ defmodule Badge.Power do
     battery_mv = sample_mv(state.unit, state.battery_chan)
     vbus_mv = sample_mv(state.unit, state.vbus_chan)
 
-    :io.format(~c"Power: battery=~pmv vbus=~pmv usb=~p~n", [
+    # Bring-up instrumentation: this is the only line that runs on every page,
+    # so it is where a leak is visible with nothing else switched on.
+    :io.format(~c"Power: battery=~pmv vbus=~pmv usb=~p heap=~p~n", [
       battery_mv,
       vbus_mv,
-      vbus_mv >= @usb_present_mv
+      vbus_mv >= @usb_present_mv,
+      free_heap()
     ])
 
     {:noreply, %{state | battery_mv: battery_mv, vbus_mv: vbus_mv}}
@@ -103,6 +106,12 @@ defmodule Badge.Power do
       {:ok, {_raw, mv}} -> mv * 2
       {:error, _reason} -> 0
     end
+  end
+
+  defp free_heap do
+    :erlang.system_info(:esp32_free_heap_size)
+  catch
+    _kind, _error -> -1
   end
 
   defp start_ticker do
