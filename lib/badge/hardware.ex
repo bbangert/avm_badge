@@ -31,4 +31,12 @@ defmodule Badge.Hardware do
   def pixel_peripheral, do: "spi3"
   def pixel_clock_hz, do: 3_200_000
   def pixel_count, do: 4
+
+  # Battery and VBUS each read through a 1/2 voltage divider.
+  def adc_battery_pin, do: 1
+  def adc_vbus_pin, do: 2
+
+  # TMP103 temperature sensor and SC7A20 accelerometer share this bus.
+  def i2c_scl, do: 10
+  def i2c_sda, do: 11
 end
