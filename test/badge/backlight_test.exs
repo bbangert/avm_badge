@@ -1,0 +1,71 @@
+defmodule Badge.BacklightTest do
+  use ExUnit.Case, async: true
+
+  alias Badge.Backlight
+
+  describe "duty/1" do
+    test "full brightness holds the pin low, which is no duty at all" do
+      assert Backlight.duty(100) == 0
+    end
+
+    test "dark is full duty, since the pin is active low" do
+      assert Backlight.duty(0) == 1023
+    end
+
+    test "brighter always means less duty" do
+      duties = for percent <- 0..100, do: Backlight.duty(percent)
+
+      assert duties == :lists.reverse(:lists.sort(duties))
+    end
+
+    test "half brightness is well below half light, because the curve is not linear" do
+      # Duty is inverted, so more duty means less light.
+      assert Backlight.duty(50) > 700
+    end
+
+    test "follows a square law, so the dial feels even to the eye" do
+      lit = fn percent -> 1023 - Backlight.duty(percent) end
+
+      assert lit.(50) == 255
+      assert lit.(70) == 501
+      assert lit.(100) == 1023
+    end
+
+    test "the lowest setting is far dimmer than a whole percent could express" do
+      lit = 1023 - Backlight.duty(5)
+
+      assert lit < 10
+      assert lit > 0
+    end
+
+    test "never goes fully dark, so the dial can always be found again" do
+      for percent <- 1..100 do
+        assert Backlight.duty(percent) < 1023
+      end
+    end
+
+    test "the steps grow as the setting rises, which is the point of the curve" do
+      steps =
+        for percent <- 10..90//10 do
+          Backlight.duty(percent) - Backlight.duty(percent + 10)
+        end
+
+      assert steps == :lists.sort(steps)
+      assert hd(steps) < :lists.last(steps)
+    end
+
+    test "never leaves the range the timer can express" do
+      for percent <- -20..120 do
+        duty = Backlight.duty(percent)
+
+        assert duty >= 0
+        assert duty <= 1023
+      end
+    end
+
+    test "clamps rather than wrapping past the ends" do
+      assert Backlight.duty(150) == Backlight.duty(100)
+      assert Backlight.duty(-50) == Backlight.duty(0)
+    end
+  end
+end

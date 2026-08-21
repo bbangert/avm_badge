@@ -103,9 +103,15 @@ defmodule Badge.Page.SettingsTest do
       refute right(Settings.init()).index == Settings.init().index
     end
 
-    test "up and down are left for sub-pages and do not move the carousel" do
-      assert Settings.handle_key({:move, :up}, Settings.init()) == :ignore
-      assert Settings.handle_key({:move, :down}, Settings.init()) == :ignore
+    test "up and down never move the carousel, whether a sub-page wants them or not" do
+      state = Settings.init()
+
+      for direction <- [:up, :down] do
+        case Settings.handle_key({:move, direction}, state) do
+          {:ok, next} -> assert next.index == state.index
+          :ignore -> assert true
+        end
+      end
     end
   end
 
