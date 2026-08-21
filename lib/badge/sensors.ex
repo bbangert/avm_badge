@@ -127,10 +127,6 @@ defmodule Badge.Sensors do
       temp
     ])
 
-    # Sleeps rather than using Process.send_after/3.
-    Process.sleep(@temp_interval)
-    send(self(), :temp_tick)
-
     {:noreply, %{state | temp: temp}}
   end
 
