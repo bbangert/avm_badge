@@ -31,6 +31,7 @@ defmodule Badge.UI do
   alias Badge.Pages
   alias Badge.Power
   alias Badge.Theme
+  alias Badge.Wifi
 
   @accent Theme.accent()
   @dim Theme.dim()
@@ -149,24 +150,42 @@ defmodule Badge.UI do
 
   defp reload(page), do: max(div(page.refresh(), @base_interval), 1) - 1
 
-  defp refresh_status(%{status_countdown: 0}), do: {read_status(), @status_ticks - 1}
+  # Retries next tick while a source is down, rather than calling a process that is not there.
+  defp refresh_status(%{status_countdown: 0} = state) do
+    case sources_up?() do
+      true -> {read_status(), @status_ticks - 1}
+      false -> {state.status, 0}
+    end
+  end
 
   defp refresh_status(state), do: {state.status, state.status_countdown - 1}
 
+  # This process starts before Badge.Power and Badge.Wifi, and outlives a restart of either.
+  defp sources_up? do
+    Process.whereis(Badge.Power) != nil and Process.whereis(Badge.Wifi) != nil
+  end
+
   defp read_status do
     power = Power.status()
+    wifi = Wifi.status()
 
     %{
       battery: Battery.icon(power.battery_mv, power.usb),
-      # There is no radio yet, so disconnected is the honest answer rather than a guess.
-      wifi: :wifi_slash,
-      clock: Clock.format(div(:erlang.monotonic_time(:millisecond), 1000))
+      wifi: Wifi.icon(wifi.radio),
+      clock: Clock.format(clock_seconds(wifi))
     }
   end
 
-  # Badge.Power starts after this process, so the first real reading waits for the first tick.
+  # Uptime until SNTP sets the system clock, local wall time after.
+  defp clock_seconds(%{synced: true, offset: offset}) do
+    Clock.local_seconds(:erlang.system_time(:second), offset)
+  end
+
+  defp clock_seconds(_wifi), do: div(:erlang.monotonic_time(:millisecond), 1000)
+
+  # Badge.Power and Badge.Wifi start after this process, so the first real reading waits for the first tick.
   defp placeholder_status do
-    %{battery: :battery_0, wifi: :wifi_slash, clock: Clock.format(0)}
+    %{battery: :battery_0, wifi: Wifi.icon(:disabled), clock: Clock.format(0)}
   end
 
   # Re-entering the current page would reset it, and key repeat fires a held key 8 times a second.
