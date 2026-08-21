@@ -39,4 +39,9 @@ defmodule Badge.Hardware do
   # TMP103 temperature sensor and SC7A20 accelerometer share this bus.
   def i2c_scl, do: 10
   def i2c_sda, do: 11
+  def tmp103_addr, do: 0x70
+  def sc7a20_addr, do: 0x19
+
+  # SC7A20 INT1, routed for a data-ready interrupt.
+  def accel_int_pin, do: 12
 end
