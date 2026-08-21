@@ -24,7 +24,8 @@ defmodule Badge do
     children = [
       {Badge.Screen, display_spi},
       {Badge.Keyboard, :ok},
-      {Badge.Pixels, pixel_spi}
+      {Badge.Pixels, pixel_spi},
+      {Badge.FontDemo, :ok}
     ]
 
     {:ok, _supervisor} = Supervisor.start_link(children, strategy: :one_for_one)

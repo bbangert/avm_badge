@@ -43,6 +43,11 @@ defmodule Badge.Screen do
     GenServer.cast(__MODULE__, {:key, event})
   end
 
+  @doc "The open AtomGL port, for other processes that push their own display lists."
+  def port do
+    GenServer.call(__MODULE__, :port)
+  end
+
   @impl true
   def init(spi) do
     port = :erlang.open_port({:spawn, "display"}, display_opts(spi))
@@ -57,6 +62,11 @@ defmodule Badge.Screen do
     start_ticker()
 
     {:ok, state}
+  end
+
+  @impl true
+  def handle_call(:port, _from, state) do
+    {:reply, state.port, state}
   end
 
   @impl true

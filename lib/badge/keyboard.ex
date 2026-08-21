@@ -157,11 +157,19 @@ defmodule Badge.Keyboard do
   defp maybe_repeat(state) do
     case KeyRepeat.due(state.repeat, now(), @repeat_interval) do
       {:fire, event, repeat} ->
-        Badge.Screen.key_event(event)
+        route_event(event)
         %{state | repeat: repeat}
 
       {:idle, repeat} ->
         %{state | repeat: repeat}
+    end
+  end
+
+  # While Badge.FontDemo is running it owns the display, so events go there instead of Screen.
+  defp route_event(event) do
+    case Process.whereis(Badge.FontDemo) do
+      nil -> Badge.Screen.key_event(event)
+      _pid -> Badge.FontDemo.key_event(event)
     end
   end
 
@@ -382,7 +390,7 @@ defmodule Badge.Keyboard do
         :ignored
 
       event ->
-        Badge.Screen.key_event(event)
+        route_event(event)
         {:emitted, event}
     end
   end
