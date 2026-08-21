@@ -21,6 +21,10 @@ defmodule Badge.Page.Info.WifiTest do
     %{Wifi.init() | networks: networks}
   end
 
+  defp joined_to(networks, ssid) do
+    %{listing(networks) | status: %{radio: :connected, ssid: ssid, scanning: false, scan_id: 0}}
+  end
+
   defp press(state, event) do
     {:ok, next} = Wifi.handle_key(event, state)
     next
@@ -385,6 +389,82 @@ defmodule Badge.Page.Info.WifiTest do
             do: x + 8 * byte_size(body)
 
       assert status_end == security_end
+    end
+  end
+
+  describe "the connected network" do
+    test "the cursor turns green on it, rather than staying cyan" do
+      state = joined_to([ap("Home", -50), ap("Other", -60)], "Home")
+
+      [marker] = for {:text, 0, _y, _f, colour, _b, ">"} <- Wifi.render(state), do: colour
+
+      assert marker == Theme.ok()
+    end
+
+    test "the cursor is still cyan on any other network" do
+      state = %{joined_to([ap("Home", -50), ap("Other", -60)], "Home") | cursor: 1}
+
+      [marker] = for {:text, 0, _y, _f, colour, _b, ">"} <- Wifi.render(state), do: colour
+
+      assert marker == Theme.select()
+    end
+
+    test "enter does not open passphrase entry for it" do
+      state = press(joined_to([ap("Home", -50)], "Home"), {:edit, :newline})
+
+      assert state.mode == :joined
+    end
+
+    test "the screen says why, in warning colour" do
+      state = press(joined_to([ap("Home", -50)], "Home"), {:edit, :newline})
+
+      assert shows?(state, "already connected")
+
+      [colour] =
+        for {:text, _x, _y, _f, colour, _b, body} <- Wifi.render(state),
+            :binary.match(body, "already connected") != :nomatch,
+            do: colour
+
+      assert colour == Theme.warn()
+    end
+
+    test "escape is the way back, and it goes to the list not home" do
+      state = press(joined_to([ap("Home", -50)], "Home"), {:edit, :newline})
+
+      assert press(state, {:nav, :home}).mode == :list
+    end
+
+    test "nothing else leaves the screen" do
+      state = press(joined_to([ap("Home", -50)], "Home"), {:edit, :newline})
+
+      for event <- [
+            {:char, ?a},
+            {:move, :left},
+            {:move, :right},
+            {:move, :down},
+            {:edit, :newline}
+          ] do
+        assert press(state, event).mode == :joined
+      end
+    end
+
+    test "a different network still prompts for a passphrase" do
+      state =
+        press(
+          %{joined_to([ap("Home", -50), ap("Other", -60)], "Home") | cursor: 1},
+          {:edit, :newline}
+        )
+
+      assert state.mode == :passphrase
+    end
+
+    test "while merely connecting, enter still prompts" do
+      state = %{
+        listing([ap("Home", -50)])
+        | status: %{radio: :connecting, ssid: "Home", scanning: false, scan_id: 0}
+      }
+
+      assert press(state, {:edit, :newline}).mode == :passphrase
     end
   end
 

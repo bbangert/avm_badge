@@ -22,6 +22,7 @@ defmodule Badge.Theme do
 
   # Status colours, for state that reads as good or wrong at a glance.
   def ok, do: 0x4CD964
+  def warn, do: 0xFFCC00
   def alert, do: 0xFF3B30
 
   # Whatever the cursor is currently on.

@@ -27,6 +27,7 @@ defmodule Badge.Page.Info.Wifi do
   # The network currently joined, distinct from the cursor highlight.
   @joined Theme.ok()
   @alert Theme.alert()
+  @warn Theme.warn()
   @select Theme.select()
   @dim Theme.dim()
   @bg Theme.bg()
@@ -91,7 +92,12 @@ defmodule Badge.Page.Info.Wifi do
 
   @impl true
   def handle_key(event, %{mode: :passphrase} = state), do: passphrase_key(event, state)
+  def handle_key(event, %{mode: :joined} = state), do: joined_key(event, state)
   def handle_key(event, state), do: list_key(event, state)
+
+  # Only escape leaves; the screen exists to say there is nothing to do here.
+  defp joined_key({:nav, :home}, state), do: {:ok, to_list(state)}
+  defp joined_key(_event, state), do: {:ok, state}
 
   # List mode: up and down are ours, left and right belong to the carousel.
   defp list_key({:move, :up}, state), do: {:ok, move(state, -1)}
@@ -117,6 +123,9 @@ defmodule Badge.Page.Info.Wifi do
 
   defp choose(state, network) do
     cond do
+      connected_to?(state, network) ->
+        %{state | mode: :joined, chosen: network, notice: nil}
+
       not Network.joinable?(network) ->
         %{state | notice: "enterprise networks need more than a passphrase"}
 
@@ -157,8 +166,11 @@ defmodule Badge.Page.Info.Wifi do
 
   defp passphrase_key(_event, state), do: {:ok, state}
 
+  defp connected_to?(%{status: %{radio: :connected, ssid: ssid}}, %{ssid: ssid}), do: true
+  defp connected_to?(_state, _network), do: false
+
   defp to_list(state) do
-    %{state | mode: :list, chosen: nil, field: Field.new(@capacity), show: false}
+    %{state | mode: :list, chosen: nil, field: Field.new(@capacity), show: false, notice: nil}
   end
 
   defp selected(state), do: :lists.nth(state.cursor + 1, state.networks)
@@ -174,6 +186,14 @@ defmodule Badge.Page.Info.Wifi do
   defp clamp(index, _last), do: index
 
   @impl true
+  def render(%{mode: :joined} = state) do
+    [
+      centred(state.chosen.ssid, @name_y, @joined),
+      centred("already connected to this network", @prompt_y, @warn),
+      centred("Esc to go back", @help_y, @dim)
+    ]
+  end
+
   def render(%{mode: :passphrase} = state) do
     [
       centred(state.chosen.ssid, @name_y, @fg),
@@ -243,7 +263,7 @@ defmodule Badge.Page.Info.Wifi do
       {:text, @row_x, y, :default16px, colour, @bg, Network.name(network)},
       Icons.item(signal_icon(network), @signal_x, y),
       {:text, Readout.right_x(security), y, :default16px, colour, @bg, security},
-      {:text, @cursor_x, y, :default16px, @select, @bg, marker}
+      {:text, @cursor_x, y, :default16px, colour, @bg, marker}
     ]
 
     network_items(rest, index + 1, state, y + Readout.pitch(), items ++ acc)
