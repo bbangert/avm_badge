@@ -75,8 +75,41 @@ defmodule Badge.KeymapTest do
     end
   end
 
-  describe "ignored keys" do
-    test "modifiers, arrows, shape keys and unmapped intersections" do
+  describe "navigation keys" do
+    test "escape goes home" do
+      assert Keymap.decode(~c"Esc", false) == {:nav, :home}
+    end
+
+    test "each shape key names its own slot" do
+      assert Keymap.decode(~c"Square", false) == {:nav, :square}
+      assert Keymap.decode(~c"Triangle", false) == {:nav, :triangle}
+      assert Keymap.decode(~c"Cross", false) == {:nav, :cross}
+      assert Keymap.decode(~c"Circle", false) == {:nav, :circle}
+      assert Keymap.decode(~c"Clover", false) == {:nav, :clover}
+      assert Keymap.decode(~c"Diamond", false) == {:nav, :diamond}
+    end
+
+    test "shift does not change navigation" do
+      assert Keymap.decode(~c"Esc", true) == {:nav, :home}
+      assert Keymap.decode(~c"Square", true) == {:nav, :square}
+    end
+  end
+
+  describe "arrow keys" do
+    test "arrows are movement, not navigation" do
+      assert Keymap.decode(~c"Up", false) == {:move, :up}
+      assert Keymap.decode(~c"Down", false) == {:move, :down}
+      assert Keymap.decode(~c"Left", false) == {:move, :left}
+      assert Keymap.decode(~c"Right", false) == {:move, :right}
+    end
+
+    test "shift does not change movement" do
+      assert Keymap.decode(~c"Up", true) == {:move, :up}
+    end
+  end
+
+  describe "keys with no meaning" do
+    test "modifiers and unmapped intersections are ignored, shifted or not" do
       for label <- [
             ~c"LShift",
             ~c"RShift",
@@ -85,17 +118,6 @@ defmodule Badge.KeymapTest do
             ~c"AltGr",
             ~c"Fn",
             ~c"SP",
-            ~c"Esc",
-            ~c"Up",
-            ~c"Down",
-            ~c"Left",
-            ~c"Right",
-            ~c"Square",
-            ~c"Triangle",
-            ~c"Cross",
-            ~c"Circle",
-            ~c"Clover",
-            ~c"Diamond",
             ~c"<unmapped R0C0>"
           ] do
         assert Keymap.decode(label, false) == :ignore
