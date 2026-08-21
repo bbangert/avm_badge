@@ -23,7 +23,8 @@ defmodule Badge.Page.Info.Wifi do
   @fg Theme.fg()
 
   # The network currently joined, distinct from the cursor highlight.
-  @joined 0x4CD964
+  @joined Theme.ok()
+  @alert Theme.alert()
   @dim Theme.dim()
   @bg Theme.bg()
 
@@ -34,6 +35,9 @@ defmodule Badge.Page.Info.Wifi do
   @row_x 8
   @cursor_x 0
   @help_y 216
+
+  # Signal sits between the name and the security column, both ending flush right.
+  @signal_right 272
 
   @impl true
   def title, do: "Wifi"
@@ -47,6 +51,7 @@ defmodule Badge.Page.Info.Wifi do
       scan_id: 0,
       field: Field.new(@capacity),
       chosen: nil,
+      notice: nil,
       status: %{radio: :disabled, ssid: nil, scanning: false, scan_id: 0}
     }
   end
@@ -90,6 +95,21 @@ defmodule Badge.Page.Info.Wifi do
 
   defp list_key(_event, _state), do: :ignore
 
+  defp choose(state, network) do
+    cond do
+      not Network.joinable?(network) ->
+        %{state | notice: "enterprise networks need more than a passphrase"}
+
+      Network.secured?(network) ->
+        %{state | mode: :passphrase, chosen: network, field: Field.new(@capacity), notice: nil}
+
+      true ->
+        Wifi.connect(network.ssid, "")
+
+        %{state | notice: nil}
+    end
+  end
+
   # Passphrase mode: escape backs out, and the arrows are swallowed so typing stays put.
   defp passphrase_key({:nav, :home}, state), do: {:ok, to_list(state)}
   defp passphrase_key({:move, _direction}, state), do: {:ok, state}
@@ -109,18 +129,6 @@ defmodule Badge.Page.Info.Wifi do
   end
 
   defp passphrase_key(_event, state), do: {:ok, state}
-
-  defp choose(state, network) do
-    case Network.secured?(network) do
-      false ->
-        Wifi.connect(network.ssid, "")
-
-        state
-
-      true ->
-        %{state | mode: :passphrase, chosen: network, field: Field.new(@capacity)}
-    end
-  end
 
   defp to_list(state) do
     %{state | mode: :list, chosen: nil, field: Field.new(@capacity)}
@@ -145,23 +153,28 @@ defmodule Badge.Page.Info.Wifi do
       {:text, 120, Info.content_top(), :default16px, @fg, @bg, state.chosen.ssid},
       {:text, @row_x, Info.content_top() + 26, :default16px, @accent, @bg,
        Field.masked(state.field) <> "_"},
-      help("Enter join   Esc back")
+      help("Enter join   Esc back", @dim)
     ]
   end
 
   def render(state) do
-    status_row(state) ++ [help(list_help(state))] ++ rows(state)
+    status_row(state) ++ [list_help_item(state)] ++ rows(state)
   end
 
-  defp status_row(state) do
-    Readout.rows([{"wifi", radio(state.status.radio)}], Info.content_top())
+  defp status_row(%{status: %{radio: radio}}) do
+    Readout.right_row("wifi", radio(radio), Info.content_top(), status_colour(radio))
   end
+
+  defp status_colour(:failed), do: @alert
+  defp status_colour(:connected), do: @joined
+  defp status_colour(_radio), do: @fg
 
   defp radio(:connected), do: "connected"
   defp radio(:connecting), do: "connecting"
   defp radio(:failed), do: "failed - check passphrase"
   defp radio(_radio), do: "off"
 
+  defp list_help(%{notice: notice}) when notice != nil, do: notice
   defp list_help(%{networks: []}), do: "s scan   c forget saved network"
   defp list_help(_state), do: "Enter join   s rescan   c forget"
 
@@ -196,9 +209,14 @@ defmodule Badge.Page.Info.Wifi do
   defp network_items([network | rest], index, state, y, acc) do
     marker = if index == state.cursor, do: ">", else: " "
 
+    colour = row_colour(network, index, state)
+    signal = Network.signal(network)
+    security = Network.security(network)
+
     items = [
-      {:text, @row_x, y, :default16px, row_colour(network, index, state), @bg,
-       Network.label(network)},
+      {:text, @row_x, y, :default16px, colour, @bg, Network.name(network)},
+      {:text, @signal_right - 8 * byte_size(signal), y, :default16px, colour, @bg, signal},
+      {:text, Readout.right_x(security), y, :default16px, colour, @bg, security},
       {:text, @cursor_x, y, :default16px, @accent, @bg, marker}
     ]
 
@@ -210,5 +228,9 @@ defmodule Badge.Page.Info.Wifi do
   defp row_colour(_network, index, %{cursor: index}), do: @accent
   defp row_colour(_network, _index, _state), do: @fg
 
-  defp help(text), do: {:text, @row_x, @help_y, :default16px, @dim, @bg, text}
+  defp help(text, colour), do: {:text, @row_x, @help_y, :default16px, colour, @bg, text}
+
+  # A notice is something the user needs to notice, so it is not dim.
+  defp list_help_item(%{notice: nil} = state), do: help(list_help(state), @dim)
+  defp list_help_item(state), do: help(list_help(state), @alert)
 end

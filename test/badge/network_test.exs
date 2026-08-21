@@ -63,29 +63,103 @@ defmodule Badge.NetworkTest do
       refute Network.secured?(ap("Cafe", -40, :open))
     end
 
+    test "OWE encrypts without a passphrase, so it must not prompt for one" do
+      refute Network.secured?(ap("Cafe", -40, :owe))
+    end
+
     test "anything else does" do
       assert Network.secured?(ap("Home", -40, :wpa2_psk))
       assert Network.secured?(ap("Work", -40, :wpa_wpa2_psk))
     end
   end
 
-  describe "label/1" do
-    test "shows the ssid, signal and security" do
-      label = Network.label(ap("HomeNet", -52))
-
-      assert :binary.match(label, "HomeNet") != :nomatch
-      assert :binary.match(label, "-52") != :nomatch
+  describe "name/1" do
+    test "short names come through whole" do
+      assert Network.name(ap("HomeNet", -52)) == "HomeNet"
     end
 
-    test "truncates a long ssid so the columns line up" do
-      label = Network.label(ap("AVeryLongNetworkNameIndeed", -52))
+    test "a long name is truncated so the columns line up" do
+      name = Network.name(ap("AVeryLongNetworkNameIndeedYesReally", -52))
 
-      assert :binary.match(label, "AVeryLongNetworkNameIndeed") == :nomatch
-      assert byte_size(label) == byte_size(Network.label(ap("Short", -52)))
+      assert byte_size(name) < byte_size("AVeryLongNetworkNameIndeedYesReally")
+      assert :binary.match("AVeryLongNetworkNameIndeedYesReally", name) != :nomatch
+    end
+  end
+
+  describe "security/1" do
+    test "names the actual security rather than a generic word" do
+      assert Network.security(ap("N", -50, :wpa2_psk)) == "WPA2"
+      assert Network.security(ap("N", -50, :wpa3_psk)) == "WPA3"
+      assert Network.security(ap("N", -50, :wpa_psk)) == "WPA"
+      assert Network.security(ap("N", -50, :wep)) == "WEP"
+      assert Network.security(ap("N", -50, :open)) == "open"
     end
 
-    test "open networks say so" do
-      assert :binary.match(Network.label(ap("Cafe", -40, :open)), "open") != :nomatch
+    test "mixed modes report the stronger one" do
+      assert Network.security(ap("N", -50, :wpa_wpa2_psk)) == "WPA2"
+      assert Network.security(ap("N", -50, :wpa2_wpa3_psk)) == "WPA3"
+    end
+
+    test "enterprise is called out, since a passphrase will not do" do
+      assert Network.security(ap("N", -50, :eap)) == "ENT"
+      assert Network.security(ap("N", -50, :wpa3_enterprise)) == "ENT"
+    end
+
+    test "an unknown mode does not crash" do
+      assert Network.security(ap("N", -50, :something_new)) == "?"
+    end
+
+    test "every mode AtomVM can report fits the column" do
+      modes = [
+        :open,
+        :wep,
+        :wpa_psk,
+        :wpa2_psk,
+        :wpa_wpa2_psk,
+        :eap,
+        :wpa3_psk,
+        :wpa2_wpa3_psk,
+        :wapi,
+        :owe,
+        :wpa3_enterprise_192,
+        :wpa3_ext_psk,
+        :wpa3_ext_psk_mixed,
+        :dpp,
+        :wpa_enterprise,
+        :wpa3_enterprise,
+        :wpa2_wpa3_enterprise
+      ]
+
+      for mode <- modes do
+        assert byte_size(Network.security(ap("N", -50, mode))) <= 4
+      end
+    end
+  end
+
+  describe "joinable?/1" do
+    test "ordinary networks are joinable with a passphrase" do
+      assert Network.joinable?(ap("N", -50, :wpa2_psk))
+      assert Network.joinable?(ap("N", -50, :open))
+    end
+
+    test "enterprise networks are not" do
+      refute Network.joinable?(ap("N", -50, :eap))
+      refute Network.joinable?(ap("N", -50, :wpa2_wpa3_enterprise))
+    end
+  end
+
+  describe "level/1" do
+    test "buckets signal strength, strongest first" do
+      assert Network.level(ap("N", -40)) == 3
+      assert Network.level(ap("N", -60)) == 2
+      assert Network.level(ap("N", -70)) == 1
+      assert Network.level(ap("N", -90)) == 0
+    end
+
+    test "never falls outside the four levels" do
+      for rssi <- -100..0 do
+        assert Network.level(ap("N", rssi)) in [0, 1, 2, 3]
+      end
     end
   end
 end

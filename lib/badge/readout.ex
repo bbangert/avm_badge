@@ -15,6 +15,7 @@ defmodule Badge.Readout do
   @label_x 8
   @value_x 120
   @pitch 18
+  @char_w 8
 
   @doc "Vertical gap between rows."
   def pitch, do: @pitch
@@ -23,12 +24,31 @@ defmodule Badge.Readout do
   @spec rows([{binary, binary}], integer) :: [tuple]
   def rows(pairs, top), do: rows(pairs, top, [])
 
+  @doc "A single row whose value ends at the right margin instead of a fixed column."
+  @spec right_row(binary, binary, integer, integer) :: [tuple]
+  def right_row(label, value, y, colour) do
+    [
+      {:text, @label_x, y, :default16px, @dim, @bg, label},
+      {:text, right_x(value), y, :default16px, colour, @bg, value}
+    ]
+  end
+
+  @doc "The x at which fixed-width text ends flush with the right margin."
+  @spec right_x(binary) :: integer
+  def right_x(text), do: Theme.width() - @label_x - @char_w * byte_size(text)
+
+  @doc "A single row whose value carries a colour of its own."
+  @spec row(binary, binary, integer, integer) :: [tuple]
+  def row(label, value, y, colour) do
+    [
+      {:text, @label_x, y, :default16px, @dim, @bg, label},
+      {:text, @value_x, y, :default16px, colour, @bg, value}
+    ]
+  end
+
   defp rows([], _y, acc), do: :lists.reverse(acc)
 
   defp rows([{label, value} | rest], y, acc) do
-    label_item = {:text, @label_x, y, :default16px, @dim, @bg, label}
-    value_item = {:text, @value_x, y, :default16px, @fg, @bg, value}
-
-    rows(rest, y + @pitch, [value_item, label_item | acc])
+    rows(rest, y + @pitch, :lists.reverse(row(label, value, y, @fg)) ++ acc)
   end
 end

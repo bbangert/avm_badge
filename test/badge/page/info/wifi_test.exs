@@ -32,6 +32,21 @@ defmodule Badge.Page.Info.WifiTest do
     Enum.any?(texts(state), fn body -> :binary.match(body, needle) != :nomatch end)
   end
 
+  # The status row's value is the right-aligned text on the first row.
+  defp status_colour(state) do
+    [colour] =
+      for {:text, x, y, _f, colour, _bg, _body} <- Wifi.render(state),
+          y == Info.content_top(),
+          x > 8,
+          do: colour
+
+    colour
+  end
+
+  defp with_radio(radio) do
+    %{listing([]) | status: %{radio: radio, ssid: "X", scanning: false, scan_id: 0}}
+  end
+
   describe "identity" do
     test "names itself for the tab strip" do
       assert Wifi.title() == "Wifi"
@@ -252,6 +267,86 @@ defmodule Badge.Page.Info.WifiTest do
 
       assert shows?(state, "Net20")
       refute shows?(state, "Net1 ")
+    end
+  end
+
+  describe "enterprise networks" do
+    test "are not offered a passphrase prompt they cannot satisfy" do
+      state = press(listing([ap("Corp", -50, :eap)]), {:edit, :newline})
+
+      assert state.mode == :list
+      assert state.notice != nil
+    end
+
+    test "say why, in the help line" do
+      state = press(listing([ap("Corp", -50, :eap)]), {:edit, :newline})
+
+      assert shows?(state, "enterprise")
+    end
+
+    test "an ordinary network still prompts" do
+      state = press(listing([ap("Home", -50, :wpa2_psk)]), {:edit, :newline})
+
+      assert state.mode == :passphrase
+      assert state.notice == nil
+    end
+  end
+
+  describe "columns" do
+    test "security is named rather than called lock" do
+      assert shows?(listing([ap("Home", -50, :wpa2_psk)]), "WPA2")
+      assert shows?(listing([ap("Cafe", -50, :open)]), "open")
+    end
+
+    test "the security column ends flush with the right margin" do
+      state = listing([ap("Home", -50, :wpa2_psk), ap("Cafe", -60, :open)])
+
+      ends =
+        for {:text, x, _y, _f, _c, _b, body} <- Wifi.render(state),
+            body in ["WPA2", "open"],
+            do: x + 8 * byte_size(body)
+
+      assert length(ends) == 2
+      assert length(:lists.usort(ends)) == 1
+    end
+
+    test "the status value ends flush with the right margin too" do
+      [status_end] =
+        for {:text, x, y, _f, _c, _b, body} <- Wifi.render(with_radio(:connected)),
+            y == Info.content_top(),
+            x > 8,
+            do: x + 8 * byte_size(body)
+
+      [security_end] =
+        for {:text, x, _y, _f, _c, _b, body} <- Wifi.render(listing([ap("H", -50)])),
+            body == "WPA2",
+            do: x + 8 * byte_size(body)
+
+      assert status_end == security_end
+    end
+  end
+
+  describe "status colour" do
+    test "a failed join is red" do
+      assert status_colour(with_radio(:failed)) == Theme.alert()
+    end
+
+    test "a live connection is green" do
+      assert status_colour(with_radio(:connected)) == Theme.ok()
+    end
+
+    test "an idle radio is neither" do
+      colour = status_colour(with_radio(:disabled))
+
+      refute colour == Theme.alert()
+      refute colour == Theme.ok()
+    end
+
+    test "connecting is neither, so red means a real failure" do
+      colour = status_colour(with_radio(:connecting))
+
+      refute colour == Theme.alert()
+      refute colour == Theme.ok()
     end
   end
 end

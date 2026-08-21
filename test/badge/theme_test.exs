@@ -5,14 +5,21 @@ defmodule Badge.ThemeTest do
 
   describe "colours" do
     test "every colour fits in 24 bits" do
-      for colour <- [Theme.bg(), Theme.fg(), Theme.dim(), Theme.accent()] do
+      for colour <- [
+            Theme.bg(),
+            Theme.fg(),
+            Theme.dim(),
+            Theme.accent(),
+            Theme.ok(),
+            Theme.alert()
+          ] do
         assert colour >= 0x000000
         assert colour <= 0xFFFFFF
       end
     end
 
     test "tokens are distinct" do
-      colours = [Theme.bg(), Theme.fg(), Theme.dim(), Theme.accent()]
+      colours = [Theme.bg(), Theme.fg(), Theme.dim(), Theme.accent(), Theme.ok(), Theme.alert()]
 
       assert length(colours) == length(:lists.usort(colours))
     end
