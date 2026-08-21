@@ -1,16 +1,14 @@
 defmodule Badge.Sensors do
   @moduledoc """
-  Owns the I2C bus shared by the SC7A20 accelerometer and TMP103
-  temperature sensor.
+  Reads the SC7A20 accelerometer and TMP103 temperature sensor over the
+  shared I2C bus.
 
-  The accelerometer is interrupt-driven: GPIO12 carries its INT1 line,
-  configured for data-ready, so a fresh sample is read and averaged on
-  each rising edge rather than by polling. Reading the output registers
-  clears the data-ready condition, so every interrupt is followed by a
-  read or interrupts stop arriving.
+  Every reading is taken on demand, inside the call that asks for it. This
+  process runs no timer and takes no interrupt, so a page that never asks
+  costs nothing and a caller never queues behind background sampling.
 
-  TMP103 has no interrupt; a linked ticker samples it every
-  `@temp_interval` and logs a status line at the same cadence.
+  Accelerometer samples are smoothed against the previous reading, so the
+  averaging follows how often a page actually polls.
   """
 
   use GenServer
@@ -22,12 +20,11 @@ defmodule Badge.Sensors do
 
   @sc7a20_addr Hardware.sc7a20_addr()
   @tmp103_addr Hardware.tmp103_addr()
-  @accel_int_pin Hardware.accel_int_pin()
 
   @sc7a20_ctrl_reg1 0x20
   @sc7a20_ctrl_reg1_25hz_xyz 0x37
   @sc7a20_ctrl_reg3 0x22
-  @sc7a20_ctrl_reg3_i1_zyxda 0x10
+  @sc7a20_ctrl_reg3_int_off 0x00
   @sc7a20_ctrl_reg4 0x23
   @sc7a20_ctrl_reg4_bdu_2g 0x80
   @sc7a20_out_x_l 0x28
@@ -35,25 +32,23 @@ defmodule Badge.Sensors do
 
   @tmp103_reg 0x00
 
-  @temp_interval 2_000
-
   def start_link(_arg) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  @doc "Latest averaged accelerometer reading, in milli-g."
+  @doc "Reads the accelerometer now, in milli-g."
   @spec acceleration() :: Accel.mg()
   def acceleration do
     GenServer.call(__MODULE__, :acceleration)
   end
 
-  @doc "Roll and pitch in whole degrees, from the latest averaged reading."
+  @doc "Reads the accelerometer now and returns roll and pitch in whole degrees."
   @spec orientation() :: {integer, integer}
   def orientation do
     GenServer.call(__MODULE__, :orientation)
   end
 
-  @doc "Latest TMP103 reading in whole degrees C, or :unavailable before the first read."
+  @doc "Reads the TMP103 now in whole degrees C, or :unavailable if the read fails."
   @spec temperature() :: integer | :unavailable
   def temperature do
     GenServer.call(__MODULE__, :temperature)
@@ -65,75 +60,47 @@ defmodule Badge.Sensors do
 
     :ok = I2C.write_bytes(i2c, @sc7a20_addr, @sc7a20_ctrl_reg1, @sc7a20_ctrl_reg1_25hz_xyz)
     :ok = I2C.write_bytes(i2c, @sc7a20_addr, @sc7a20_ctrl_reg4, @sc7a20_ctrl_reg4_bdu_2g)
-    :ok = I2C.write_bytes(i2c, @sc7a20_addr, @sc7a20_ctrl_reg3, @sc7a20_ctrl_reg3_i1_zyxda)
 
-    gpio = GPIO.open()
-    :ok = GPIO.set_int(gpio, @accel_int_pin, :rising)
+    # INT1 stays off: readings are polled, so a data-ready line would only generate traffic.
+    :ok = I2C.write_bytes(i2c, @sc7a20_addr, @sc7a20_ctrl_reg3, @sc7a20_ctrl_reg3_int_off)
 
-    # Clearing after arming, not before: a sample landing between the two would
-    # leave INT1 already high, and a rising-edge trigger never fires again.
-    _ = I2C.read_bytes(i2c, @sc7a20_addr, @sc7a20_out_x_l ||| @sc7a20_auto_increment, 6)
+    :io.format(~c"Sensors: sc7a20 and tmp103, polled on demand~n")
 
-    :io.format(~c"Sensors: sc7a20 25Hz data-ready interrupt on GPIO~p, tmp103 every ~ps~n", [
-      @accel_int_pin,
-      div(@temp_interval, 1000)
-    ])
-
-    send(self(), :temp_tick)
-    start_temp_ticker()
-
-    {:ok, %{i2c: i2c, gpio: gpio, accel: nil, temp: :unavailable}}
+    {:ok, %{i2c: i2c, accel: nil}}
   end
 
   @impl true
   def handle_call(:acceleration, _from, state) do
-    {:reply, state.accel || {0, 0, 0}, state}
+    accel = read_accel(state)
+
+    {:reply, accel, %{state | accel: accel}}
   end
 
   def handle_call(:orientation, _from, state) do
-    {:reply, Accel.orientation(state.accel || {0, 0, 0}), state}
+    accel = read_accel(state)
+
+    {:reply, Accel.orientation(accel), %{state | accel: accel}}
   end
 
   def handle_call(:temperature, _from, state) do
-    {:reply, state.temp, state}
+    {:reply, read_temp(state.i2c), state}
   end
 
-  @impl true
-  def handle_info({:gpio_interrupt, @accel_int_pin}, state) do
-    case I2C.read_bytes(state.i2c, @sc7a20_addr, @sc7a20_out_x_l ||| @sc7a20_auto_increment, 6) do
-      {:ok, bytes} ->
-        sample = Accel.decode(bytes)
-        {:noreply, %{state | accel: Accel.average(state.accel, sample)}}
-
-      {:error, _reason} ->
-        {:noreply, state}
+  defp read_accel(%{i2c: i2c, accel: previous}) do
+    case I2C.read_bytes(i2c, @sc7a20_addr, @sc7a20_out_x_l ||| @sc7a20_auto_increment, 6) do
+      {:ok, bytes} -> Accel.average(previous, Accel.decode(bytes))
+      {:error, _reason} -> previous || {0, 0, 0}
     end
   end
 
-  def handle_info(:temp_tick, state) do
-    temp =
-      case I2C.read_bytes(state.i2c, @tmp103_addr, @tmp103_reg, 1) do
-        {:ok, <<raw>>} -> signed_byte(raw)
-        {:error, _reason} -> :unavailable
-      end
-
-    {roll, pitch} = Accel.orientation(state.accel || {0, 0, 0})
-
-    {:noreply, %{state | temp: temp}}
+  defp read_temp(i2c) do
+    case I2C.read_bytes(i2c, @tmp103_addr, @tmp103_reg, 1) do
+      {:ok, <<raw>>} -> signed_byte(raw)
+      {:error, _reason} -> :unavailable
+    end
   end
 
   # TMP103 register 0x00 is a signed 8-bit whole-degree-C reading.
   defp signed_byte(raw) when raw >= 128, do: raw - 256
   defp signed_byte(raw), do: raw
-
-  defp start_temp_ticker do
-    sensors = self()
-    spawn_link(fn -> temp_tick_loop(sensors) end)
-  end
-
-  defp temp_tick_loop(sensors) do
-    Process.sleep(@temp_interval)
-    send(sensors, :temp_tick)
-    temp_tick_loop(sensors)
-  end
 end

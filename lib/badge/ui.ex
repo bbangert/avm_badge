@@ -1,0 +1,232 @@
+defmodule Badge.UI do
+  @moduledoc """
+  Owns the AtomGL port and decides what is on it.
+
+  Pages are modules, not processes: this process holds the current page's
+  state and calls `render/1`, `tick/1` and `handle_key/2` on it. Shape keys
+  and Esc are intercepted here and never reach a page, so no page has to
+  know that navigation exists.
+
+  Rendering stays decoupled from input: key events only mutate page state
+  and mark it dirty, and a linked ticker asks for a redraw at a bounded
+  rate. The link is load-bearing — a silently dead ticker would freeze the
+  panel behind a healthy-looking supervision tree.
+
+  Each page sets its own frame rate through `refresh/0`. `tick/1` still
+  runs on every base tick regardless, so a page that smooths its readings
+  keeps averaging at full rate while repainting slowly.
+
+  The title bar carries the page name, a clock and the battery and wifi
+  icons. Its contents are compared like page state, so the clock ticks even
+  on a page that never changes by itself.
+  """
+
+  use GenServer
+
+  alias Badge.Battery
+  alias Badge.Clock
+  alias Badge.Hardware
+  alias Badge.Icons
+  alias Badge.Page.Home
+  alias Badge.Pages
+  alias Badge.Power
+  alias Badge.Theme
+
+  @accent Theme.accent()
+  @dim Theme.dim()
+  @bg Theme.bg()
+  @width Theme.width()
+  @height Theme.height()
+  @bar_h Theme.bar_h()
+
+  # Ticker rate. A page renders at its own `refresh/0`, which must be a multiple of this.
+  @base_interval 100
+
+  # The clock in the title bar needs a second; battery and wifi change far more slowly.
+  @status_ticks div(1_000, @base_interval)
+
+  @status_y 3
+  @status_margin 6
+  @status_gap 6
+  @status_w elem(Icons.size(:battery_100), 0)
+  @battery_x Theme.width() - @status_margin - @status_w
+  @wifi_x @battery_x - @status_gap - @status_w
+  @char_w 8
+
+  @font_dogica File.read!("priv/fonts/dogica.uf")
+  @font_pixel_operator File.read!("priv/fonts/pixel_operator.uf")
+
+  def start_link(spi) do
+    GenServer.start_link(__MODULE__, spi, name: __MODULE__)
+  end
+
+  @doc """
+  Applies a decoded key event.
+
+  Does not draw. Navigation is handled here; anything else goes to the
+  current page, and the ticker turns the result into a frame.
+  """
+  def key_event(event) do
+    GenServer.cast(__MODULE__, {:key, event})
+  end
+
+  @impl true
+  def init(spi) do
+    port = :erlang.open_port({:spawn, "display"}, display_opts(spi))
+
+    :port.call(port, {:register_font, :dogica, @font_dogica})
+    :port.call(port, {:register_font, :pixel_operator, @font_pixel_operator})
+
+    :io.format(~c"UI: AtomGL port open, ~p slots~n", [length(Pages.all())])
+
+    state = %{
+      port: port,
+      page: Home,
+      page_state: Home.init(),
+      dirty: false,
+      countdown: 0,
+      status: placeholder_status(),
+      status_countdown: 0
+    }
+
+    # Renders once immediately so the home grid is up before the first tick.
+    render(state)
+
+    start_ticker()
+
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_cast({:key, {:nav, :home}}, state) do
+    {:noreply, goto(state, Home)}
+  end
+
+  def handle_cast({:key, {:nav, key}}, state) do
+    case Pages.for_key(key) do
+      nil -> {:noreply, state}
+      module -> {:noreply, goto(state, module)}
+    end
+  end
+
+  def handle_cast({:key, event}, state) do
+    case state.page.handle_key(event, state.page_state) do
+      {:ok, page_state} ->
+        dirty = state.dirty or page_state != state.page_state
+
+        {:noreply, %{state | page_state: page_state, dirty: dirty}}
+
+      :ignore ->
+        {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info(:render_tick, state) do
+    page_state = state.page.tick(state.page_state)
+    {status, status_countdown} = refresh_status(state)
+    dirty = state.dirty or page_state != state.page_state or status != state.status
+
+    next = %{
+      state
+      | page_state: page_state,
+        status: status,
+        status_countdown: status_countdown,
+        dirty: dirty
+    }
+
+    # Polling keeps running every tick so smoothing stays responsive; only the frame is held back.
+    case dirty and next.countdown <= 0 do
+      true ->
+        render(next)
+
+        {:noreply, %{next | dirty: false, countdown: reload(next.page)}}
+
+      false ->
+        {:noreply, %{next | countdown: max(next.countdown - 1, 0)}}
+    end
+  end
+
+  defp reload(page), do: max(div(page.refresh(), @base_interval), 1) - 1
+
+  defp refresh_status(%{status_countdown: 0}), do: {read_status(), @status_ticks - 1}
+
+  defp refresh_status(state), do: {state.status, state.status_countdown - 1}
+
+  defp read_status do
+    power = Power.status()
+
+    %{
+      battery: Battery.icon(power.battery_mv, power.usb),
+      # There is no radio yet, so disconnected is the honest answer rather than a guess.
+      wifi: :wifi_slash,
+      clock: Clock.format(div(:erlang.monotonic_time(:millisecond), 1000))
+    }
+  end
+
+  # Badge.Power starts after this process, so the first real reading waits for the first tick.
+  defp placeholder_status do
+    %{battery: :battery_0, wifi: :wifi_slash, clock: Clock.format(0)}
+  end
+
+  # Re-entering the current page would reset it, and key repeat fires a held key 8 times a second.
+  defp goto(%{page: page} = state, page), do: state
+
+  defp goto(state, page) do
+    %{state | page: page, page_state: page.init(), dirty: true, countdown: 0}
+  end
+
+  defp render(%{port: port, page: page, page_state: page_state, status: status}) do
+    :port.call(port, {:update, page.render(page_state) ++ chrome(page.title(), status)})
+  end
+
+  # Z-order runs tail to head: background last.
+  defp chrome(title, status) do
+    [
+      Icons.item(status.battery, @battery_x, @status_y),
+      Icons.item(status.wifi, @wifi_x, @status_y),
+      clock_item(status.clock),
+      {:text, @status_margin, @status_y, :pixel_operator, @accent, @bg, title},
+      {:rect, 0, @bar_h, @width, 1, @dim},
+      {:rect, 0, 0, @width, @height, @bg}
+    ]
+  end
+
+  # default16px is 8px per character, so this is the one thing in the bar that can be centred.
+  defp clock_item(clock) do
+    x = div(@width - @char_w * byte_size(clock), 2)
+
+    {:text, x, @status_y, :default16px, @dim, @bg, clock}
+  end
+
+  # Waits in a linked process, so this GenServer never sleeps in a callback and a dead ticker crashes loudly.
+  defp start_ticker do
+    ui = self()
+    spawn_link(fn -> tick_loop(ui) end)
+  end
+
+  defp tick_loop(ui) do
+    Process.sleep(@base_interval)
+    send(ui, :render_tick)
+    tick_loop(ui)
+  end
+
+  # init_seq_type "alt_gamma_2" matches this panel; rotation 3 needs the patch noted in Badge.Hardware.
+  defp display_opts(spi) do
+    [
+      compatible: "sitronix,st7789",
+      init_seq_type: "alt_gamma_2",
+      enable_tft_invon: true,
+      width: Hardware.display_width(),
+      height: Hardware.display_height(),
+      rotation: Hardware.display_rotation(),
+      reset: Hardware.display_reset(),
+      dc: Hardware.display_dc(),
+      cs: Hardware.display_cs(),
+      backlight: Hardware.display_backlight(),
+      backlight_active: :low,
+      backlight_enabled: true,
+      spi_host: spi
+    ]
+  end
+end

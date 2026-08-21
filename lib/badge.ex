@@ -22,12 +22,11 @@ defmodule Badge do
     pixel_spi = open_pixel_spi()
 
     children = [
-      {Badge.Screen, display_spi},
+      {Badge.UI, display_spi},
       {Badge.Keyboard, :ok},
       {Badge.Pixels, pixel_spi},
       {Badge.Sensors, :ok},
-      {Badge.Power, :ok},
-      {Badge.FontDemo, :ok}
+      {Badge.Power, :ok}
     ]
 
     {:ok, _supervisor} = Supervisor.start_link(children, strategy: :one_for_one)

@@ -24,17 +24,28 @@ defmodule Badge.AccelTest do
       assert Accel.average(nil, {100, 200, 300}) == {100, 200, 300}
     end
 
-    test "moves a quarter of the way to the new sample per axis" do
-      assert Accel.average({100, 200, 300}, {200, 200, 700}) == {125, 200, 400}
+    test "a repeated sample settles near it and then stops moving" do
+      settle = fn n ->
+        :lists.foldl(
+          fn _i, acc -> Accel.average(acc, {100, 200, 300}) end,
+          {0, 0, 0},
+          :lists.seq(1, n)
+        )
+      end
+
+      {x, y, z} = settle.(40)
+
+      # Integer division truncates, so the average stalls within 3 of the target
+      # rather than reaching it. That is what stops it dithering once settled.
+      assert_in_delta x, 100, 3
+      assert_in_delta y, 200, 3
+      assert_in_delta z, 300, 3
+
+      assert settle.(80) == settle.(40)
     end
 
-    test "converges toward a steady input" do
-      steady = {1000, -500, 250}
-
-      averaged =
-        Enum.reduce(1..20, nil, fn _, acc -> Accel.average(acc, steady) end)
-
-      assert averaged == steady
+    test "one step moves a quarter of the way" do
+      assert Accel.average({0, 0, 0}, {100, 200, 300}) == {25, 50, 75}
     end
   end
 

@@ -1,11 +1,16 @@
 defmodule Badge.Accel do
   @moduledoc """
   Pure maths for the SC7A20 accelerometer: decoding raw registers,
-  exponential averaging, and tilt orientation. No I2C, no process state.
+  exponential averaging, and deriving tilt orientation. No I2C, no process
+  state.
 
   The SC7A20 in normal mode is 10-bit, left-justified in a signed 16-bit
   little-endian pair, +-2g full scale, so 1g = 16384 counts and
   `mg = raw * 1000 / 16384`, simplified here to `raw * 125 / 2048`.
+
+  Note that the sensor is not mounted square to the panel: a badge lying
+  flat reads roughly 123 degrees of roll, so `orientation/1` is only
+  meaningful as a difference against a captured reference.
   """
 
   @type mg :: {integer, integer, integer}
@@ -29,7 +34,7 @@ defmodule Badge.Accel do
     {ema(px, x), ema(py, y), ema(pz, z)}
   end
 
-  defp ema(prev, new), do: prev + div(new - prev, 4)
+  defp ema(previous, new), do: previous + div(new - previous, 4)
 
   @doc "Roll and pitch in whole degrees from a milli-g sample."
   @spec orientation(mg) :: {integer, integer}

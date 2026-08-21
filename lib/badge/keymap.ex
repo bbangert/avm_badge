@@ -57,6 +57,25 @@ defmodule Badge.Keymap do
     ~c"Tab" => :tab
   }
 
+  # Handled by Badge.UI before a page ever sees them.
+  @nav %{
+    ~c"Esc" => :home,
+    ~c"Square" => :square,
+    ~c"Triangle" => :triangle,
+    ~c"Cross" => :cross,
+    ~c"Circle" => :circle,
+    ~c"Clover" => :clover,
+    ~c"Diamond" => :diamond
+  }
+
+  # Passed through to the current page.
+  @moves %{
+    ~c"Up" => :up,
+    ~c"Down" => :down,
+    ~c"Left" => :left,
+    ~c"Right" => :right
+  }
+
   @doc """
   Decodes a key label into an editing intent.
 
@@ -74,8 +93,22 @@ defmodule Badge.Keymap do
 
   defp edit(label) do
     case Map.get(@edits, label) do
-      nil -> :ignore
+      nil -> nav(label)
       op -> {:edit, op}
+    end
+  end
+
+  defp nav(label) do
+    case Map.get(@nav, label) do
+      nil -> move(label)
+      key -> {:nav, key}
+    end
+  end
+
+  defp move(label) do
+    case Map.get(@moves, label) do
+      nil -> :ignore
+      dir -> {:move, dir}
     end
   end
 end

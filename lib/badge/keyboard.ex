@@ -165,12 +165,8 @@ defmodule Badge.Keyboard do
     end
   end
 
-  # While Badge.FontDemo is running it owns the display, so events go there instead of Screen.
   defp route_event(event) do
-    case Process.whereis(Badge.FontDemo) do
-      nil -> Badge.Screen.key_event(event)
-      _pid -> Badge.FontDemo.key_event(event)
-    end
+    Badge.UI.key_event(event)
   end
 
   defp setup do
