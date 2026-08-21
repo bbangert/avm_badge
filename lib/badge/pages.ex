@@ -10,7 +10,7 @@ defmodule Badge.Pages do
   @pages [
     {:square, Badge.Page.Text},
     {:triangle, nil},
-    {:cross, nil},
+    {:cross, Badge.Page.Temp},
     {:circle, nil},
     {:clover, nil},
     {:diamond, nil}
