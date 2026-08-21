@@ -32,6 +32,10 @@ defmodule Badge.Page.Temp do
   @readout_y 30
   @footer_y 206
 
+  # One sample lands per second, so three frames a second is already generous.
+  @impl true
+  def refresh, do: 333
+
   @impl true
   def title, do: "Temp"
 

@@ -25,6 +25,10 @@ defmodule Badge.Page.TiltTest do
       assert Tilt.title() == "Tilt"
       assert Tilt.icon() == :triangle
     end
+
+    test "repaints slowly, since a frame is a whole panel" do
+      assert Tilt.refresh() == 333
+    end
   end
 
   describe "zeroing" do
@@ -43,7 +47,7 @@ defmodule Badge.Page.TiltTest do
       {rested_x, _y} = marker(rested)
       {tilted_x, _y2} = marker(Tilt.update(rested, {143, 4}))
 
-      assert tilted_x > rested_x
+      refute tilted_x == rested_x
     end
 
     test "Enter re-zeroes at the current orientation" do
@@ -60,9 +64,9 @@ defmodule Badge.Page.TiltTest do
       {rested_x, _y} = marker(rested)
       {crossed_x, _y2} = marker(Tilt.update(rested, {-170, 0}))
 
-      # -170 is 20 degrees past 170, so the marker should nudge, not slam to the edge.
-      assert crossed_x > rested_x
-      assert crossed_x < elem(marker(at(45, 0)), 0)
+      # -170 is 20 degrees past 170: a nudge, not a slam to the edge.
+      refute crossed_x == rested_x
+      assert abs(crossed_x - rested_x) < abs(elem(marker(at(45, 0)), 0) - rested_x)
     end
 
     test "anything other than Enter is ignored" do
@@ -80,13 +84,23 @@ defmodule Badge.Page.TiltTest do
       assert y == 120 - div(h, 2)
     end
 
-    test "rolling moves the marker horizontally" do
-      {left, _y} = marker(at(-45, 0))
+    test "roll moves the marker horizontally, inverted to match the panel" do
+      {positive, _y} = marker(at(45, 0))
       {centre, _y2} = marker(at(0, 0))
-      {right, _y3} = marker(at(45, 0))
+      {negative, _y3} = marker(at(-45, 0))
 
-      assert left < centre
-      assert centre < right
+      # Sensor roll increases toward the panel's left, so the mapping flips it.
+      assert positive < centre
+      assert centre < negative
+    end
+
+    test "the readout agrees with the direction the marker moved" do
+      [body] = for {:text, _x, _y, _f, _fg, _bg, body} <- Tilt.render(at(-30, 0)), do: body
+      {x, _y} = marker(at(-30, 0))
+
+      # Marker right of centre means a positive roll on screen.
+      assert x > elem(marker(at(0, 0)), 0)
+      assert :binary.match(body, "roll 30") != :nomatch
     end
 
     test "pitching moves the marker vertically" do
@@ -99,9 +113,10 @@ defmodule Badge.Page.TiltTest do
     end
 
     test "the marker moves further the more it is tilted" do
-      {small, _y} = marker(at(10, 0))
-      {medium, _y2} = marker(at(25, 0))
-      {large, _y3} = marker(at(40, 0))
+      centre = elem(marker(at(0, 0)), 0)
+      small = abs(elem(marker(at(10, 0)), 0) - centre)
+      medium = abs(elem(marker(at(25, 0)), 0) - centre)
+      large = abs(elem(marker(at(40, 0)), 0) - centre)
 
       assert small < medium
       assert medium < large
@@ -113,11 +128,20 @@ defmodule Badge.Page.TiltTest do
       assert marker(at(0, 80)) == marker(at(0, 45))
     end
 
-    test "position is quantised to 4px so noise does not repaint" do
+    test "position is quantised so noise does not repaint" do
       {x, y} = marker(at(37, 23))
 
-      assert rem(x, 4) == 0
-      assert rem(y, 4) == 0
+      assert rem(x, 8) == 0
+      assert rem(y, 8) == 0
+    end
+
+    test "a degree of wobble either way leaves the marker alone" do
+      centre = marker(levelled())
+
+      # Half a quantum is about 1.3 degrees, so that is the deadzone.
+      for wobble <- [-1, 0, 1] do
+        assert marker(at(wobble, wobble)) == centre
+      end
     end
 
     test "a sub-quantum wobble does not change state" do
@@ -141,7 +165,7 @@ defmodule Badge.Page.TiltTest do
     end
 
     test "shows the angles relative to the zero" do
-      texts = for {:text, _x, _y, _f, _fg, _bg, body} <- Tilt.render(at(30, -20)), do: body
+      texts = for {:text, _x, _y, _f, _fg, _bg, body} <- Tilt.render(at(-30, -20)), do: body
 
       assert length(texts) == 1
       assert :binary.match(hd(texts), "30") != :nomatch

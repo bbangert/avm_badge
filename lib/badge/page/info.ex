@@ -36,6 +36,10 @@ defmodule Badge.Page.Info do
 
   @row_ys for i <- 0..5, do: @top + i * @pitch
 
+  # Nothing here moves fast enough to be worth a full repaint ten times a second.
+  @impl true
+  def refresh, do: 333
+
   @impl true
   def title, do: "Info"
 

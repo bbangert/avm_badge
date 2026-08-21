@@ -6,6 +6,9 @@ defmodule Badge.Page.Tilt do
   the page opened, and slides toward whichever way it is tilted from there.
   Enter re-zeroes at the current orientation.
 
+  Refreshes three times a second rather than ten: a frame is a full-panel
+  repaint, and orientation does not need more.
+
   Levelling against a captured reference rather than an absolute frame is
   deliberate: the accelerometer is not mounted square to the panel, so a
   badge lying flat on a desk reads roughly 123 degrees of roll and an
@@ -29,7 +32,12 @@ defmodule Badge.Page.Tilt do
   # Tilt that drives the marker to the edge.
   @range 45
 
-  @quantum 4
+  # The sensor's roll increases toward the panel's left, so it is inverted here.
+  @roll_sign -1
+  @pitch_sign 1
+
+  # 8px is about 2.6 degrees at this range, so a small wobble leaves the marker alone.
+  @quantum 8
   @degree_quantum 2
 
   # Both centres land on a quantum boundary once the marker's half-size is taken off.
@@ -38,10 +46,13 @@ defmodule Badge.Page.Tilt do
   @span_x 140
   @span_y 76
 
-  @rest_x div(@centre_x - @half_w, @quantum) * @quantum
-  @rest_y div(@centre_y - @half_h, @quantum) * @quantum
+  @rest_x div(@centre_x - @half_w + div(@quantum, 2), @quantum) * @quantum
+  @rest_y div(@centre_y - @half_h + div(@quantum, 2), @quantum) * @quantum
 
   @readout_y 218
+
+  @impl true
+  def refresh, do: 333
 
   @impl true
   def title, do: "Tilt"
@@ -69,8 +80,8 @@ defmodule Badge.Page.Tilt do
   end
 
   def update(%{zero: {roll_zero, pitch_zero}} = state, {roll, pitch}) do
-    roll_from_zero = wrap(roll - roll_zero)
-    pitch_from_zero = wrap(pitch - pitch_zero)
+    roll_from_zero = @roll_sign * wrap(roll - roll_zero)
+    pitch_from_zero = @pitch_sign * wrap(pitch - pitch_zero)
 
     %{
       state
@@ -106,7 +117,8 @@ defmodule Badge.Page.Tilt do
   defp wrap(degrees) when degrees < -180, do: degrees + 360
   defp wrap(degrees), do: degrees
 
-  defp quantise(value), do: div(value, @quantum) * @quantum
+  # Rounds rather than truncates, so the steps sit symmetrically either side of centre.
+  defp quantise(value), do: div(value + div(@quantum, 2), @quantum) * @quantum
 
   defp coarse(degrees), do: div(degrees, @degree_quantum) * @degree_quantum
 end

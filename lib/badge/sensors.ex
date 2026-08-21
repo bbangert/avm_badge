@@ -4,9 +4,11 @@ defmodule Badge.Sensors do
   shared I2C bus.
 
   Every reading is taken on demand, inside the call that asks for it. This
-  process holds no cached sample, runs no timer and takes no interrupt, so
-  a page that never asks costs nothing and a caller never queues behind
-  background sampling.
+  process runs no timer and takes no interrupt, so a page that never asks
+  costs nothing and a caller never queues behind background sampling.
+
+  Accelerometer samples are smoothed against the previous reading, so the
+  averaging follows how often a page actually polls.
   """
 
   use GenServer
@@ -64,26 +66,30 @@ defmodule Badge.Sensors do
 
     :io.format(~c"Sensors: sc7a20 and tmp103, polled on demand~n")
 
-    {:ok, %{i2c: i2c}}
+    {:ok, %{i2c: i2c, accel: nil}}
   end
 
   @impl true
   def handle_call(:acceleration, _from, state) do
-    {:reply, read_accel(state.i2c), state}
+    accel = read_accel(state)
+
+    {:reply, accel, %{state | accel: accel}}
   end
 
   def handle_call(:orientation, _from, state) do
-    {:reply, Accel.orientation(read_accel(state.i2c)), state}
+    accel = read_accel(state)
+
+    {:reply, Accel.orientation(accel), %{state | accel: accel}}
   end
 
   def handle_call(:temperature, _from, state) do
     {:reply, read_temp(state.i2c), state}
   end
 
-  defp read_accel(i2c) do
+  defp read_accel(%{i2c: i2c, accel: previous}) do
     case I2C.read_bytes(i2c, @sc7a20_addr, @sc7a20_out_x_l ||| @sc7a20_auto_increment, 6) do
-      {:ok, bytes} -> Accel.decode(bytes)
-      {:error, _reason} -> {0, 0, 0}
+      {:ok, bytes} -> Accel.average(previous, Accel.decode(bytes))
+      {:error, _reason} -> previous || {0, 0, 0}
     end
   end
 

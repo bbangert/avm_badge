@@ -11,6 +11,10 @@ defmodule Badge.UI do
   and mark it dirty, and a linked ticker asks for a redraw at a bounded
   rate. The link is load-bearing — a silently dead ticker would freeze the
   panel behind a healthy-looking supervision tree.
+
+  Each page sets its own frame rate through `refresh/0`. `tick/1` still
+  runs on every base tick regardless, so a page that smooths its readings
+  keeps averaging at full rate while repainting slowly.
   """
 
   use GenServer
@@ -27,7 +31,8 @@ defmodule Badge.UI do
   @height Theme.height()
   @bar_h Theme.bar_h()
 
-  @render_interval 100
+  # Ticker rate. A page renders at its own `refresh/0`, which must be a multiple of this.
+  @base_interval 100
 
   @font_dogica File.read!("priv/fonts/dogica.uf")
   @font_pixel_operator File.read!("priv/fonts/pixel_operator.uf")
@@ -55,7 +60,7 @@ defmodule Badge.UI do
 
     :io.format(~c"UI: AtomGL port open, ~p slots~n", [length(Pages.all())])
 
-    state = %{port: port, page: Home, page_state: Home.init(), dirty: false}
+    state = %{port: port, page: Home, page_state: Home.init(), dirty: false, countdown: 0}
 
     # Renders once immediately so the home grid is up before the first tick.
     render(state)
@@ -92,24 +97,28 @@ defmodule Badge.UI do
   @impl true
   def handle_info(:render_tick, state) do
     page_state = state.page.tick(state.page_state)
+    dirty = state.dirty or page_state != state.page_state
+    next = %{state | page_state: page_state, dirty: dirty}
 
-    case state.dirty or page_state != state.page_state do
+    # Polling keeps running every tick so smoothing stays responsive; only the frame is held back.
+    case dirty and next.countdown <= 0 do
       true ->
-        next = %{state | page_state: page_state}
         render(next)
 
-        {:noreply, %{next | dirty: false}}
+        {:noreply, %{next | dirty: false, countdown: reload(next.page)}}
 
       false ->
-        {:noreply, state}
+        {:noreply, %{next | countdown: max(next.countdown - 1, 0)}}
     end
   end
+
+  defp reload(page), do: max(div(page.refresh(), @base_interval), 1) - 1
 
   # Re-entering the current page would reset it, and key repeat fires a held key 8 times a second.
   defp goto(%{page: page} = state, page), do: state
 
   defp goto(state, page) do
-    %{state | page: page, page_state: page.init(), dirty: true}
+    %{state | page: page, page_state: page.init(), dirty: true, countdown: 0}
   end
 
   defp render(%{port: port, page: page, page_state: page_state}) do
@@ -132,7 +141,7 @@ defmodule Badge.UI do
   end
 
   defp tick_loop(ui) do
-    Process.sleep(@render_interval)
+    Process.sleep(@base_interval)
     send(ui, :render_tick)
     tick_loop(ui)
   end

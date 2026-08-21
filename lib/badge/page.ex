@@ -7,8 +7,8 @@ defmodule Badge.Page do
   the title bar and the background rect, so no page can get the z-order
   wrong or forget the background.
 
-  `use Badge.Page` supplies `handle_key/2` and `tick/1` for pages that need
-  neither, both overridable.
+  `use Badge.Page` supplies `handle_key/2`, `tick/1` and a 100 ms
+  `refresh/0` for pages that need none of them, all overridable.
   """
 
   @type state :: term
@@ -33,6 +33,14 @@ defmodule Badge.Page do
   @doc "Refreshes state from the outside world; returning the same state means nothing to draw."
   @callback tick(state) :: state
 
+  @doc """
+  Shortest gap between frames, in milliseconds.
+
+  A frame is a full-panel repaint, so a page whose data changes constantly
+  should ask for a slower rate than one that only redraws on a keypress.
+  """
+  @callback refresh() :: pos_integer
+
   defmacro __using__(_opts) do
     quote do
       @behaviour Badge.Page
@@ -43,7 +51,10 @@ defmodule Badge.Page do
       @impl true
       def tick(state), do: state
 
-      defoverridable handle_key: 2, tick: 1
+      @impl true
+      def refresh, do: 100
+
+      defoverridable handle_key: 2, tick: 1, refresh: 0
     end
   end
 end
