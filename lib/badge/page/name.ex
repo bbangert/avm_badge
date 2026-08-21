@@ -2,32 +2,76 @@ defmodule Badge.Page.Name do
   @moduledoc """
   A name tag to leave on screen.
 
-  Edit `@name` and `@tagline` to make the badge yours. AtomGL cannot scale
-  text, so the name is capped at `dogica`'s native size.
+  The name is set in the editor and kept in NVS. Long names wrap onto a
+  second line, and the rule sits under however many lines that takes.
   """
 
   use Badge.Page
 
+  alias Badge.Field
+  alias Badge.Font
+  alias Badge.Identity
+  alias Badge.Icons
+  alias Badge.Peers
+  alias Badge.Profile
+  alias Badge.Text
   alias Badge.Theme
-
-  @name "AtomVM"
-  @tagline "Elixir on ESP32-S3"
 
   @accent Theme.accent()
   @fg Theme.fg()
   @dim Theme.dim()
+  @muted Theme.muted()
   @bg Theme.bg()
+
+  @margin 16
+
+  # dogica is fixed width, so its text can be measured and wrapped exactly.
+  @name_font :dogica
+  @name_w Font.advance(@name_font)
+
+  @name_w != nil ||
+    raise "#{@name_font} is proportional; the name cannot be wrapped without glyph widths"
+
+  @name_columns div(Theme.width() - 2 * @margin, @name_w)
+  @name_pitch 22
 
   @char_w 8
 
-  @name_x 16
-  @name_y 90
-  @rule_y 132
+  @name_y Theme.content_top() + 10
+  @rule_h 2
   @rule_w 200
-  @tagline_y 152
 
-  # Only default16px has known metrics, so only it can be centred.
-  @tagline_x div(Theme.width() - @char_w * byte_size(@tagline), 2)
+  @detail_pitch 20
+  @icon_w 16
+
+  # Every detail line starts at the same x, icon or not, so they stay aligned.
+  @detail_x @margin + @icon_w + 6
+  @hint_y 216
+
+  @alert Theme.alert()
+  @select Theme.select()
+
+  @row_y Theme.content_top() + 10
+  @row_pitch 18
+  @marker_x 0
+  @label_x 8
+  @value_x 88
+  @value_columns div(Theme.width() - @value_x - 8, @char_w)
+
+  @screens 4
+
+  @ok Theme.ok()
+  @muted_rows 6
+
+  # The big-name screen, and what it falls back to when a name will not fit.
+  @big_font :w95fa
+  @big_usable Theme.width() - 2 * @margin
+  @dot_y 228
+  @dot 6
+  @dot_gap 10
+
+  @entry_label_y Theme.content_top() + 30
+  @entry_value_y Theme.content_top() + 70
 
   @impl true
   def title, do: "Name"
@@ -36,20 +80,305 @@ defmodule Badge.Page.Name do
   def icon, do: :diamond
 
   @impl true
-  def init, do: :ok
+  def init do
+    %{
+      mode: :show,
+      screen: 0,
+      profile: Profile.blank(),
+      peers: [],
+      chip: "",
+      sharing: false,
+      cursor: 0,
+      field: nil,
+      loaded: false,
+      saved: nil
+    }
+  end
 
-  @doc "The name on the tag."
-  def name, do: @name
+  # Hardware is only touched here, never from a key handler.
+  @impl true
+  def tick(state), do: state |> load() |> persist()
 
-  @doc "The line under the name."
-  def tagline, do: @tagline
+  # The saved profile arrives on the first tick, so init/0 stays pure.
+  defp load(%{loaded: true} = state), do: state
+
+  defp load(state) do
+    profile = Profile.load()
+
+    %{
+      state
+      | profile: profile,
+        saved: profile,
+        peers: Peers.load(),
+        chip: Identity.format(Identity.chip_id()),
+        loaded: true
+    }
+  end
+
+  # Written once the editor is closed, not on every keystroke.
+  defp persist(%{mode: mode} = state) when mode != :show, do: state
+  defp persist(%{profile: profile, saved: profile} = state), do: state
+
+  defp persist(state) do
+    Profile.save(state.profile)
+
+    %{state | saved: state.profile}
+  end
 
   @impl true
-  def render(:ok) do
+  def handle_key(event, %{mode: :typing} = state), do: typing_key(event, state)
+  def handle_key(event, %{mode: :fields} = state), do: fields_key(event, state)
+  def handle_key(event, state), do: show_key(event, state)
+
+  defp show_key({:char, char}, state) when char == ?e or char == ?E do
+    {:ok, %{state | mode: :fields, cursor: 0}}
+  end
+
+  # Sharing has nothing behind it yet, so this only remembers the answer.
+  defp show_key({:edit, :newline}, %{screen: 2} = state) do
+    {:ok, %{state | sharing: not state.sharing}}
+  end
+
+  defp show_key({:move, :right}, state), do: {:ok, turn(state, 1)}
+  defp show_key({:move, :left}, state), do: {:ok, turn(state, -1)}
+  defp show_key(_event, _state), do: :ignore
+
+  defp turn(state, delta), do: %{state | screen: rem(state.screen + delta + @screens, @screens)}
+
+  @doc "How many badge screens there are to page through."
+  def screens, do: @screens
+
+  # Escape leaves the editor; the router only sees it once we are back on the badge.
+  defp fields_key({:nav, :home}, state), do: {:ok, %{state | mode: :show}}
+  defp fields_key({:move, :up}, state), do: {:ok, move(state, -1)}
+  defp fields_key({:move, :down}, state), do: {:ok, move(state, 1)}
+
+  defp fields_key({:edit, :newline}, state) do
+    key = selected(state)
+    value = Map.get(state.profile, key, "")
+
+    {:ok, %{state | mode: :typing, field: fill(value, Profile.capacity(key))}}
+  end
+
+  defp fields_key(_event, state), do: {:ok, state}
+
+  defp typing_key({:nav, :home}, state), do: {:ok, %{state | mode: :fields, field: nil}}
+
+  defp typing_key({:edit, :newline}, state) do
+    profile = Map.put(state.profile, selected(state), Field.value(state.field))
+
+    {:ok, %{state | mode: :fields, profile: profile, field: nil}}
+  end
+
+  defp typing_key({:char, char}, state) do
+    {:ok, %{state | field: Field.insert(state.field, char)}}
+  end
+
+  defp typing_key({:edit, :backspace}, state) do
+    {:ok, %{state | field: Field.backspace(state.field)}}
+  end
+
+  defp typing_key(_event, state), do: {:ok, state}
+
+  defp move(state, delta) do
+    %{state | cursor: clamp(state.cursor + delta, length(Profile.keys()) - 1)}
+  end
+
+  defp clamp(index, _last) when index < 0, do: 0
+  defp clamp(index, last) when index > last, do: last
+  defp clamp(index, _last), do: index
+
+  @doc "The field the cursor is on."
+  def selected(%{cursor: cursor}), do: :lists.nth(cursor + 1, Profile.keys())
+
+  defp fill(value, capacity) do
+    :lists.foldl(&Field.insert(&2, &1), Field.new(capacity), :erlang.binary_to_list(value))
+  end
+
+  @doc "How many characters of the name fit on one line."
+  def columns, do: @name_columns
+
+  @impl true
+  def render(%{mode: :typing} = state) do
+    key = selected(state)
+    value = Field.value(state.field) <> "_"
+
     [
-      {:text, @name_x, @name_y, :dogica, @fg, @bg, @name},
-      {:text, @tagline_x, @tagline_y, :default16px, @dim, @bg, @tagline},
-      {:rect, @name_x, @rule_y, @rule_w, 2, @accent}
+      centred(Profile.label(key), @entry_label_y, @dim),
+      centred(value, @entry_value_y, @select),
+      centred("Enter save   Esc cancel", @hint_y, @dim)
     ]
+  end
+
+  def render(%{mode: :fields} = state) do
+    rows(Profile.keys(), 0, state, @row_y, []) ++
+      [centred("up/down pick   Enter edit   Esc done", @hint_y, @dim)]
+  end
+
+  def render(%{screen: 1, profile: profile}), do: big_screen(profile) ++ dots(1)
+
+  def render(%{screen: 2} = state), do: share_screen(state) ++ dots(2)
+
+  def render(%{screen: 3} = state), do: peers_screen(state) ++ dots(3)
+
+  def render(%{profile: profile} = state) do
+    lines = Text.wrap(Profile.display_name(profile), @name_columns)
+    rule_y = @name_y + length(lines) * @name_pitch + 6
+
+    name_items(lines, @name_y, []) ++
+      [{:rect, @margin, rule_y, @rule_w, @rule_h, @accent}] ++
+      detail_items(Profile.lines(profile), rule_y + 14, []) ++
+      [hint()] ++ dots(state.screen)
+  end
+
+  # The whole name, as large as it will go. w95fa is proportional, so it is
+  # measured rather than guessed, and a name too wide for it drops to dogica.
+  defp big_screen(profile) do
+    name = Profile.display_name(profile)
+
+    {font, lines} =
+      case Font.fits?(@big_font, name, @big_usable) do
+        true -> {@big_font, [name]}
+        false -> {@name_font, Text.wrap(name, @name_columns)}
+      end
+
+    height = Font.line_height(font)
+    top = div(Theme.content_top() + Theme.height() - length(lines) * height, 2)
+
+    big_lines(lines, font, height, top, [])
+  end
+
+  defp big_lines([], _font, _height, _y, acc), do: :lists.reverse(acc)
+
+  defp big_lines([line | rest], font, height, y, acc) do
+    x = div(Theme.width() - Font.width(font, line), 2)
+    item = {:text, x, y, font, @fg, @bg, line}
+
+    big_lines(rest, font, height, y + height, [item | acc])
+  end
+
+  # Sharing over IR is not built yet; the switch is here so the shape of it is.
+  defp share_screen(state) do
+    [
+      centred("Share", Theme.content_top() + 16, @fg),
+      centred(state.chip, Theme.content_top() + 44, @dim),
+      centred(
+        sharing_text(state.sharing),
+        Theme.content_top() + 84,
+        sharing_colour(state.sharing)
+      ),
+      centred("over IR, once that is built", Theme.content_top() + 110, @dim),
+      centred("Enter to turn " <> opposite(state.sharing), @hint_y, @dim)
+    ]
+  end
+
+  defp sharing_text(true), do: "sharing is on"
+  defp sharing_text(false), do: "sharing is off"
+
+  defp sharing_colour(true), do: @ok
+  defp sharing_colour(false), do: @muted
+
+  defp opposite(true), do: "off"
+  defp opposite(false), do: "on"
+
+  defp peers_screen(%{peers: peers}) do
+    count = Peers.count(peers)
+
+    [
+      centred("Collected", Theme.content_top() + 16, @fg),
+      centred(:erlang.integer_to_binary(count) <> collected(count), Theme.content_top() + 44, @ok)
+    ] ++ peer_rows(peers, @muted_rows, Theme.content_top() + 80, [])
+  end
+
+  defp collected(1), do: " badge"
+  defp collected(_count), do: " badges"
+
+  defp peer_rows([], _left, _y, acc), do: :lists.reverse(acc)
+  defp peer_rows(_peers, 0, _y, acc), do: :lists.reverse(acc)
+
+  defp peer_rows([peer | rest], left, y, acc) do
+    name = Profile.display_name(Map.get(peer, :profile, %{}))
+
+    peer_rows(rest, left - 1, y + @detail_pitch, [centred(name, y, @muted) | acc])
+  end
+
+  # Which screen you are on, so paging is discoverable without a label.
+  defp dots(current) do
+    left = div(Theme.width() - (@screens * @dot + (@screens - 1) * (@dot_gap - @dot)), 2)
+
+    for index <- 0..(@screens - 1) do
+      colour = if index == current, do: @fg, else: @dim
+
+      {:rect, left + index * @dot_gap, @dot_y, @dot, @dot, colour}
+    end
+  end
+
+  defp name_items([], _y, acc), do: :lists.reverse(acc)
+
+  defp name_items([line | rest], y, acc) do
+    item = {:text, @margin, y, @name_font, @fg, @bg, line}
+
+    name_items(rest, y + @name_pitch, [item | acc])
+  end
+
+  # Anything that will not fit above the hint is dropped rather than overlapping it.
+  defp detail_items([], _y, acc), do: :lists.reverse(acc)
+
+  defp detail_items(_lines, y, acc) when y + @detail_pitch > @hint_y, do: :lists.reverse(acc)
+
+  defp detail_items([{icon, text} | rest], y, acc) do
+    item = {:text, @detail_x, y, :default16px, @muted, @bg, text}
+
+    detail_items(rest, y + @detail_pitch, [item | acc] ++ badge_icon(icon, y))
+  end
+
+  # The icon sits a little above the text baseline so the two line up by eye.
+  defp badge_icon(nil, _y), do: []
+  defp badge_icon(icon, y), do: [Icons.item(icon, @margin, y)]
+
+  defp rows([], _position, _state, _y, acc), do: :lists.reverse(acc)
+
+  defp rows([key | rest], position, state, y, acc) do
+    colour = row_colour(state, position, key)
+    marker = if position == state.cursor, do: ">", else: " "
+
+    items = [
+      {:text, @value_x, y, :default16px, colour, @bg, shown(Map.get(state.profile, key, ""))},
+      {:text, @label_x, y, :default16px, label_colour(state, position), @bg, Profile.label(key)},
+      {:text, @marker_x, y, :default16px, @select, @bg, marker}
+    ]
+
+    rows(rest, position + 1, state, y + @row_pitch, items ++ acc)
+  end
+
+  # The one field that must be filled in says so, in the colour used for problems.
+  defp row_colour(state, position, key) do
+    cond do
+      key == Profile.required() and not Profile.complete?(state.profile) -> @alert
+      position == state.cursor -> @select
+      true -> @fg
+    end
+  end
+
+  defp label_colour(%{cursor: position}, position), do: @select
+  defp label_colour(_state, _position), do: @dim
+
+  # Values are longer than the column, so the list shows as much as fits.
+  defp shown(value) when byte_size(value) > @value_columns do
+    :binary.part(value, 0, @value_columns)
+  end
+
+  defp shown(""), do: "-"
+  defp shown(value), do: value
+
+  defp centred(text, y, colour) do
+    {:text, div(Theme.width() - @char_w * byte_size(text), 2), y, :default16px, colour, @bg, text}
+  end
+
+  defp hint do
+    text = "E to edit"
+
+    {:text, div(Theme.width() - @char_w * byte_size(text), 2), @hint_y, :default16px, @dim, @bg,
+     text}
   end
 end

@@ -17,6 +17,10 @@ defmodule Badge.Theme do
 
   def bg, do: 0x000000
   def fg, do: 0xFFFFFF
+
+  # Secondary text: clearly below the primary line, still comfortably readable.
+  def muted, do: 0xA8A8A8
+
   def dim, do: 0x606060
   def accent, do: 0x00E5A0
 
