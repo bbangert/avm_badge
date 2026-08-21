@@ -7,8 +7,10 @@ defmodule Badge.Page do
   the title bar and the background rect, so no page can get the z-order
   wrong or forget the background.
 
-  `use Badge.Page` supplies `handle_key/2`, `tick/1` and a 100 ms
-  `refresh/0` for pages that need none of them, all overridable.
+  `use Badge.Page` supplies `handle_key/2`, `tick/1`, a 100 ms `refresh/0`
+  and a placeholder `icon/0` for pages that need none of them, all
+  overridable. Sub-pages inside a container never reach the home grid, so
+  they leave `icon/0` alone.
   """
 
   @type state :: term
@@ -54,7 +56,10 @@ defmodule Badge.Page do
       @impl true
       def refresh, do: 100
 
-      defoverridable handle_key: 2, tick: 1, refresh: 0
+      @impl true
+      def icon, do: :square
+
+      defoverridable handle_key: 2, tick: 1, refresh: 0, icon: 0
     end
   end
 end

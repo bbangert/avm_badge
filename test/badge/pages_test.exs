@@ -57,6 +57,18 @@ defmodule Badge.PagesTest do
       end
     end
 
+    test "no page traps escape, so the home grid is always reachable" do
+      for {_key, module} <- Pages.all(), module != nil do
+        Code.ensure_loaded!(module)
+
+        assert module.handle_key({:nav, :home}, module.init()) == :ignore
+      end
+    end
+
+    test "home itself does not trap escape either" do
+      assert Badge.Page.Home.handle_key({:nav, :home}, Badge.Page.Home.init()) == :ignore
+    end
+
     test "a page's icon matches the key that opens it" do
       for {key, module} <- Pages.all(), module != nil do
         assert module.icon() == key
