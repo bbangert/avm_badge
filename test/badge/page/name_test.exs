@@ -232,6 +232,81 @@ defmodule Badge.Page.NameTest do
     end
   end
 
+  describe "paging between badge screens" do
+    defp screen(state, n), do: %{state | screen: n}
+
+    defp big_lines(state) do
+      for {:text, _x, _y, font, _c, _b, body} <- Name.render(state),
+          font in [:w95fa, :dogica],
+          do: {font, body}
+    end
+
+    test "right and left page through, and wrap" do
+      state = showing(%{name: "Gus"})
+
+      assert press(state, {:move, :right}).screen == 1
+      assert press(state, {:move, :right}, Name.screens()).screen == 0
+      assert press(state, {:move, :left}).screen == Name.screens() - 1
+    end
+
+    test "paging is only for the badge, not the editor" do
+      assert press(editing(), {:move, :right}).screen == 0
+    end
+
+    test "the big screen shows the name and nothing else" do
+      state = screen(showing(%{name: "Gus", company: "Protolux"}), 1)
+      bodies = for {:text, _x, _y, _f, _c, _b, body} <- Name.render(state), do: body
+
+      assert bodies == ["Gus"]
+    end
+
+    test "a name that fits uses the large font" do
+      assert big_lines(screen(showing(%{name: "Gus Ross"}), 1)) == [{:w95fa, "Gus Ross"}]
+    end
+
+    test "a name too wide for the large font drops to dogica and wraps" do
+      lines = big_lines(screen(showing(%{name: "Bartholomew Cubbins"}), 1))
+
+      assert Enum.all?(lines, fn {font, _body} -> font == :dogica end)
+      assert length(lines) > 1
+    end
+
+    test "whichever font is used, nothing runs off the panel" do
+      for name <- ["Gus", "Gus Ross", "Bartholomew Cubbins", "Wolfeschlegelsteinhausen"] do
+        state = screen(showing(%{name: name}), 1)
+
+        for {:text, x, _y, font, _c, _b, body} <- Name.render(state) do
+          assert x >= 0
+          assert x + Badge.Font.width(font, body) <= Theme.width()
+        end
+      end
+    end
+
+    test "the big name is centred, which needs the font measured not guessed" do
+      state = screen(showing(%{name: "Gus Ross"}), 1)
+
+      [{:text, x, _y, font, _c, _b, body}] =
+        for item = {:text, _x, _y, f, _c, _b, _t} <- Name.render(state), f == :w95fa, do: item
+
+      assert x == div(Theme.width() - Badge.Font.width(font, body), 2)
+    end
+
+    test "a dot marks which screen you are on" do
+      for index <- 0..(Name.screens() - 1) do
+        state = screen(showing(%{name: "Gus"}), index)
+
+        bright =
+          for {:rect, _x, _y, 6, 6, colour} <- Name.render(state), colour == Theme.fg(), do: :dot
+
+        dim =
+          for {:rect, _x, _y, 6, 6, colour} <- Name.render(state), colour == Theme.dim(), do: :dot
+
+        assert length(bright) == 1
+        assert length(dim) == Name.screens() - 1
+      end
+    end
+  end
+
   describe "opening the editor" do
     test "E opens it, and so does a capital E" do
       assert editing().mode == :fields

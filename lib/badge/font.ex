@@ -36,6 +36,11 @@ defmodule Badge.Font do
                  end)
                  |> Enum.into(%{}, fn {name, offset, size} -> {name, {offset, size}} end)
 
+               {header, _header_size} = Map.fetch!(records, "uFH0")
+
+               <<_intervals::little-32, _compressed::8, line_height::little-16, _rest::binary>> =
+                 :binary.part(data, header, 11)
+
                {glyphs, _glyph_size} = Map.fetch!(records, "uFP0")
                {intervals, interval_size} = Map.fetch!(records, "uFI0")
 
@@ -52,12 +57,24 @@ defmodule Badge.Font do
                    advance
                  end
 
+               codes =
+                 for index <- 0..(div(interval_size, @interval_bytes) - 1),
+                     <<first::little-32, last::little-32, _offset::little-32>> =
+                       :binary.part(data, intervals + index * @interval_bytes, @interval_bytes),
+                     code <- first..last do
+                   code
+                 end
+
                name = path |> Path.basename(".uf") |> String.to_atom()
 
-               {name, Enum.uniq(widths)}
+               {name, {Enum.uniq(widths), Enum.zip(codes, widths) |> Enum.into(%{}), line_height}}
              end)
 
-  @fixed (for {name, widths} <- @advances, length(widths) == 1, into: %{} do
+  @per_char for {name, {_widths, table, _height}} <- @advances, into: %{}, do: {name, table}
+
+  @line_heights for {name, {_widths, _table, height}} <- @advances, into: %{}, do: {name, height}
+
+  @fixed (for {name, {widths, _table, _height}} <- @advances, length(widths) == 1, into: %{} do
             {name, hd(widths)}
           end)
 
@@ -73,4 +90,42 @@ defmodule Badge.Font do
 
   @doc "Every font whose characters are all the same width."
   def fixed_width, do: Map.keys(@fixed)
+
+  @doc "How far one line of `font` sits below the last, in pixels."
+  @spec line_height(atom) :: pos_integer | nil
+  def line_height(:default16px), do: 16
+  def line_height(font), do: Map.get(@line_heights, font)
+
+  @doc """
+  How wide `text` is in `font`, in pixels.
+
+  Works for proportional fonts too, by summing each glyph's own advance.
+  `nil` when the font was never registered, so a caller can tell "zero
+  wide" from "no idea".
+  """
+  @spec width(atom, binary) :: non_neg_integer | nil
+  def width(:default16px, text), do: 8 * byte_size(text)
+
+  def width(font, text) do
+    case Map.get(@per_char, font) do
+      nil -> nil
+      table -> sum(text, table, 0)
+    end
+  end
+
+  @doc "Whether `text` fits within `pixels` when set in `font`."
+  @spec fits?(atom, binary, integer) :: boolean
+  def fits?(font, text, pixels) do
+    case width(font, text) do
+      nil -> false
+      measured -> measured <= pixels
+    end
+  end
+
+  # An unknown character contributes nothing rather than crashing the render.
+  defp sum(<<>>, _table, total), do: total
+
+  defp sum(<<char, rest::binary>>, table, total) do
+    sum(rest, table, total + Map.get(table, char, 0))
+  end
 end

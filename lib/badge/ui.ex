@@ -56,6 +56,7 @@ defmodule Badge.UI do
 
   @font_dogica File.read!("priv/fonts/dogica.uf")
   @font_pixel_operator File.read!("priv/fonts/pixel_operator.uf")
+  @font_w95fa File.read!("priv/fonts/w95fa.uf")
 
   def start_link(spi) do
     GenServer.start_link(__MODULE__, spi, name: __MODULE__)
@@ -77,6 +78,7 @@ defmodule Badge.UI do
 
     :port.call(port, {:register_font, :dogica, @font_dogica})
     :port.call(port, {:register_font, :pixel_operator, @font_pixel_operator})
+    :port.call(port, {:register_font, :w95fa, @font_w95fa})
 
     :io.format(~c"UI: AtomGL port open, ~p slots~n", [length(Pages.all())])
 

@@ -21,7 +21,6 @@ defmodule Badge.Page.Settings.Wifi do
   alias Badge.Theme
   alias Badge.Wifi
 
-  @accent Theme.accent()
   @fg Theme.fg()
 
   # The network currently joined, distinct from the cursor highlight.

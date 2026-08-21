@@ -56,6 +56,15 @@ defmodule Badge.Page.Name do
   @value_x 88
   @value_columns div(Theme.width() - @value_x - 8, @char_w)
 
+  @screens 2
+
+  # The big-name screen, and what it falls back to when a name will not fit.
+  @big_font :w95fa
+  @big_usable Theme.width() - 2 * @margin
+  @dot_y 228
+  @dot 6
+  @dot_gap 10
+
   @entry_label_y Theme.content_top() + 30
   @entry_value_y Theme.content_top() + 70
 
@@ -69,6 +78,7 @@ defmodule Badge.Page.Name do
   def init do
     %{
       mode: :show,
+      screen: 0,
       profile: Profile.blank(),
       cursor: 0,
       field: nil,
@@ -109,7 +119,14 @@ defmodule Badge.Page.Name do
     {:ok, %{state | mode: :fields, cursor: 0}}
   end
 
+  defp show_key({:move, :right}, state), do: {:ok, turn(state, 1)}
+  defp show_key({:move, :left}, state), do: {:ok, turn(state, -1)}
   defp show_key(_event, _state), do: :ignore
+
+  defp turn(state, delta), do: %{state | screen: rem(state.screen + delta + @screens, @screens)}
+
+  @doc "How many badge screens there are to page through."
+  def screens, do: @screens
 
   # Escape leaves the editor; the router only sees it once we are back on the badge.
   defp fields_key({:nav, :home}, state), do: {:ok, %{state | mode: :show}}
@@ -178,14 +195,53 @@ defmodule Badge.Page.Name do
       [centred("up/down pick   Enter edit   Esc done", @hint_y, @dim)]
   end
 
-  def render(%{profile: profile}) do
+  def render(%{screen: 1, profile: profile}), do: big_screen(profile) ++ dots(1)
+
+  def render(%{profile: profile} = state) do
     lines = Text.wrap(Profile.display_name(profile), @name_columns)
     rule_y = @name_y + length(lines) * @name_pitch + 6
 
     name_items(lines, @name_y, []) ++
       [{:rect, @margin, rule_y, @rule_w, @rule_h, @accent}] ++
       detail_items(Profile.lines(profile), rule_y + 14, []) ++
-      [hint()]
+      [hint()] ++ dots(state.screen)
+  end
+
+  # The whole name, as large as it will go. w95fa is proportional, so it is
+  # measured rather than guessed, and a name too wide for it drops to dogica.
+  defp big_screen(profile) do
+    name = Profile.display_name(profile)
+
+    {font, lines} =
+      case Font.fits?(@big_font, name, @big_usable) do
+        true -> {@big_font, [name]}
+        false -> {@name_font, Text.wrap(name, @name_columns)}
+      end
+
+    height = Font.line_height(font)
+    top = div(Theme.content_top() + Theme.height() - length(lines) * height, 2)
+
+    big_lines(lines, font, height, top, [])
+  end
+
+  defp big_lines([], _font, _height, _y, acc), do: :lists.reverse(acc)
+
+  defp big_lines([line | rest], font, height, y, acc) do
+    x = div(Theme.width() - Font.width(font, line), 2)
+    item = {:text, x, y, font, @fg, @bg, line}
+
+    big_lines(rest, font, height, y + height, [item | acc])
+  end
+
+  # Which screen you are on, so paging is discoverable without a label.
+  defp dots(current) do
+    left = div(Theme.width() - (@screens * @dot + (@screens - 1) * (@dot_gap - @dot)), 2)
+
+    for index <- 0..(@screens - 1) do
+      colour = if index == current, do: @fg, else: @dim
+
+      {:rect, left + index * @dot_gap, @dot_y, @dot, @dot, colour}
+    end
   end
 
   defp name_items([], _y, acc), do: :lists.reverse(acc)
