@@ -3,6 +3,42 @@ defmodule Badge.BacklightTest do
 
   alias Badge.Backlight
 
+  describe "stored settings" do
+    test "nothing saved gives the defaults" do
+      assert Backlight.decode_brightness(nil) == 100
+      assert Backlight.decode_sleep(nil) == :s30
+    end
+
+    test "a saved brightness comes back" do
+      assert Backlight.decode_brightness("45") == 45
+      assert Backlight.decode_brightness("5") == 5
+      assert Backlight.decode_brightness("100") == 100
+    end
+
+    test "a corrupt or out-of-range brightness falls back rather than crashing" do
+      for stored <- ["", "abc", "45x", "-10", "0", "101", "99999"] do
+        assert Backlight.decode_brightness(stored) == 100
+      end
+    end
+
+    test "every sleep option round-trips through storage" do
+      for {name, _label} <- Backlight.timeouts() do
+        assert Backlight.decode_sleep(Backlight.sleep_label(name)) == name
+      end
+    end
+
+    test "an unknown sleep value falls back to the default" do
+      assert Backlight.decode_sleep("banana") == :s30
+      assert Backlight.decode_sleep("") == :s30
+    end
+
+    test "the options are the ones the page offers, in order" do
+      labels = for {_name, label} <- Backlight.timeouts(), do: label
+
+      assert labels == ["10s", "30s", "60s", "off"]
+    end
+  end
+
   describe "duty/1" do
     test "full brightness holds the pin low, which is no duty at all" do
       assert Backlight.duty(100) == 0

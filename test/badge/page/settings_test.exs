@@ -17,7 +17,6 @@ defmodule Badge.Page.SettingsTest do
   defp tabs(state) do
     for {:text, _x, y, _f, colour, _bg, body} <- Settings.render(state),
         y == Theme.content_top(),
-        body != " | ",
         do: {body, colour}
   end
 
@@ -143,8 +142,7 @@ defmodule Badge.Page.SettingsTest do
       ys = for {:text, _x, y, _f, _fg, _bg, _body} <- Settings.render(Settings.init()), do: y
       {strip, content} = :lists.partition(fn y -> y == Theme.content_top() end, ys)
 
-      # The strip is several items now: a tab each, and a separator between.
-      assert length(strip) == 2 * length(Settings.subpages()) - 1
+      assert length(strip) == length(Settings.subpages())
       assert content != []
       assert Enum.all?(content, fn y -> y >= Settings.content_top() end)
     end
@@ -164,6 +162,33 @@ defmodule Badge.Page.SettingsTest do
         assert y >= Theme.content_top()
         assert y < Theme.height()
       end
+    end
+
+    test "the first tab starts on the left margin and the last ends on the right" do
+      placed =
+        for {:text, x, y, _f, _c, _bg, body} <- Settings.render(Settings.init()),
+            y == Theme.content_top(),
+            do: {x, x + 8 * byte_size(body)}
+
+      {first, _} = hd(placed)
+      {_, last} = :lists.last(placed)
+
+      assert first == 8
+      assert last == Theme.width() - 8
+    end
+
+    test "the gaps between tabs are even" do
+      placed =
+        for {:text, x, y, _f, _c, _bg, body} <- Settings.render(Settings.init()),
+            y == Theme.content_top(),
+            do: {x, x + 8 * byte_size(body)}
+
+      gaps =
+        for {{_x, ends}, {starts, _e}} <- :lists.zip(:lists.droplast(placed), tl(placed)),
+            do: starts - ends
+
+      # Integer division can leave one pixel in it; anything more is a layout bug.
+      assert :lists.max(gaps) - :lists.min(gaps) <= 1
     end
 
     test "the strip fits the panel and does not overlap itself" do

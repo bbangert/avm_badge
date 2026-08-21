@@ -28,8 +28,6 @@ defmodule Badge.Page.Settings.Display do
   @min_brightness 5
   @max_brightness 100
 
-  @timeouts [{:s10, "10s"}, {:s30, "30s"}, {:s60, "60s"}, {:off, "off"}]
-
   @label_x 8
   @marker_x 0
 
@@ -47,17 +45,56 @@ defmodule Badge.Page.Settings.Display do
 
   @impl true
   def init do
-    %{cursor: 0, editing: false, brightness: Backlight.default(), timeout: :s30, pushed: nil}
+    %{
+      cursor: 0,
+      editing: false,
+      brightness: Backlight.default_brightness(),
+      timeout: Backlight.default_sleep(),
+      pushed: nil,
+      saved: nil,
+      loaded: false
+    }
   end
 
-  # The panel is only told about a change once, and never from a key handler.
+  # Hardware is only touched here, never from a key handler.
   @impl true
-  def tick(%{pushed: pushed, brightness: brightness} = state) when pushed == brightness, do: state
+  def tick(state), do: state |> load() |> push() |> persist()
 
-  def tick(state) do
+  # The saved settings arrive on the first tick, so init/0 stays pure.
+  defp load(%{loaded: true} = state), do: state
+
+  defp load(state) do
+    saved = Backlight.settings()
+
+    %{
+      state
+      | brightness: saved.brightness,
+        timeout: saved.sleep,
+        pushed: saved.brightness,
+        saved: {saved.brightness, saved.sleep},
+        loaded: true
+    }
+  end
+
+  defp push(%{pushed: brightness, brightness: brightness} = state), do: state
+
+  defp push(state) do
     Backlight.set(state.brightness)
 
     %{state | pushed: state.brightness}
+  end
+
+  # Written only once the dial settles, so holding a key does not hammer flash.
+  defp persist(%{editing: true} = state), do: state
+
+  defp persist(%{saved: {brightness, timeout}, brightness: brightness, timeout: timeout} = state) do
+    state
+  end
+
+  defp persist(state) do
+    Backlight.store(state.brightness, state.timeout)
+
+    %{state | saved: {state.brightness, state.timeout}}
   end
 
   @impl true
@@ -96,10 +133,10 @@ defmodule Badge.Page.Settings.Display do
 
   # Stops at the ends rather than wrapping, so holding a key settles somewhere.
   defp shift(timeout, delta) do
-    index = position(@timeouts, timeout, 0) + delta
-    last = length(@timeouts) - 1
+    index = position(Backlight.timeouts(), timeout, 0) + delta
+    last = length(Backlight.timeouts()) - 1
 
-    {name, _label} = :lists.nth(bounded(index, last) + 1, @timeouts)
+    {name, _label} = :lists.nth(bounded(index, last) + 1, Backlight.timeouts())
 
     name
   end
@@ -114,11 +151,7 @@ defmodule Badge.Page.Settings.Display do
 
   defp percent(brightness), do: :erlang.integer_to_binary(brightness) <> "%"
 
-  defp timeout_name(timeout) do
-    {_name, label} = :lists.nth(position(@timeouts, timeout, 0) + 1, @timeouts)
-
-    label
-  end
+  defp timeout_name(timeout), do: Backlight.sleep_label(timeout)
 
   @impl true
   def render(state) do
@@ -150,11 +183,11 @@ defmodule Badge.Page.Settings.Display do
     [
       marker(state, 1, @sleep_y),
       {:text, @label_x, @sleep_y, :default16px, label_colour(state, 1), @bg, "Sleep"}
-    ] ++ segments(@timeouts, state, right_edge(), [])
+    ] ++ segments(Backlight.timeouts(), state, right_edge(), [])
   end
 
   # Laid out from the right so the row ends flush with everything else.
-  defp right_edge, do: Theme.width() - 8 - @segment_w * length(@timeouts)
+  defp right_edge, do: Theme.width() - 8 - @segment_w * length(Backlight.timeouts())
 
   defp segments([], _state, _x, acc), do: :lists.reverse(acc)
 
