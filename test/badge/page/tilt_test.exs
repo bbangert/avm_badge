@@ -28,9 +28,8 @@ defmodule Badge.Page.TiltTest do
   defp marker_size, do: Icons.size(:circle)
 
   describe "identity" do
-    test "announces itself for the home grid" do
+    test "names itself for the carousel" do
       assert Tilt.title() == "Tilt"
-      assert Tilt.icon() == :triangle
     end
 
     test "repaints slowly, since a frame is a whole panel" do

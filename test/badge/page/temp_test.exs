@@ -25,7 +25,6 @@ defmodule Badge.Page.TempTest do
   describe "identity" do
     test "announces itself for the home grid" do
       assert Temp.title() == "Temp"
-      assert Temp.icon() == :cross
     end
   end
 

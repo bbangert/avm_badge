@@ -58,9 +58,6 @@ defmodule Badge.Page.Tilt do
   def title, do: "Tilt"
 
   @impl true
-  def icon, do: :triangle
-
-  @impl true
   def init, do: %{roll: 0, pitch: 0, x: @rest_x, y: @rest_y}
 
   @impl true

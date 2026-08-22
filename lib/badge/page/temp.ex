@@ -40,9 +40,6 @@ defmodule Badge.Page.Temp do
   def title, do: "Temp"
 
   @impl true
-  def icon, do: :cross
-
-  @impl true
   def init, do: %{samples: [], last_second: nil}
 
   @impl true

@@ -9,8 +9,8 @@ defmodule Badge.Pages do
 
   @pages [
     {:square, Badge.Page.Text},
-    {:triangle, Badge.Page.Tilt},
-    {:cross, Badge.Page.Temp},
+    {:triangle, Badge.Page.Sensors},
+    {:cross, Badge.Page.Soon},
     {:circle, Badge.Page.Settings},
     {:clover, Badge.Page.Led},
     {:diamond, Badge.Page.Name}
