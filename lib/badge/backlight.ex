@@ -21,6 +21,11 @@ defmodule Badge.Backlight do
   # 10 bits is finer than the eye can see here, and keeps the frequency easy.
   @resolution 10
   @max_duty 1023
+
+  # LEDC counts duty from 0 to 2^resolution inclusive, so full duty is one more
+  # than @max_duty. Stopping at 1023 leaves a count of the cycle driving the
+  # active low pin, which shows as a backlight that is never quite off.
+  @full_duty 1024
   @frequency 5_000
 
   @default_brightness 100
@@ -142,7 +147,7 @@ defmodule Badge.Backlight do
   """
   @spec duty(integer) :: integer
   def duty(percent) when percent >= 100, do: 0
-  def duty(percent) when percent <= 0, do: @max_duty
+  def duty(percent) when percent <= 0, do: @full_duty
   def duty(percent), do: @max_duty - lit(percent)
 
   # One count rather than none, so the lowest setting is dim but never dark.

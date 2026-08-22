@@ -45,7 +45,18 @@ defmodule Badge.BacklightTest do
     end
 
     test "dark is full duty, since the pin is active low" do
-      assert Backlight.duty(0) == 1023
+      assert Backlight.duty(0) == 1024
+    end
+
+    test "dark is the whole cycle, so the panel is not faintly lit" do
+      # LEDC counts 0..2^resolution inclusive; one short of that still lets light through.
+      assert Backlight.duty(0) == :math.pow(2, 10) |> round()
+    end
+
+    test "no brightness setting is as dark as off" do
+      for percent <- 1..100 do
+        assert Backlight.duty(percent) < Backlight.duty(0)
+      end
     end
 
     test "brighter always means less duty" do
@@ -91,11 +102,12 @@ defmodule Badge.BacklightTest do
     end
 
     test "never leaves the range the timer can express" do
+      # A 10 bit timer counts 0..1024 inclusive, 1024 being the whole cycle.
       for percent <- -20..120 do
         duty = Backlight.duty(percent)
 
         assert duty >= 0
-        assert duty <= 1023
+        assert duty <= 1024
       end
     end
 
