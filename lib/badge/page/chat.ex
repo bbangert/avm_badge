@@ -15,6 +15,7 @@ defmodule Badge.Page.Chat do
   alias Badge.Chat.Link
   alias Badge.Field
   alias Badge.Readout
+  alias Badge.Text
   alias Badge.Theme
 
   @fg Theme.fg()
@@ -97,31 +98,43 @@ defmodule Badge.Page.Chat do
       ] ++ empty(state)
   end
 
-  # Oldest at the top so the newest ends up against the draft line.
-  defp rows(messages, left, top, acc) do
-    lines(:lists.reverse(take(messages, left, [])), top, acc)
+  # Oldest at the top so the newest ends up against the draft line. A message
+  # can take several lines, so the newest are taken until the room runs out.
+  defp rows(messages, left, top, _acc) do
+    messages
+    |> newest(left, [])
+    |> lines(top, [])
+  end
+
+  # Walks newest first, keeping whole messages until the lines are spent.
+  defp newest([], _left, acc), do: acc
+
+  defp newest(_messages, left, acc) when left <= 0, do: acc
+
+  defp newest([message | rest], left, acc) do
+    wrapped = wrap(message)
+    count = length(wrapped)
+
+    case count > left do
+      true -> acc
+      false -> newest(rest, left - count, wrapped ++ acc)
+    end
+  end
+
+  defp wrap(message) do
+    Text.wrap(Map.get(message, :from, "") <> ": " <> Map.get(message, :body, ""), @columns)
   end
 
   defp lines([], _y, acc), do: :lists.reverse(acc)
 
-  defp lines([message | rest], y, acc) do
-    lines(rest, y + @pitch, [line(message, y) | acc])
+  defp lines([body | rest], y, acc) do
+    lines(rest, y + @pitch, [{:text, @margin, y, :default16px, @fg, @bg, body} | acc])
   end
-
-  defp line(message, y) do
-    body = cut(Map.get(message, :from, "") <> ": " <> Map.get(message, :body, ""))
-
-    {:text, @margin, y, :default16px, @fg, @bg, body}
-  end
-
-  defp take(_messages, 0, acc), do: :lists.reverse(acc)
-  defp take([], _left, acc), do: :lists.reverse(acc)
-  defp take([head | rest], left, acc), do: take(rest, left - 1, [head | acc])
 
   defp draft(%{draft: field} = state) do
     case Field.value(field) do
       "" -> idle(state)
-      value -> prompt(cut("> " <> value <> "_"), colour(state.link))
+      value -> prompt(tail("> " <> value <> "_"), colour(state.link))
     end
   end
 
@@ -141,6 +154,10 @@ defmodule Badge.Page.Chat do
 
   defp empty(_state), do: []
 
-  defp cut(text) when byte_size(text) > @columns, do: :binary.part(text, 0, @columns)
-  defp cut(text), do: text
+  # Typing runs off the left rather than the right, so the caret stays in view.
+  defp tail(text) when byte_size(text) > @columns do
+    :binary.part(text, byte_size(text) - @columns, @columns)
+  end
+
+  defp tail(text), do: text
 end

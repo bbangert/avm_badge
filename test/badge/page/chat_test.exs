@@ -110,4 +110,65 @@ defmodule Badge.Page.ChatTest do
              end)
     end
   end
+
+  describe "a message too long for one line" do
+    test "is wrapped across lines instead of being cut" do
+      long = "the quick brown fox jumps over the lazy dog and keeps on running"
+      shown = texts(heard(Chat.init(), [%{from: "Gus", body: long}]))
+      joined = :erlang.iolist_to_binary(shown)
+
+      assert :binary.match(joined, "running") != :nomatch
+    end
+
+    test "every line still fits the panel" do
+      long = "the quick brown fox jumps over the lazy dog and keeps on running"
+
+      for body <- texts(heard(Chat.init(), [%{from: "Gus", body: long}])) do
+        assert 8 * byte_size(body) <= Theme.width()
+      end
+    end
+
+    test "a single unbroken word is dashed across lines" do
+      shown = texts(heard(Chat.init(), [%{from: "A", body: :binary.copy("x", 90)}]))
+      joined = :erlang.iolist_to_binary(shown)
+
+      assert :binary.match(joined, "-") != :nomatch
+    end
+
+    test "the room never draws more lines than fit above the draft" do
+      many = for n <- 1..12, do: %{from: "A", body: "message number #{n} with some length to it"}
+      items = Chat.render(heard(Chat.init(), many))
+
+      ys = for {:text, _x, y, _f, _c, _b, _body} <- items, y < 206, do: y
+
+      assert length(ys) <= 8
+    end
+  end
+
+  describe "typing past the end of the line" do
+    test "keeps the whole draft, showing its tail" do
+      long = :binary.copy("a", 30) <> "END"
+      state = typed(Chat.init(), long)
+
+      assert Badge.Field.value(state.draft) == long
+
+      shown = :erlang.iolist_to_binary(texts(%{state | link: :joined}))
+      assert :binary.match(shown, "END") != :nomatch
+    end
+
+    test "the draft line still fits the panel" do
+      state = %{typed(Chat.init(), :binary.copy("b", 120)) | link: :joined}
+
+      for body <- texts(state) do
+        assert 8 * byte_size(body) <= Theme.width()
+      end
+    end
+
+    test "a short draft is shown whole, from the start" do
+      state = %{typed(Chat.init(), "hi") | link: :joined}
+      shown = :erlang.iolist_to_binary(texts(state))
+
+      assert :binary.match(shown, "> hi") != :nomatch
+    end
+  end
 end

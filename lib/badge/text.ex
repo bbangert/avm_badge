@@ -10,8 +10,9 @@ defmodule Badge.Text do
   Breaks `text` into lines of at most `columns` characters.
 
   Breaks at the last space that fits, so words stay whole. A word longer
-  than a line has nowhere to break, so it is cut mid-word rather than
-  running off the panel.
+  than a line has nowhere to break, so it is split and a dash joins it to
+  the line below. The dash costs a column, so the break comes one character
+  early.
   """
   @spec wrap(binary, pos_integer) :: [binary]
   def wrap(text, columns) when columns < 1, do: [text]
@@ -24,11 +25,17 @@ defmodule Badge.Text do
 
   defp wrap(text, columns, acc) do
     case break_at(text, columns) do
-      # No space to break on, so the word is cut where the line ends.
-      0 -> wrap(rest(text, columns), columns, [:binary.part(text, 0, columns) | acc])
+      0 -> wrap(rest(text, kept(columns)), columns, [dashed(text, columns) | acc])
       at -> wrap(rest(text, at + 1), columns, [trim(:binary.part(text, 0, at)) | acc])
     end
   end
+
+  # No space to break on, so the word is split and dashed onto the next line.
+  defp dashed(text, columns), do: :binary.part(text, 0, kept(columns)) <> "-"
+
+  # One column goes to the dash, but a single column line would never advance.
+  defp kept(1), do: 1
+  defp kept(columns), do: columns - 1
 
   # The last space at or before the column limit, or 0 when there is none.
   defp break_at(text, columns), do: break_at(text, columns, 0, 0)

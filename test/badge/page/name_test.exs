@@ -76,11 +76,11 @@ defmodule Badge.Page.NameTest do
       assert name_lines(showing(%{name: "Bartholomew Cubbins"})) == ["Bartholomew", "Cubbins"]
     end
 
-    test "a long name with no space is cut rather than running off the panel" do
+    test "a long name with no space is dashed rather than running off the panel" do
       lines = name_lines(showing(%{name: "Wolfeschlegelsteinhausen"}))
 
       assert length(lines) == 2
-      assert hd(lines) == "Wolfeschlegelstein"
+      assert hd(lines) == "Wolfeschlegelstei-"
     end
 
     test "no name line is wider than the panel" do
