@@ -732,4 +732,16 @@ defmodule Badge.Page.NameTest do
       end
     end
   end
+
+  describe "the big font" do
+    test "is only asked for on the screen that draws with it" do
+      assert Name.fonts(screen(showing(%{name: "Gus"}), 1)) == [:w95fa]
+    end
+
+    test "is not held while any other screen is showing" do
+      for other <- [0, 2, 3] do
+        assert Name.fonts(screen(showing(%{name: "Gus"}), other)) == []
+      end
+    end
+  end
 end

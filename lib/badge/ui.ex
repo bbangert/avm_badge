@@ -56,7 +56,9 @@ defmodule Badge.UI do
 
   @font_dogica File.read!("priv/fonts/dogica.uf")
   @font_pixel_operator File.read!("priv/fonts/pixel_operator.uf")
-  @font_w95fa File.read!("priv/fonts/w95fa.uf")
+  # Loaded only while a page asks for it: 18 kB is more than this badge can
+  # spare for a font used on one screen.
+  @loadable %{w95fa: File.read!("priv/fonts/w95fa.uf")}
 
   def start_link(spi) do
     GenServer.start_link(__MODULE__, spi, name: __MODULE__)
@@ -86,7 +88,6 @@ defmodule Badge.UI do
 
     :port.call(port, {:register_font, :dogica, @font_dogica})
     :port.call(port, {:register_font, :pixel_operator, @font_pixel_operator})
-    :port.call(port, {:register_font, :w95fa, @font_w95fa})
 
     :io.format(~c"UI: AtomGL port open, ~p slots~n", [length(Pages.all())])
 
@@ -102,7 +103,8 @@ defmodule Badge.UI do
       dirty: false,
       countdown: 0,
       status: placeholder_status(),
-      status_countdown: 0
+      status_countdown: 0,
+      fonts: []
     }
 
     # Renders once immediately so the home grid is up before the first tick.
@@ -163,9 +165,10 @@ defmodule Badge.UI do
     # Polling keeps running every tick so smoothing stays responsive; only the frame is held back.
     case dirty and next.countdown <= 0 do
       true ->
-        render(next)
+        drawn = sync_fonts(next)
+        render(drawn)
 
-        {:noreply, %{next | dirty: false, countdown: reload(next.page, next.page_state)}}
+        {:noreply, %{drawn | dirty: false, countdown: reload(drawn.page, drawn.page_state)}}
 
       false ->
         {:noreply, %{next | countdown: max(next.countdown - 1, 0)}}
@@ -207,6 +210,32 @@ defmodule Badge.UI do
     :io.format(~c"UI: terminating ~p~n", [reason])
 
     :ok
+  end
+
+  # Fonts are settled before the frame, never from a page, because a page runs
+  # inside this process and a message to itself would arrive after the draw.
+  defp sync_fonts(state) do
+    wanted = state.page.fonts(state.page_state)
+
+    state
+    |> free_fonts(state.fonts -- wanted)
+    |> load_fonts(wanted -- state.fonts)
+  end
+
+  defp free_fonts(state, []), do: state
+
+  defp free_fonts(state, [name | rest]) do
+    :port.call(state.port, {:deregister_font, name})
+
+    free_fonts(%{state | fonts: state.fonts -- [name]}, rest)
+  end
+
+  defp load_fonts(state, []), do: state
+
+  defp load_fonts(state, [name | rest]) do
+    :port.call(state.port, {:register_font, name, Map.fetch!(@loadable, name)})
+
+    load_fonts(%{state | fonts: [name | state.fonts]}, rest)
   end
 
   defp reload(page, page_state), do: max(div(page.refresh(page_state), @base_interval), 1) - 1

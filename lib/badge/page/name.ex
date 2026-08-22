@@ -98,6 +98,12 @@ defmodule Badge.Page.Name do
   def refresh(%{screen: 2}), do: 333
   def refresh(_state), do: 100
 
+  # w95fa is 18 kB in the display driver's heap, so it is only asked for on
+  # the one screen that draws with it.
+  @impl true
+  def fonts(%{screen: 1}), do: [@big_font]
+  def fonts(_state), do: []
+
   @impl true
   def title, do: "Name"
 
