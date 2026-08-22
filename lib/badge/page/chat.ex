@@ -5,6 +5,9 @@ defmodule Badge.Page.Chat do
   Messages arrive through `Badge.Chat.Link`, which does the polling; this page
   only reads what it has heard and hands typed lines back. Newest sits nearest
   the draft line, so the eye follows the conversation downwards.
+
+  The link is opened on the first tick and closed on the way out, because a
+  session held open costs heap the badge needs for whatever else is on screen.
   """
 
   use Badge.Page
@@ -52,13 +55,18 @@ defmodule Badge.Page.Chat do
     %{messages: [], link: :offline, draft: Field.new(@capacity)}
   end
 
-  # Hardware is only read here, never from a key handler.
+  # Hardware is only touched here, never from a key handler.
   @impl true
   def tick(state) do
+    Link.open()
     status = Link.status()
 
     %{state | messages: status.messages, link: status.state}
   end
+
+  # A page is not a process, so the session has nowhere else to be given back.
+  @impl true
+  def leave(_state), do: Link.close()
 
   @impl true
   def handle_key({:char, char}, state), do: {:ok, %{state | draft: Field.insert(state.draft, char)}}

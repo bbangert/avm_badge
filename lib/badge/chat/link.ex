@@ -9,6 +9,12 @@ defmodule Badge.Chat.Link do
   Phoenix hands back a fresh token on every response and expires the old one,
   so the token is taken from whatever arrived last. A 410 means the session is
   gone and the whole thing starts again.
+
+  Nothing is polled until a page asks. Holding the session open costs about
+  7 kB of heap, which this badge cannot spare while it is doing something
+  else, so `Badge.Page.Chat` opens the link on entry and closes it on the way
+  out. The room keeps no history, so nothing is missed that was not already
+  gone.
   """
 
   use GenServer
@@ -30,6 +36,14 @@ defmodule Badge.Chat.Link do
 
   def start_link(:ok), do: GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
 
+  @doc "Starts polling, if it is not already."
+  @spec open() :: :ok
+  def open, do: GenServer.cast(__MODULE__, :open)
+
+  @doc "Stops polling and forgets the session."
+  @spec close() :: :ok
+  def close, do: GenServer.cast(__MODULE__, :close)
+
   @doc "Posts a line to the room."
   @spec say(binary) :: :ok
   def say(body), do: GenServer.cast(__MODULE__, {:say, body})
@@ -41,7 +55,7 @@ defmodule Badge.Chat.Link do
   @impl true
   def init(:ok) do
     state = %{
-      state: :offline,
+      state: :idle,
       token: nil,
       ref: 1,
       messages: [],
@@ -61,6 +75,15 @@ defmodule Badge.Chat.Link do
   end
 
   @impl true
+  def handle_cast(:open, %{state: :idle} = state), do: {:noreply, %{state | state: :offline}}
+
+  def handle_cast(:open, state), do: {:noreply, state}
+
+  # An answer from a request still in flight is dropped by the :idle guard below.
+  def handle_cast(:close, state) do
+    {:noreply, %{state | state: :idle, token: nil, messages: []}}
+  end
+
   def handle_cast({:say, _body}, %{state: joined} = state) when joined != :joined do
     {:noreply, state}
   end
@@ -76,7 +99,9 @@ defmodule Badge.Chat.Link do
   # One request at a time: a second poll on the same token is refused anyway.
   def handle_info(:tick, %{worker: worker} = state) when worker != nil, do: {:noreply, state}
 
-  def handle_info(:tick, %{state: :offline} = state), do: {:noreply, open(state)}
+  def handle_info(:tick, %{state: :idle} = state), do: {:noreply, state}
+
+  def handle_info(:tick, %{state: :offline} = state), do: {:noreply, start(state)}
 
   def handle_info(:tick, %{state: :joined} = state) do
     token = state.token
@@ -85,6 +110,11 @@ defmodule Badge.Chat.Link do
   end
 
   def handle_info(:tick, state), do: {:noreply, state}
+
+  # Closed while a request was in flight: its answer is no longer wanted.
+  def handle_info({:chat, _kind, _result}, %{state: :idle} = state) do
+    {:noreply, %{state | worker: nil}}
+  end
 
   def handle_info({:chat, kind, result}, state) do
     {:noreply, answered(kind, result, %{state | worker: nil})}
@@ -97,7 +127,7 @@ defmodule Badge.Chat.Link do
   def handle_info(_message, state), do: {:noreply, state}
 
   # Nothing can happen before there is an address to reach the server from.
-  defp open(state) do
+  defp start(state) do
     case Wifi.status() do
       %{radio: :connected} -> opening(state)
       _down -> state
