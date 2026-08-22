@@ -10,6 +10,7 @@ defmodule Badge.Page.Led do
   use Badge.Page
 
   alias Badge.Color
+  alias Badge.LedMode
   alias Badge.Pixels
   alias Badge.Theme
 
@@ -18,9 +19,8 @@ defmodule Badge.Page.Led do
   @dim Theme.dim()
   @bg Theme.bg()
 
-  @modes [:rainbow, :solid, :off]
+  @modes LedMode.modes()
   @mode_count length(@modes)
-  @names ["rainbow", "solid", "off"]
 
   @hue_step 15
 
@@ -42,7 +42,7 @@ defmodule Badge.Page.Led do
   def icon, do: :clover
 
   @impl true
-  def init, do: %{index: 0, hue: 0, pushed: nil}
+  def init, do: %{index: 0, hue: 0, pushed: nil, loaded: false}
 
   @impl true
   def handle_key({:move, :down}, state) do
@@ -63,7 +63,11 @@ defmodule Badge.Page.Led do
 
   def handle_key(_event, _state), do: :ignore
 
+  # Adopts what the chain is already showing, so opening the page cannot
+  # overwrite a saved mode with this page's starting selection.
   @impl true
+  def tick(%{loaded: false} = state), do: adopt(state, Pixels.mode())
+
   def tick(%{pushed: pushed} = state) do
     case mode(state) do
       ^pushed ->
@@ -75,6 +79,20 @@ defmodule Badge.Page.Led do
         %{state | pushed: current}
     end
   end
+
+  defp adopt(state, {:solid, hue} = current) do
+    %{state | index: index_of(:solid), hue: hue, pushed: current, loaded: true}
+  end
+
+  defp adopt(state, current) do
+    %{state | index: index_of(current), pushed: current, loaded: true}
+  end
+
+  defp index_of(mode), do: index_of(@modes, mode, 0)
+
+  defp index_of([], _mode, _position), do: 0
+  defp index_of([mode | _rest], mode, position), do: position
+  defp index_of([_other | rest], mode, position), do: index_of(rest, mode, position + 1)
 
   @doc "The chain mode the current selection means."
   def mode(%{index: index, hue: hue}) do
@@ -96,13 +114,14 @@ defmodule Badge.Page.Led do
     ]
   end
 
-  defp name(%{index: index}), do: :lists.nth(index + 1, @names)
+  defp name(%{index: index}), do: LedMode.name(:lists.nth(index + 1, @modes))
 
   defp swatch(state) do
     {:rect, @swatch_x, @swatch_y, @swatch_w, @swatch_h, swatch_colour(mode(state))}
   end
 
   defp swatch_colour(:off), do: @bg
+  defp swatch_colour(:white), do: @fg
   defp swatch_colour(:rainbow), do: @accent
   defp swatch_colour({:solid, hue}), do: Color.rgb888(Color.hsv_to_rgb(hue, 255, 255))
 end

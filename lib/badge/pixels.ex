@@ -19,6 +19,8 @@ defmodule Badge.Pixels do
 
   alias Badge.Color
   alias Badge.Hardware
+  alias Badge.LedMode
+  alias Badge.Nvs
 
   @device :pixels
 
@@ -41,14 +43,26 @@ defmodule Badge.Pixels do
   end
 
   @doc """
-  Sets what the chain displays.
+  Sets what the chain displays, and remembers it.
 
-  `:rainbow` animates; `{:solid, hue}` and `:off` are static and are only
-  written to the chain once.
+  `:rainbow` animates; `{:solid, hue}`, `:white` and `:off` are static and are
+  only written to the chain once.
   """
   def set_mode(mode) do
     GenServer.cast(__MODULE__, {:mode, mode})
   end
+
+  @doc "What the chain is showing, so a page can adopt it rather than reset it."
+  @spec mode() :: atom | {atom, integer}
+  def mode, do: GenServer.call(__MODULE__, :mode)
+
+  @doc "Blanks the chain, leaving the mode to come back to."
+  @spec sleep() :: :ok
+  def sleep, do: GenServer.cast(__MODULE__, :sleep)
+
+  @doc "Puts back whatever was showing before sleep."
+  @spec wake() :: :ok
+  def wake, do: GenServer.cast(__MODULE__, :wake)
 
   @doc """
   Shows a colour briefly, then goes back to whatever was set before.
@@ -69,22 +83,40 @@ defmodule Badge.Pixels do
       Hardware.pixel_clock_hz()
     ])
 
-    {:ok, %{spi: spi, phase: 0, mode: :rainbow, last: nil, flash: nil}, {:continue, :self_test}}
+    state = %{spi: spi, phase: 0, mode: :rainbow, last: nil, flash: nil, asleep: false}
+
+    {:ok, state, {:continue, :restore}}
   end
 
-  # Runs the self-test after init/1 returns, not during it.
+  # Reads NVS after init/1 returns, not during it.
   @impl true
-  def handle_continue(:self_test, %{spi: spi} = state) do
-    self_test(spi)
+  def handle_continue(:restore, state) do
+    mode = LedMode.decode(Nvs.get(:led_mode))
+
+    :io.format(~c"Pixels: ~s~n", [LedMode.encode(mode)])
+
     send(self(), :tick)
 
-    {:noreply, state}
+    {:noreply, %{state | mode: mode}}
   end
 
   @impl true
+  def handle_call(:mode, _from, state), do: {:reply, state.mode, state}
+
+  @impl true
+  # Repeating a mode is free; only a change is worth a flash write.
+  def handle_cast({:mode, mode}, %{mode: mode} = state), do: {:noreply, state}
+
   def handle_cast({:mode, mode}, state) do
+    Nvs.put(:led_mode, LedMode.encode(mode))
+
     {:noreply, %{state | mode: mode}}
   end
+
+  def handle_cast(:sleep, state), do: {:noreply, %{state | asleep: true}}
+
+  # `last` is cleared so the chain is repainted even if the colour is unchanged.
+  def handle_cast(:wake, state), do: {:noreply, %{state | asleep: false, last: nil}}
 
   def handle_cast({:flash, hue, ticks}, state) do
     {:noreply, %{state | flash: {hue, ticks}}}
@@ -100,6 +132,9 @@ defmodule Badge.Pixels do
 
     {:noreply, next}
   end
+
+  # Asleep outranks everything, including a flash: a badge in a pocket stays dark.
+  defp paint(%{asleep: true} = state), do: hold(state, {0, 0, 0})
 
   # A flash outranks the mode until its ticks run out, then the mode resumes
   # on its own because `last` no longer matches.
@@ -121,6 +156,8 @@ defmodule Badge.Pixels do
     hold(state, Color.hsv_to_rgb(hue, 255, @brightness))
   end
 
+  defp paint(%{mode: :white} = state), do: hold(state, {@brightness, @brightness, @brightness})
+
   defp paint(%{mode: :off} = state), do: hold(state, {0, 0, 0})
 
   # A static mode would otherwise rewrite the chain fifty times a second.
@@ -130,26 +167,6 @@ defmodule Badge.Pixels do
     fill(spi, colour)
 
     %{state | last: colour}
-  end
-
-  # Solid colours, in order, make byte-order and wiring faults visible.
-  defp self_test(spi) do
-    Enum.each(
-      [
-        {~c"red", {@brightness, 0, 0}},
-        {~c"green", {0, @brightness, 0}},
-        {~c"blue", {0, 0, @brightness}},
-        {~c"white", {@brightness, @brightness, @brightness}}
-      ],
-      fn {name, colour} ->
-        :io.format(~c"Pixels: all ~s~n", [name])
-        fill(spi, colour)
-        Process.sleep(700)
-      end
-    )
-
-    fill(spi, {0, 0, 0})
-    Process.sleep(300)
   end
 
   defp frame(spi, phase) do

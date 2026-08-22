@@ -36,11 +36,12 @@ defmodule Badge.Page.LedTest do
       state = Led.init()
 
       assert Led.mode(press(state, :down)) == {:solid, 0}
-      assert Led.mode(press(state, :down, 2)) == :off
+      assert Led.mode(press(state, :down, 2)) == :white
+      assert Led.mode(press(state, :down, 3)) == :off
     end
 
     test "down wraps back to the start" do
-      assert Led.mode(press(Led.init(), :down, 3)) == :rainbow
+      assert Led.mode(press(Led.init(), :down, 4)) == :rainbow
     end
 
     test "up wraps backwards" do
@@ -70,7 +71,7 @@ defmodule Badge.Page.LedTest do
     test "hue survives a mode change" do
       state = press(press(press(Led.init(), :down), :right, 4), :down)
 
-      assert Led.mode(press(state, :down, 2)) == {:solid, 60}
+      assert Led.mode(press(state, :down, 3)) == {:solid, 60}
     end
   end
 
@@ -89,7 +90,8 @@ defmodule Badge.Page.LedTest do
     test "names the current mode" do
       assert "rainbow" in texts(Led.init())
       assert "solid" in texts(press(Led.init(), :down))
-      assert "off" in texts(press(Led.init(), :down, 2))
+      assert "white" in texts(press(Led.init(), :down, 2))
+      assert "off" in texts(press(Led.init(), :down, 3))
     end
 
     test "the swatch follows the hue" do
@@ -100,7 +102,7 @@ defmodule Badge.Page.LedTest do
     end
 
     test "off draws a black swatch" do
-      assert swatch(press(Led.init(), :down, 2)) == Theme.bg()
+      assert swatch(press(Led.init(), :down, 3)) == Theme.bg()
     end
 
     test "every item sits inside the content area" do
@@ -121,6 +123,56 @@ defmodule Badge.Page.LedTest do
                {:rect, 0, 0, 320, 240, _colour} -> true
                _item -> false
              end)
+    end
+  end
+
+  describe "white" do
+    defp adopted(state), do: %{state | loaded: true}
+
+    test "is one of the modes you can page to" do
+      names = for mode <- Badge.LedMode.modes(), do: Badge.LedMode.name(mode)
+
+      assert "white" in names
+    end
+
+    test "is reachable from rainbow and reads as white" do
+      state = adopted(%{Led.init() | index: 2})
+
+      assert Led.mode(state) == :white
+    end
+
+    test "its swatch is white, not the accent colour" do
+      state = adopted(%{Led.init() | index: 2})
+
+      [{:rect, _x, _y, _w, _h, colour}] =
+        for {:rect, _x, _y, w, _h, _c} = item <- Led.render(state), w > 100, do: item
+
+      assert colour == Theme.fg()
+    end
+
+    test "paging wraps through every mode and back" do
+      seen =
+        for step <- 0..(length(Badge.LedMode.modes()) - 1) do
+          Led.mode(adopted(%{Led.init() | index: step}))
+        end
+
+      assert length(seen) == length(Badge.LedMode.modes())
+      assert :white in seen
+      assert :off in seen
+    end
+  end
+
+  describe "adopting the live mode" do
+    test "a page that has not loaded yet pushes nothing" do
+      refute Led.init().loaded
+      assert Led.init().pushed == nil
+    end
+
+    test "once loaded, a real change is still pushed" do
+      state = %{Led.init() | loaded: true, index: 3, pushed: :rainbow}
+
+      assert Led.mode(state) == :off
+      refute Led.mode(state) == state.pushed
     end
   end
 end
