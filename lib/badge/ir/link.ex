@@ -24,7 +24,8 @@ defmodule Badge.Ir.Link do
 
   @compile {:no_warn_undefined, :uart}
 
-  @baud 4800
+  # 4800 smears a 21-byte frame down to 12 at anything but square alignment.
+  @baud 2400
   @read_ms 100
 
   # Enough for several frames; a stream of noise that never frames up must
