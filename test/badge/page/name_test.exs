@@ -440,6 +440,13 @@ defmodule Badge.Page.NameTest do
       assert Peers.count(next.peers) == 1
     end
 
+    test "collecting a badge does not write to NVS from the handler" do
+      {:ok, next} = Name.handle_ir("aaaaaa", "Pat", sharing())
+
+      assert Peers.count(next.peers) == 1
+      assert next.stored == []
+    end
+
     test "a badge heard on any other screen is dropped" do
       for other <- [0, 1, 3] do
         state = %{sharing() | screen: other}

@@ -111,6 +111,7 @@ defmodule Badge.Page.Name do
       screen: 0,
       profile: Profile.blank(),
       peers: [],
+      stored: [],
       chip: "",
       beam: 0,
       announced: nil,
@@ -132,12 +133,14 @@ defmodule Badge.Page.Name do
 
   defp load(state) do
     profile = Profile.load()
+    peers = Peers.load()
 
     %{
       state
       | profile: profile,
         saved: profile,
-        peers: Peers.load(),
+        peers: peers,
+        stored: peers,
         chip: Identity.format(Identity.chip_id()),
         loaded: true
     }
@@ -203,27 +206,34 @@ defmodule Badge.Page.Name do
 
   defp meet(state, mac, name, greeting) do
     peers = Peers.add(state.peers, mac, %{name: name})
-    save_peers(peers)
     Pixels.flash(hue(greeting))
 
     %{state | peers: peers, announced: {mac, name}, met: {name, greeting}}
   end
 
-  # TEMPORARY for bench testing: collected badges are held in memory only, so
-  # every reset starts from an empty list. Restore Peers.save/1 before merging.
-  defp save_peers(_peers), do: :ok
-
   defp hue(:new), do: @new_hue
   defp hue(:renamed), do: @renamed_hue
 
-  # Written once the editor is closed, not on every keystroke.
-  defp persist(%{mode: mode} = state) when mode != :show, do: state
-  defp persist(%{profile: profile, saved: profile} = state), do: state
+  # Both writes are deferred to here, so a key handler and an arriving frame
+  # stay pure and NVS is only touched on a tick.
+  defp persist(state), do: state |> persist_profile() |> persist_peers()
 
-  defp persist(state) do
+  # Written once the editor is closed, not on every keystroke.
+  defp persist_profile(%{mode: mode} = state) when mode != :show, do: state
+  defp persist_profile(%{profile: profile, saved: profile} = state), do: state
+
+  defp persist_profile(state) do
     Profile.save(state.profile)
 
     %{state | saved: state.profile}
+  end
+
+  defp persist_peers(%{peers: peers, stored: peers} = state), do: state
+
+  defp persist_peers(state) do
+    Peers.save(state.peers)
+
+    %{state | stored: state.peers}
   end
 
   @impl true

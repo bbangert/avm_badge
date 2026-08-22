@@ -22,10 +22,6 @@ defmodule Badge do
   def start do
     :io.format(~c"Badge: starting~n")
 
-    # TEMPORARY for bench testing: drops any collected badges left in NVS, so
-    # each boot starts from nothing. Remove before merging.
-    Badge.Nvs.delete(:peers)
-
     display_spi = open_display_spi()
     pixel_spi = open_pixel_spi()
 
