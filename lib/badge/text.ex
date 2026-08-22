@@ -13,21 +13,41 @@ defmodule Badge.Text do
   than a line has nowhere to break, so it is split and a dash joins it to
   the line below. The dash costs a column, so the break comes one character
   early.
-  """
-  @spec wrap(binary, pos_integer) :: [binary]
-  def wrap(text, columns) when columns < 1, do: [text]
-  def wrap(<<>>, _columns), do: [""]
-  def wrap(text, columns), do: wrap(text, columns, [])
 
-  defp wrap(text, columns, acc) when byte_size(text) <= columns do
+  `orphan` is how much ragged gap a space may leave before splitting is
+  preferred to it. A long unbroken word after a short one would otherwise
+  push a nearly empty line, so a space further back than this is passed over
+  and the word is dashed instead. `:never` keeps every space, which is what
+  wrapping a name wants.
+  """
+  @spec wrap(binary, pos_integer, non_neg_integer | :never) :: [binary]
+  def wrap(text, columns, orphan \\ :never)
+  def wrap(text, columns, _orphan) when columns < 1, do: [text]
+  def wrap(<<>>, _columns, _orphan), do: [""]
+  def wrap(text, columns, orphan), do: lines(text, columns, orphan, [])
+
+  defp lines(text, columns, _orphan, acc) when byte_size(text) <= columns do
     :lists.reverse([text | acc])
   end
 
-  defp wrap(text, columns, acc) do
+  defp lines(text, columns, orphan, acc) do
     case break_at(text, columns) do
-      0 -> wrap(rest(text, kept(columns)), columns, [dashed(text, columns) | acc])
-      at -> wrap(rest(text, at + 1), columns, [trim(:binary.part(text, 0, at)) | acc])
+      0 -> dash(text, columns, orphan, acc)
+      at -> at_space(text, columns, orphan, at, acc)
     end
+  end
+
+  # A space so far back that breaking on it would leave the line half empty.
+  defp at_space(text, columns, orphan, at, acc) when is_integer(orphan) and columns - at > orphan do
+    dash(text, columns, orphan, acc)
+  end
+
+  defp at_space(text, columns, orphan, at, acc) do
+    lines(rest(text, at + 1), columns, orphan, [trim(:binary.part(text, 0, at)) | acc])
+  end
+
+  defp dash(text, columns, orphan, acc) do
+    lines(rest(text, kept(columns)), columns, orphan, [dashed(text, columns) | acc])
   end
 
   # No space to break on, so the word is split and dashed onto the next line.

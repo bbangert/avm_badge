@@ -6,9 +6,17 @@ defmodule Badge.Chat.Poll do
   own; `Badge.Chat.Link` spawns one per request and takes the answer as a
   message.
 
-  Plain HTTP on purpose. AtomVM's TLS cannot complete a handshake in the heap
-  this badge has left - it aborts the board - and it could only ever offer
-  `verify_none` anyway, so nothing is lost by staying off it.
+  TLS became possible once the external PSRAM was enabled - the handshake
+  needs more heap than the badge had internally, and used to abort the board -
+  but it is off by default because AtomVM pins the maximum version to TLS 1.2
+  (`otp_ssl.c`), and the ngrok edge in front of the development server speaks
+  only 1.3. Point `@scheme` at `:https` for a server that accepts 1.2.
+
+  On that path AtomVM offers no certificate verification: `verify_none` is the
+  only mode its `ssl` module accepts, so the connection would be encrypted but
+  the server unauthenticated. `active: false` is not optional either - `ssl`
+  has no clause for `{active, true}`, which `ahttp_client` would otherwise
+  default to.
 
   The host is compiled in. ngrok hands out a new subdomain every time it
   restarts, so a restarted tunnel means reflashing.
@@ -17,7 +25,9 @@ defmodule Badge.Chat.Poll do
   alias Badge.Chat.Wire
 
   @compile {:no_warn_undefined, :ahttp_client}
+  @compile {:no_warn_undefined, :ssl}
 
+  @scheme :http
   @host "a477-2001-7e8-fc14-7001-f8f9-ea8a-ec1f-f130.ngrok-free.app"
   @port 80
   @path "/badge/socket/longpoll"
@@ -52,9 +62,20 @@ defmodule Badge.Chat.Poll do
   defp get(query), do: request("GET", query, nil)
 
   defp request(method, query, body) do
-    case :ahttp_client.connect(:http, @host, @port, active: false) do
+    case connect() do
       {:ok, conn} -> send_request(conn, method, query, body)
       {:error, reason} -> {:error, {:connect, reason}}
+    end
+  end
+
+  defp connect do
+    case @scheme do
+      :https ->
+        :ssl.start()
+        :ahttp_client.connect(:https, @host, @port, active: false, verify: :verify_none)
+
+      :http ->
+        :ahttp_client.connect(:http, @host, @port, active: false)
     end
   end
 

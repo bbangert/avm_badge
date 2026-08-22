@@ -139,9 +139,10 @@ defmodule Badge.Page.ChatTest do
       many = for n <- 1..12, do: %{from: "A", body: "message number #{n} with some length to it"}
       items = Chat.render(heard(Chat.init(), many))
 
+      # A line can carry two items now, the name and the body, so count rows.
       ys = for {:text, _x, y, _f, _c, _b, _body} <- items, y < 206, do: y
 
-      assert length(ys) <= 8
+      assert length(:lists.usort(ys)) <= 8
     end
   end
 
@@ -169,6 +170,65 @@ defmodule Badge.Page.ChatTest do
       shown = :erlang.iolist_to_binary(texts(state))
 
       assert :binary.match(shown, "> hi") != :nomatch
+    end
+  end
+
+  describe "who said what" do
+    defp coloured(state) do
+      for {:text, _x, y, _f, colour, _b, body} <- Chat.render(state), y < 206, do: {body, colour}
+    end
+
+    test "the name is a different colour from the message" do
+      shown = coloured(heard(Chat.init(), [%{from: "Gus", body: "hello", mine: false}]))
+
+      [{_name, name_colour}] = for {b, c} <- shown, :binary.match(b, "Gus") != :nomatch, do: {b, c}
+      [{_body, body_colour}] = for {b, c} <- shown, :binary.match(b, "hello") != :nomatch, do: {b, c}
+
+      refute name_colour == body_colour
+    end
+
+    test "my own name reads differently from someone else's" do
+      mine = coloured(heard(Chat.init(), [%{from: "Me", body: "xyzzy", mine: true}]))
+      theirs = coloured(heard(Chat.init(), [%{from: "Me", body: "xyzzy", mine: false}]))
+
+      [{_b, mine_colour}] = for {b, c} <- mine, :binary.match(b, "Me") != :nomatch, do: {b, c}
+      [{_b, their_colour}] = for {b, c} <- theirs, :binary.match(b, "Me") != :nomatch, do: {b, c}
+
+      refute mine_colour == their_colour
+      assert mine_colour == Theme.select()
+    end
+
+    test "the message itself is the same colour whoever sent it" do
+      mine = coloured(heard(Chat.init(), [%{from: "Me", body: "xyzzy", mine: true}]))
+      theirs = coloured(heard(Chat.init(), [%{from: "Me", body: "xyzzy", mine: false}]))
+
+      [{_b, mine_body}] = for {b, c} <- mine, :binary.match(b, "xyzzy") != :nomatch, do: {b, c}
+      [{_b, their_body}] = for {b, c} <- theirs, :binary.match(b, "xyzzy") != :nomatch, do: {b, c}
+
+      assert mine_body == their_body
+      assert mine_body == Theme.fg()
+    end
+
+    test "a wrapped line keeps the message colour, not the name colour" do
+      long = "one two three four five six seven eight nine ten eleven twelve thirteen"
+      shown = coloured(heard(Chat.init(), [%{from: "Me", body: long, mine: true}]))
+
+      for {body, colour} <- shown, :binary.match(body, "Me:") == :nomatch do
+        assert colour == Theme.fg()
+      end
+    end
+
+    test "a message with no ownership flag still renders" do
+      assert is_list(Chat.render(heard(Chat.init(), [%{from: "A", body: "b"}])))
+    end
+
+    test "a long unbroken word is dashed rather than orphaning the name line" do
+      body = "kfldlsssldkfjghfklos8iqjkdjmcmcmasoaopaaaa"
+      lines = for {b, _c} <- coloured(heard(Chat.init(), [%{from: "Gus", body: body, mine: false}])), do: b
+
+      # The first line carries the name and some of the word, not the name alone.
+      assert Enum.any?(lines, &(:binary.match(&1, "-") != :nomatch))
+      refute Enum.any?(lines, &(&1 == "Gus:"))
     end
   end
 end

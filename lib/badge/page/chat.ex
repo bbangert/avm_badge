@@ -19,6 +19,7 @@ defmodule Badge.Page.Chat do
   alias Badge.Theme
 
   @fg Theme.fg()
+  @accent Theme.accent()
   @dim Theme.dim()
   @muted Theme.muted()
   @select Theme.select()
@@ -38,6 +39,11 @@ defmodule Badge.Page.Chat do
 
   # Matches the server's cap, so nothing is typed that would be cut on arrival.
   @capacity 200
+
+  # How much ragged gap a space may leave before a word is dashed instead.
+  # Without it a long unbroken word pushes the sender's name onto a line of
+  # its own and wastes most of the one below.
+  @orphan 6
 
   @none "No messages yet"
 
@@ -117,19 +123,54 @@ defmodule Badge.Page.Chat do
 
     case count > left do
       true -> acc
-      false -> newest(rest, left - count, wrapped ++ acc)
+      false -> newest(rest, left - count, [{message, wrapped} | acc])
     end
   end
 
   defp wrap(message) do
-    Text.wrap(Map.get(message, :from, "") <> ": " <> Map.get(message, :body, ""), @columns)
+    Text.wrap(prefix(message) <> Map.get(message, :body, ""), @columns, @orphan)
   end
+
+  defp prefix(message), do: Map.get(message, :from, "") <> ": "
 
   defp lines([], _y, acc), do: :lists.reverse(acc)
 
-  defp lines([body | rest], y, acc) do
-    lines(rest, y + @pitch, [{:text, @margin, y, :default16px, @fg, @bg, body} | acc])
+  defp lines([{message, [first | rest_lines]} | rest], y, acc) do
+    items = head_items(message, first, y) ++ tail_items(message, rest_lines, y + @pitch, [])
+
+    lines(rest, y + @pitch * (length(rest_lines) + 1), items ++ acc)
   end
+
+  # The name is drawn separately so it can carry its own colour.
+  defp head_items(message, first, y) do
+    name = prefix(message)
+
+    case byte_size(first) > byte_size(name) and :binary.part(first, 0, byte_size(name)) == name do
+      true ->
+        rest = :binary.part(first, byte_size(name), byte_size(first) - byte_size(name))
+
+        [
+          {:text, @margin + @char_w * byte_size(name), y, :default16px, @fg, @bg,
+           rest},
+          {:text, @margin, y, :default16px, name_colour(message), @bg, name}
+        ]
+
+      false ->
+        [{:text, @margin, y, :default16px, name_colour(message), @bg, first}]
+    end
+  end
+
+  defp tail_items(_message, [], _y, acc), do: acc
+
+  defp tail_items(message, [body | rest], y, acc) do
+    item = {:text, @margin, y, :default16px, @fg, @bg, body}
+
+    tail_items(message, rest, y + @pitch, [item | acc])
+  end
+
+  # Every message reads the same; only the name says who is speaking.
+  defp name_colour(%{mine: true}), do: @select
+  defp name_colour(_message), do: @accent
 
   defp draft(%{draft: field} = state) do
     case Field.value(field) do

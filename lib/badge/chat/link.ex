@@ -199,7 +199,11 @@ defmodule Badge.Chat.Link do
   defp receive_messages(state, [%{event: "new_msg", payload: payload} | rest]) do
     :io.format(~c"Chat: ~s: ~s~n", [line(payload, "from"), line(payload, "body")])
 
-    heard = %{from: line(payload, "from"), body: line(payload, "body")}
+    heard = %{
+      from: line(payload, "from"),
+      body: line(payload, "body"),
+      mine: line(payload, "chip") == state.chip
+    }
 
     receive_messages(%{state | messages: keep([heard | state.messages], @keep, [])}, rest)
   end

@@ -93,4 +93,37 @@ defmodule Badge.TextTest do
                length(Text.wrap("abcdef", 2)) > 1
     end
   end
+
+  describe "wrap/3 with an orphan limit" do
+    test "still breaks at a space that is close to the line end" do
+      assert Text.wrap("hello world there", 12, 6) == ["hello world", "there"]
+    end
+
+    test "dashes instead when the last space is further back than the limit" do
+      assert Text.wrap("Gus: kfldlsssldkfjghfklos", 20, 6) == ["Gus: kfldlsssldkfjg-", "hfklos"]
+    end
+
+    test "the ragged gap is what the limit measures" do
+      # The space sits 15 columns from the end, so breaking there would waste them.
+      assert hd(Text.wrap("ab cdefghijklmnopqrstuvwxyz", 18, 6)) == "ab cdefghijklmnop-"
+    end
+
+    test "wrap/2 is unchanged, so names still break on spaces" do
+      assert Text.wrap("Alexander Hamilton", 12) == ["Alexander", "Hamilton"]
+    end
+
+    test "no line runs over the column limit" do
+      for line <- Text.wrap("Gus Workman: kfldlsssldkfjghfklos8iqjkdjmcmcmasoaopaaaa", 24, 6) do
+        assert byte_size(line) <= 24
+      end
+    end
+
+    test "nothing is lost, dashes aside" do
+      text = "Gus: kfldlsssldkfjghfklos8iqjkdjmcmcmasoaopaaaa"
+      joined = Text.wrap(text, 24, 6) |> Enum.map_join(&:binary.replace(&1, "-", "", [:global]))
+
+      assert :binary.replace(joined, " ", "", [:global]) ==
+               :binary.replace(text, " ", "", [:global])
+    end
+  end
 end
