@@ -56,6 +56,30 @@ defmodule Badge.Backlight do
     GenServer.call(__MODULE__, :settings)
   end
 
+  @doc "Blanks the panel, leaving the saved brightness to come back to."
+  @spec sleep() :: :ok
+  def sleep, do: GenServer.cast(__MODULE__, :sleep)
+
+  @doc "Restores the brightness the badge went to sleep at."
+  @spec wake() :: :ok
+  def wake, do: GenServer.cast(__MODULE__, :wake)
+
+  @doc """
+  How many ticks of `interval` milliseconds a timeout is worth.
+
+  `:never` for a badge set not to sleep, so a caller cannot accidentally
+  count down to it.
+  """
+  @spec sleep_ticks(atom, pos_integer) :: pos_integer | :never
+  def sleep_ticks(:off, _interval), do: :never
+  def sleep_ticks(sleep, interval), do: div(seconds(sleep) * 1000, interval)
+
+  # The label doubles as the number of seconds, bar the trailing s.
+  defp seconds(:s10), do: 10
+  defp seconds(:s30), do: 30
+  defp seconds(:s60), do: 60
+  defp seconds(_unknown), do: seconds(@default_sleep)
+
   @doc "Sleep timeout options, in order, as `{name, label}`."
   def timeouts, do: @timeouts
 
@@ -174,12 +198,29 @@ defmodule Badge.Backlight do
     {:noreply, %{state | sleep: sleep}}
   end
 
+  # Duty is driven straight, so the saved percentage survives the blanking.
+  def handle_cast(:sleep, state) do
+    drive(0)
+
+    {:noreply, state}
+  end
+
+  def handle_cast(:wake, state) do
+    drive(state.percent)
+
+    {:noreply, state}
+  end
+
   def handle_cast({:set, percent}, %{percent: percent} = state), do: {:noreply, state}
 
   def handle_cast({:set, percent}, state) do
-    :ok = LEDC.set_duty(LEDC.low_speed_mode(), @channel, duty(percent))
-    :ok = LEDC.update_duty(LEDC.low_speed_mode(), @channel)
+    drive(percent)
 
     {:noreply, %{state | percent: percent}}
+  end
+
+  defp drive(percent) do
+    :ok = LEDC.set_duty(LEDC.low_speed_mode(), @channel, duty(percent))
+    :ok = LEDC.update_duty(LEDC.low_speed_mode(), @channel)
   end
 end

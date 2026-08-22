@@ -16,6 +16,11 @@ defmodule Badge.UI do
   runs on every base tick regardless, so a page that smooths its readings
   keeps averaging at full rate while repainting slowly.
 
+  After the sleep timeout the panel and the LED chain go dark and no frame is
+  drawn, though pages keep ticking so nothing resets behind the blank screen.
+  The key that wakes the badge is swallowed here rather than reaching the page,
+  so waking never also does something.
+
   The title bar carries the page name, a clock and the battery and wifi
   icons. Its contents are compared like page state, so the clock ticks even
   on a page that never changes by itself.
@@ -23,12 +28,14 @@ defmodule Badge.UI do
 
   use GenServer
 
+  alias Badge.Backlight
   alias Badge.Battery
   alias Badge.Clock
   alias Badge.Hardware
   alias Badge.Icons
   alias Badge.Page.Home
   alias Badge.Pages
+  alias Badge.Pixels
   alias Badge.Power
   alias Badge.Theme
   alias Badge.Wifi
@@ -104,7 +111,9 @@ defmodule Badge.UI do
       countdown: 0,
       status: placeholder_status(),
       status_countdown: 0,
-      fonts: []
+      fonts: [],
+      idle: 0,
+      asleep: false
     }
 
     # Renders once immediately so the home grid is up before the first tick.
@@ -116,8 +125,14 @@ defmodule Badge.UI do
   end
 
   @impl true
+  def handle_cast({:key, _event}, %{asleep: true} = state) do
+    {:noreply, wake(state)}
+  end
+
   # Offered to the page first so a container can back out a level; ignoring it goes Home.
   def handle_cast({:key, {:nav, :home}}, state) do
+    state = %{state | idle: 0}
+
     case state.page.handle_key({:nav, :home}, state.page_state) do
       {:ok, page_state} ->
         dirty = state.dirty or page_state != state.page_state
@@ -131,12 +146,14 @@ defmodule Badge.UI do
 
   def handle_cast({:key, {:nav, key}}, state) do
     case Pages.for_key(key) do
-      nil -> {:noreply, state}
-      module -> {:noreply, goto(state, module)}
+      nil -> {:noreply, %{state | idle: 0}}
+      module -> {:noreply, goto(%{state | idle: 0}, module)}
     end
   end
 
   def handle_cast({:key, event}, state) do
+    state = %{state | idle: 0}
+
     case state.page.handle_key(event, state.page_state) do
       {:ok, page_state} ->
         dirty = state.dirty or page_state != state.page_state
@@ -162,8 +179,10 @@ defmodule Badge.UI do
         dirty: dirty
     }
 
-    # Polling keeps running every tick so smoothing stays responsive; only the frame is held back.
-    case dirty and next.countdown <= 0 do
+    next = drowse(next)
+
+    # Nothing is visible while asleep, and a repaint is the costliest thing here.
+    case not next.asleep and dirty and next.countdown <= 0 do
       true ->
         drawn = sync_fonts(next)
         render(drawn)
@@ -210,6 +229,33 @@ defmodule Badge.UI do
     :io.format(~c"UI: terminating ~p~n", [reason])
 
     :ok
+  end
+
+  # A badge set never to sleep counts on without ever reaching the timeout.
+  defp drowse(%{asleep: true} = state), do: state
+
+  defp drowse(state) do
+    idle = state.idle + 1
+
+    case Backlight.sleep_ticks(Backlight.settings().sleep, @base_interval) do
+      ticks when is_integer(ticks) and idle >= ticks -> sleep(state)
+      _awake -> %{state | idle: idle}
+    end
+  end
+
+  defp sleep(state) do
+    Backlight.sleep()
+    Pixels.sleep()
+
+    %{state | asleep: true, idle: 0}
+  end
+
+  # Dirty, so the panel is right the moment the light comes back.
+  defp wake(state) do
+    Backlight.wake()
+    Pixels.wake()
+
+    %{state | asleep: false, idle: 0, dirty: true, countdown: 0}
   end
 
   # Fonts are settled before the frame, never from a page, because a page runs

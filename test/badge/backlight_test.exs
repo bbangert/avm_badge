@@ -104,4 +104,25 @@ defmodule Badge.BacklightTest do
       assert Backlight.duty(-50) == Backlight.duty(0)
     end
   end
+
+  describe "sleep_ticks/2" do
+    test "converts each timeout into ticks of the base interval" do
+      assert Backlight.sleep_ticks(:s10, 100) == 100
+      assert Backlight.sleep_ticks(:s30, 100) == 300
+      assert Backlight.sleep_ticks(:s60, 100) == 600
+    end
+
+    test "off never sleeps" do
+      assert Backlight.sleep_ticks(:off, 100) == :never
+    end
+
+    test "an unknown setting is treated as the default rather than never" do
+      assert Backlight.sleep_ticks(:nonsense, 100) ==
+               Backlight.sleep_ticks(Backlight.default_sleep(), 100)
+    end
+
+    test "a slower base tick needs fewer of them" do
+      assert Backlight.sleep_ticks(:s30, 500) == 60
+    end
+  end
 end
