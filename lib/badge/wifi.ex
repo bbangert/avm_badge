@@ -1,6 +1,11 @@
 defmodule Badge.Wifi do
   @moduledoc """
-  Owns the wifi radio and the SNTP clock sync.
+  Owns the wifi radio, the SNTP clock sync, and placing the badge.
+
+  SNTP keeps the system clock on UTC, so anything needing a real clock -
+  certificate validity above all - still gets one. Where the badge is comes
+  from `Badge.Whenwhere` once there is an IP, and the zone it reports becomes
+  a UTC offset through `Badge.Zone`.
 
   Credentials come from NVS, provisioned by `tools/provision_wifi.py`. With
   none present the radio never starts and the rest of the badge is
@@ -15,6 +20,8 @@ defmodule Badge.Wifi do
   alias Badge.Clock
   alias Badge.Network
   alias Badge.Nvs
+  alias Badge.Whenwhere
+  alias Badge.Zone
 
   @compile {:no_warn_undefined, :network}
 
@@ -33,8 +40,8 @@ defmodule Badge.Wifi do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  @doc "Radio state, whether the clock has synced, and the provisioned UTC offset."
-  @spec status() :: %{radio: atom, synced: boolean, offset: integer}
+  @doc "Radio state, whether the clock has synced, and the UTC offset if it is known."
+  @spec status() :: %{radio: atom, synced: boolean, offset: integer | nil, zone: binary | nil}
   def status do
     GenServer.call(__MODULE__, :status)
   end
@@ -90,7 +97,8 @@ defmodule Badge.Wifi do
     state = %{
       radio: :disabled,
       synced: false,
-      offset: Clock.offset_minutes(Nvs.get(:utc_offset_m)),
+      zone: Nvs.get(:time_zone),
+      offset: nil,
       backoff: @first_backoff,
       ssid: Nvs.get(:wifi_ssid),
       attempts: 0,
@@ -129,6 +137,7 @@ defmodule Badge.Wifi do
       ssid: state.ssid,
       synced: state.synced,
       offset: state.offset,
+      zone: state.zone,
       scanning: state.scanning,
       scan_id: state.scan_id
     }
@@ -185,7 +194,23 @@ defmodule Badge.Wifi do
   def handle_info({:got_ip, info}, state) do
     :io.format(~c"Wifi: got ip ~p~n", [info])
 
+    place()
+
     {:noreply, %{save(state) | radio: :connected}}
+  end
+
+  def handle_info({:whenwhere, {:ok, place}}, state) do
+    :io.format(~c"Wifi: placed in ~s ~s,~s~n", [place.zone, place.latitude, place.longitude])
+
+    store(place)
+
+    {:noreply, offset(%{state | zone: place.zone})}
+  end
+
+  def handle_info({:whenwhere, {:error, reason}}, state) do
+    :io.format(~c"Wifi: could not place the badge, ~p~n", [reason])
+
+    {:noreply, state}
   end
 
   def handle_info({:scan_results, {:error, reason}}, state) do
@@ -225,10 +250,54 @@ defmodule Badge.Wifi do
     {:noreply, %{state | backoff: min(state.backoff * 2, @max_backoff)}}
   end
 
+  # The offset is only meaningful once the clock is right, since summer time
+  # depends on the date.
   def handle_info({:synchronized, _timeval}, state) do
-    :io.format(~c"Wifi: clock synced~n")
+    next = offset(%{state | synced: true})
 
-    {:noreply, %{state | synced: true}}
+    :io.format(~c"Wifi: clock synced, offset ~p~n", [next.offset])
+
+    {:noreply, next}
+  end
+
+  # Blocks on the network, so it never runs inside this process. Unlinked, so
+  # a fetch that dies cannot take the radio with it, and caught so that it
+  # always reports something rather than going quiet.
+  defp place do
+    wifi = self()
+
+    spawn(fn -> send(wifi, {:whenwhere, attempt()}) end)
+  end
+
+  defp attempt do
+    Whenwhere.fetch()
+  catch
+    kind, error -> {:error, {kind, error}}
+  end
+
+  defp store(place) do
+    Nvs.put(:time_zone, place.zone)
+    Nvs.put(:latitude, place.latitude)
+    Nvs.put(:longitude, place.longitude)
+  end
+
+  # A zone we know beats a provisioned offset; with neither, the face reads UTC.
+  defp offset(state) do
+    %{state | offset: derive(state.zone)}
+  end
+
+  defp derive(zone) do
+    case Zone.offset_minutes(zone, :erlang.system_time(:second)) do
+      nil -> provisioned()
+      minutes -> minutes
+    end
+  end
+
+  defp provisioned do
+    case Nvs.get(:utc_offset_m) do
+      nil -> nil
+      value -> Clock.offset_minutes(value)
+    end
   end
 
   # Credentials are only stored once they are known to work.

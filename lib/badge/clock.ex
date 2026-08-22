@@ -4,8 +4,8 @@ defmodule Badge.Clock do
   time.
 
   The badge has no RTC, so the title bar shows uptime until SNTP syncs the
-  system clock; after that it shows local wall time using the provisioned
-  offset.
+  system clock; after that it shows local wall time using the offset
+  `Badge.Zone` derives from the zone the badge was placed in.
   """
 
   @day 86_400
@@ -38,6 +38,16 @@ defmodule Badge.Clock do
   def offset_minutes(<<>>), do: 0
   def offset_minutes(<<?-, rest::binary>>), do: in_range(-digits(rest, 0))
   def offset_minutes(binary), do: in_range(digits(binary, 0))
+
+  @doc """
+  The clock face for a UTC moment.
+
+  A badge whose zone is not known shows UTC and says so, rather than a local
+  time that is quietly an hour or two wrong.
+  """
+  @spec face(integer, integer | nil) :: binary
+  def face(utc_seconds, nil), do: format(utc_seconds) <> " UTC"
+  def face(utc_seconds, offset_minutes), do: format(local_seconds(utc_seconds, offset_minutes))
 
   @doc "Shifts an epoch timestamp into local time."
   @spec local_seconds(integer, integer) :: integer

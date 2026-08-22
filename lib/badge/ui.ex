@@ -233,16 +233,16 @@ defmodule Badge.UI do
     %{
       battery: Battery.icon(power.battery_mv, power.usb),
       wifi: Wifi.icon(wifi.radio),
-      clock: Clock.format(clock_seconds(wifi))
+      clock: clock_face(wifi)
     }
   end
 
   # Uptime until SNTP sets the system clock, local wall time after.
-  defp clock_seconds(%{synced: true, offset: offset}) do
-    Clock.local_seconds(:erlang.system_time(:second), offset)
+  defp clock_face(%{synced: true, offset: offset}) do
+    Clock.face(:erlang.system_time(:second), offset)
   end
 
-  defp clock_seconds(_wifi), do: div(:erlang.monotonic_time(:millisecond), 1000)
+  defp clock_face(_wifi), do: Clock.format(div(:erlang.monotonic_time(:millisecond), 1000))
 
   # Badge.Power and Badge.Wifi start after this process, so the first real reading waits for the first tick.
   defp placeholder_status do

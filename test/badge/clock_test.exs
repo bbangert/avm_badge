@@ -120,4 +120,28 @@ defmodule Badge.ClockTest do
       assert Clock.format(Clock.local_seconds(late, 120)) == "01:30:00"
     end
   end
+
+  describe "face/2" do
+    test "shows local time when the offset is known" do
+      assert Clock.face(0, 120) == "02:00:00"
+      assert Clock.face(0, 0) == "00:00:00"
+    end
+
+    test "says UTC outright when no offset is known" do
+      assert Clock.face(0, nil) == "00:00:00 UTC"
+    end
+
+    test "an unplaced badge is never quietly an hour wrong" do
+      refute Clock.face(3_600, nil) == Clock.face(3_600, 60)
+      assert :binary.match(Clock.face(3_600, nil), "UTC") != :nomatch
+    end
+
+    test "the marked face still fits beside the title bar icons" do
+      # default16px is 8px per character; the wifi icon starts at x=276.
+      face = Clock.face(0, nil)
+      width = 8 * byte_size(face)
+
+      assert div(320 - width, 2) + width <= 276
+    end
+  end
 end
