@@ -44,6 +44,8 @@ defmodule Badge do
 
     :io.format(~c"Badge: running~n")
 
+    Badge.Autopilot.start()
+
     park()
   end
 
