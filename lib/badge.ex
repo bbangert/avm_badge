@@ -7,6 +7,9 @@ defmodule Badge do
   never open a bus or a port themselves. A child that opened its own would leak
   it every time the supervisor restarted the child.
 
+  `Badge.Ir.Link` is the exception and opens its own UART, because it holds
+  those pins for the life of the badge rather than sharing them.
+
   Two buses are used: the panel and the LED chain need different MOSI pins
   and clock rates.
 
@@ -37,7 +40,8 @@ defmodule Badge do
       {Badge.Wifi, :ok},
       {Badge.Pixels, pixel_spi},
       {Badge.Sensors, :ok},
-      {Badge.Power, :ok}
+      {Badge.Power, :ok},
+      {Badge.Ir.Link, :ok}
     ]
 
     {:ok, _supervisor} = Supervisor.start_link(children, strategy: :one_for_one)

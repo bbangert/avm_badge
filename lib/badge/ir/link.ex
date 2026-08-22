@@ -1,83 +1,88 @@
 defmodule Badge.Ir.Link do
   @moduledoc """
-  Half-duplex UART over the IR beam.
+  Owns UART1 on the IR beam for the life of the badge.
 
-  One process owns the port and alternates between a short blocking read and
-  an occasional beacon, because the badge cannot listen while its own LED is
-  lit. The beacon phase is offset by the badge's own chip id, so two badges
-  tapped together do not transmit in lockstep forever.
+  Listens continuously and writes only when asked. `Badge.Ir.send/1` casts
+  here and the frame goes out on the next pass of the loop, so a send waits
+  at most one read window.
+
+  The loop is a blocking read followed by a self-send rather than a timer,
+  because `Process.send_after/3` is expensive on this platform. Casts queue
+  behind the read and are taken first when it returns.
 
   UART1 is used rather than UART0. The pins are UART0's by default, but the
   ESP32-S3 routes any peripheral to any pin through the GPIO matrix, so
   claiming them for UART1 leaves the console with nowhere to drive and no
   base image rebuild is needed.
-
-  A badge that decodes a frame carrying its **own** chip id has proved its
-  LED reaches its own sensor, which is the crosstalk answer phase one could
-  not get on its own.
   """
+
+  use GenServer
 
   alias Badge.Hardware
   alias Badge.Identity
   alias Badge.Ir.Frame
-  alias Badge.Profile
 
   @compile {:no_warn_undefined, :uart}
 
   @baud 4800
-
   @read_ms 100
-  # Ten reads between beacons, so roughly one a second.
-  @beacon_reads 10
 
   # Enough for several frames; a stream of noise that never frames up must
   # not grow without bound.
   @buffer_limit 256
 
-  @doc "Opens the link, reporting every badge it hears to the caller."
-  @spec start() :: pid
-  def start do
-    owner = self()
-
-    # Unlinked so a link fault cannot take the display down, monitored so it
-    # cannot outlive the page that opened it.
-    spawn(fn -> report(owner) end)
+  def start_link(:ok) do
+    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  @doc "Closes the link and releases the pins."
-  @spec stop(pid | nil) :: :ok
-  def stop(pid) when is_pid(pid) do
-    send(pid, :stop)
-
-    :ok
-  end
-
-  def stop(_pid), do: :ok
-
-  defp report(owner) do
-    run(owner)
-  catch
-    kind, error -> :io.format(~c"link: died ~p ~p~n", [kind, error])
+  @doc "Frames a payload from this badge and puts it on the beam."
+  @spec transmit(binary) :: :ok
+  def transmit(payload) do
+    GenServer.cast(__MODULE__, {:transmit, payload})
   end
 
   @doc "The baud this build was compiled for."
   @spec baud() :: pos_integer
   def baud, do: @baud
 
-  defp run(owner) do
-    :erlang.monitor(:process, owner)
-
-    mac = Identity.chip_id()
-    frame = Frame.encode(mac, Profile.display_name(Profile.load()))
+  @impl true
+  def init(:ok) do
+    id = Identity.chip_id()
     port = open()
 
-    :io.format(~c"link: up baud=~p mac=~s frame=~p bytes~n", [
-      @baud,
-      Identity.format(mac),
-      byte_size(frame)
-    ])
+    :io.format(~c"Ir: up baud=~p id=~s~n", [@baud, Identity.format(id)])
 
-    loop(port, mac, frame, owner, phase(mac), <<>>)
+    send(self(), :read)
+
+    {:ok, %{port: port, id: id, buffer: <<>>}}
+  end
+
+  @impl true
+  def handle_cast({:transmit, payload}, state) do
+    write(state.port, Frame.encode(state.id, payload))
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(:read, state) do
+    buffer = state.buffer |> read(state.port) |> harvest(state.id)
+
+    send(self(), :read)
+
+    {:noreply, %{state | buffer: buffer}}
+  end
+
+  def handle_info(_message, state), do: {:noreply, state}
+
+  # A restart is otherwise silent, and the reason is the only thing that says
+  # the pins have been given up.
+  @impl true
+  def terminate(reason, state) do
+    :uart.close(state.port)
+    :io.format(~c"Ir: down ~p~n", [reason])
+
+    :ok
   end
 
   defp open do
@@ -92,56 +97,23 @@ defmodule Badge.Ir.Link do
     ])
   end
 
-  # The last byte of the chip id is as good a decorrelator as any.
-  defp phase(<<_head::binary-5, last>>), do: rem(last, @beacon_reads)
-  defp phase(_mac), do: 0
-
-  defp loop(port, mac, frame, owner, n, buffer) do
-    buffer = listen(port, mac, owner, buffer)
-
-    case rem(n, @beacon_reads) do
-      0 -> :uart.write(port, frame)
-      _quiet -> :ok
-    end
-
-    case halted?() do
-      true -> close(port)
-      false -> loop(port, mac, frame, owner, n + 1, buffer)
-    end
+  # Badge.Ir refuses an oversized payload first; this is the second line.
+  defp write(_port, {:error, reason}) do
+    :io.format(~c"Ir: refused ~p~n", [reason])
   end
 
-  # One control message a cycle is plenty; nothing sends them faster.
-  defp halted? do
-    receive do
-      :stop ->
-        true
+  defp write(port, frame), do: :uart.write(port, frame)
 
-      {:DOWN, _ref, :process, _pid, _reason} ->
-        true
-    after
-      0 -> false
-    end
-  end
-
-  defp close(port) do
-    :uart.close(port)
-    :io.format(~c"link: down~n")
-
-    :ok
-  end
-
-  defp listen(port, mac, owner, buffer) do
+  defp read(buffer, port) do
     case :uart.read(port, @read_ms) do
       {:ok, data} ->
-        bytes = :erlang.iolist_to_binary(data)
-
-        harvest(mac, owner, cap(buffer <> bytes))
+        cap(buffer <> :erlang.iolist_to_binary(data))
 
       {:error, :timeout} ->
         buffer
 
       other ->
-        :io.format(~c"link: read returned ~p~n", [other])
+        :io.format(~c"Ir: read returned ~p~n", [other])
         buffer
     end
   end
@@ -152,15 +124,15 @@ defmodule Badge.Ir.Link do
     :binary.part(buffer, byte_size(buffer) - @buffer_limit, @buffer_limit)
   end
 
-  defp harvest(mac, owner, buffer) do
+  defp harvest(buffer, id) do
     case Frame.decode(buffer) do
-      {:ok, badge, rest} ->
-        announce(mac, owner, badge)
-        harvest(mac, owner, rest)
+      {:ok, frame, rest} ->
+        deliver(id, frame)
+        harvest(rest, id)
 
       {:bad, reason, rest} ->
-        :io.format(~c"link: bad frame ~p~n", [reason])
-        harvest(mac, owner, rest)
+        :io.format(~c"Ir: bad frame ~p~n", [reason])
+        harvest(rest, id)
 
       {:more, rest} ->
         rest
@@ -168,12 +140,15 @@ defmodule Badge.Ir.Link do
   end
 
   # Our own beam reaching our own sensor would be a hardware finding, not a peer.
-  defp announce(mac, _owner, %{mac: mac}) do
-    :io.format(~c"link: SELF ECHO, own beam reaches own sensor~n")
+  defp deliver(id, %{from: id}) do
+    :io.format(~c"Ir: SELF ECHO, own beam reaches own sensor~n")
   end
 
-  defp announce(_mac, owner, %{mac: from, name: name}) do
-    :io.format(~c"link: PEER ~s ~s~n", [Identity.format(from), name])
-    send(owner, {:ir_peer, from, name})
+  # Badge.UI owns the mailbox every page reads through, and it can restart.
+  defp deliver(_id, %{from: from, payload: payload}) do
+    case Process.whereis(Badge.UI) do
+      nil -> :ok
+      ui -> Kernel.send(ui, {:ir, from, payload})
+    end
   end
 end
