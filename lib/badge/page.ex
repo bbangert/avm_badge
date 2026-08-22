@@ -7,10 +7,10 @@ defmodule Badge.Page do
   the title bar and the background rect, so no page can get the z-order
   wrong or forget the background.
 
-  `use Badge.Page` supplies `handle_key/2`, `tick/1`, a 100 ms `refresh/0`,
-  a placeholder `icon/0`, an ignoring `handle_info/2` and a no-op `leave/1`
-  for pages that need none of them, all overridable. Sub-pages inside a container never reach the home grid, so
-  they leave `icon/0` alone.
+  `use Badge.Page` supplies `handle_key/2`, `tick/1`, a 100 ms `refresh/0`, a
+  placeholder `icon/0`, ignoring `handle_info/2` and `handle_ir/3`, and a no-op
+  `leave/1` for pages that need none of them, all overridable. Sub-pages inside
+  a container never reach the home grid, so they leave `icon/0` alone.
   """
 
   @type state :: term
@@ -57,6 +57,14 @@ defmodule Badge.Page do
   @callback handle_info(term, state) :: {:ok, state} | :ignore
 
   @doc """
+  Applies a payload that arrived on the IR beam.
+
+  `from` is the sending badge's chip id. Only the page on screen is offered
+  a frame; ignoring one is always safe.
+  """
+  @callback handle_ir(from :: binary, payload :: binary, state) :: {:ok, state} | :ignore
+
+  @doc """
   Releases anything the page owns, just before `Badge.UI` switches away.
 
   A page is not a process, so a page that spawned one or claimed a pin has
@@ -85,9 +93,18 @@ defmodule Badge.Page do
       def handle_info(_message, _state), do: :ignore
 
       @impl true
+      def handle_ir(_from, _payload, _state), do: :ignore
+
+      @impl true
       def leave(_state), do: :ok
 
-      defoverridable handle_key: 2, tick: 1, refresh: 1, icon: 0, leave: 1, handle_info: 2
+      defoverridable handle_key: 2,
+                     tick: 1,
+                     refresh: 1,
+                     icon: 0,
+                     leave: 1,
+                     handle_info: 2,
+                     handle_ir: 3
     end
   end
 end

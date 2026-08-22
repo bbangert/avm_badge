@@ -172,6 +172,20 @@ defmodule Badge.UI do
     end
   end
 
+  # The IR link delivers here because this process owns the mailbox; only the
+  # page on screen is offered the frame.
+  def handle_info({:ir, from, payload}, state) do
+    case state.page.handle_ir(from, payload, state.page_state) do
+      {:ok, page_state} ->
+        dirty = state.dirty or page_state != state.page_state
+
+        {:noreply, %{state | page_state: page_state, dirty: dirty}}
+
+      :ignore ->
+        {:noreply, state}
+    end
+  end
+
   # A page's own process can only send to this GenServer, which owns the
   # mailbox; anything it does not recognise is dropped rather than fatal.
   def handle_info(message, state) do
@@ -249,8 +263,6 @@ defmodule Badge.UI do
 
     :port.call(port, {:update, items})
   end
-
-
 
   # Z-order runs tail to head: background last.
   defp chrome(title, status) do
