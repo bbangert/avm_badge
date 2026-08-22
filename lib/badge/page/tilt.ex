@@ -2,21 +2,17 @@ defmodule Badge.Page.Tilt do
   @moduledoc """
   A spirit level.
 
-  The marker rests at the centre when the badge is held the way it was when
-  the page opened, and slides toward whichever way it is tilted from there.
-  Enter re-zeroes at the current orientation.
+  The marker rests at the centre when the badge lies flat and slides toward
+  whichever way it is tilted from there. Nothing has to be pressed: the
+  reference is gravity, read straight off the accelerometer.
 
   Refreshes three times a second rather than ten: a frame is a full-panel
   repaint, and orientation does not need more.
-
-  Levelling against a captured reference rather than an absolute frame is
-  deliberate: the accelerometer is not mounted square to the panel, so a
-  badge lying flat on a desk reads roughly 123 degrees of roll and an
-  absolute level would sit pegged in a corner forever.
   """
 
   use Badge.Page
 
+  alias Badge.Accel
   alias Badge.Icons
   alias Badge.Sensors
   alias Badge.Theme
@@ -51,6 +47,10 @@ defmodule Badge.Page.Tilt do
 
   @readout_y 218
 
+  # Gravity lands on -Z with the panel upwards, so level is half a turn of roll.
+  @zero_roll elem(Accel.flat(), 0)
+  @zero_pitch elem(Accel.flat(), 1)
+
   @impl true
   def refresh(_state), do: 333
 
@@ -61,27 +61,20 @@ defmodule Badge.Page.Tilt do
   def icon, do: :triangle
 
   @impl true
-  def init, do: %{zero: nil, roll: 0, pitch: 0, x: @rest_x, y: @rest_y}
+  def init, do: %{roll: 0, pitch: 0, x: @rest_x, y: @rest_y}
 
   @impl true
   def tick(state), do: update(state, Sensors.orientation())
 
-  @impl true
-  def handle_key({:edit, :newline}, state), do: {:ok, %{state | zero: nil}}
-  def handle_key(_event, _state), do: :ignore
-
   @doc """
   Moves the marker for a roll and pitch pair in whole degrees.
 
-  The first reading after entry, or after Enter, becomes the zero.
+  Angles are measured from `Badge.Accel.flat/0`, so a badge on a level
+  surface centres the marker with nothing captured and nothing pressed.
   """
-  def update(%{zero: nil} = state, {roll, pitch}) do
-    update(%{state | zero: {roll, pitch}}, {roll, pitch})
-  end
-
-  def update(%{zero: {roll_zero, pitch_zero}} = state, {roll, pitch}) do
-    roll_from_zero = @roll_sign * wrap(roll - roll_zero)
-    pitch_from_zero = @pitch_sign * wrap(pitch - pitch_zero)
+  def update(state, {roll, pitch}) do
+    roll_from_zero = @roll_sign * wrap(roll - @zero_roll)
+    pitch_from_zero = @pitch_sign * wrap(pitch - @zero_pitch)
 
     %{
       state
@@ -100,8 +93,7 @@ defmodule Badge.Page.Tilt do
   defp readout(%{roll: roll, pitch: pitch}) do
     body =
       "roll " <>
-        :erlang.integer_to_binary(roll) <>
-        "   pitch " <> :erlang.integer_to_binary(pitch) <> "   Enter=level"
+        :erlang.integer_to_binary(roll) <> "   pitch " <> :erlang.integer_to_binary(pitch)
 
     {:text, 4, @readout_y, :default16px, @dim, @bg, body}
   end

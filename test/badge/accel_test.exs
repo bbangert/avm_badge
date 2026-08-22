@@ -49,6 +49,16 @@ defmodule Badge.AccelTest do
     end
   end
 
+  describe "flat/0" do
+    test "is what orientation/1 reports with gravity on the panel normal" do
+      assert Accel.flat() == Accel.orientation({0, 0, -1000})
+    end
+
+    test "names the mounting flip rather than leaving it to a captured zero" do
+      assert Accel.flat() == {180, 0}
+    end
+  end
+
   describe "orientation/1" do
     test "flat, z up, gives zero roll and pitch" do
       assert Accel.orientation({0, 0, 1000}) == {0, 0}

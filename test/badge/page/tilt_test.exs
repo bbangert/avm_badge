@@ -1,12 +1,14 @@
 defmodule Badge.Page.TiltTest do
   use ExUnit.Case, async: true
 
+  alias Badge.Accel
   alias Badge.Icons
   alias Badge.Page.Tilt
   alias Badge.Theme
 
-  # A badge lying flat on a desk, from the real probe in Badge.AccelTest.
-  @resting {123, 4}
+  # Both boards, measured lying flat on a desk. They straddle the 180 seam.
+  @board_a {178, 2}
+  @board_b {-179, -3}
 
   defp marker(state) do
     [{:image, x, y, _bg, _img} | _rest] = Tilt.render(state)
@@ -14,9 +16,14 @@ defmodule Badge.Page.TiltTest do
     {x, y}
   end
 
-  defp levelled, do: Tilt.update(Tilt.init(), {0, 0})
+  defp levelled, do: at(0, 0)
 
-  defp at(roll, pitch), do: Tilt.update(levelled(), {roll, pitch})
+  # The raw sensor reading for a badge tilted this far from flat.
+  defp at(roll, pitch), do: Tilt.update(Tilt.init(), {seam(elem(Accel.flat(), 0) + roll), pitch})
+
+  defp seam(degrees) when degrees > 180, do: degrees - 360
+  defp seam(degrees) when degrees < -180, do: degrees + 360
+  defp seam(degrees), do: degrees
 
   defp marker_size, do: Icons.size(:circle)
 
@@ -31,47 +38,47 @@ defmodule Badge.Page.TiltTest do
     end
   end
 
-  describe "zeroing" do
-    test "the first reading becomes the zero, whatever the badge rests at" do
-      assert marker(Tilt.update(Tilt.init(), @resting)) == marker(levelled())
+  describe "levelling against gravity" do
+    test "a badge lying flat sits within a quantum of centre, with nothing pressed" do
+      {cx, cy} = marker(levelled())
+
+      for reading <- [@board_a, @board_b] do
+        {x, y} = marker(Tilt.update(Tilt.init(), reading))
+
+        assert abs(x - cx) <= 8
+        assert abs(y - cy) <= 8
+      end
     end
 
-    test "a badge left untouched stays centred" do
-      rested = Tilt.update(Tilt.init(), @resting)
+    test "the very first reading is already measured, not swallowed as a zero" do
+      tilted = Tilt.update(Tilt.init(), {seam(elem(Accel.flat(), 0) + 30), 0})
 
-      assert marker(Tilt.update(rested, @resting)) == marker(levelled())
-    end
-
-    test "tilting away from the captured zero moves the marker" do
-      rested = Tilt.update(Tilt.init(), @resting)
-      {rested_x, _y} = marker(rested)
-      {tilted_x, _y2} = marker(Tilt.update(rested, {143, 4}))
-
-      refute tilted_x == rested_x
-    end
-
-    test "Enter re-zeroes at the current orientation" do
-      tilted = Tilt.update(levelled(), {30, 20})
       refute marker(tilted) == marker(levelled())
-
-      {:ok, cleared} = Tilt.handle_key({:edit, :newline}, tilted)
-
-      assert marker(Tilt.update(cleared, {30, 20})) == marker(levelled())
     end
 
-    test "crossing the 180 degree seam is a small move, not a full swing" do
-      rested = Tilt.update(Tilt.init(), {170, 0})
-      {rested_x, _y} = marker(rested)
-      {crossed_x, _y2} = marker(Tilt.update(rested, {-170, 0}))
+    test "the flat reference sits on the seam, so either side of it reads level" do
+      assert elem(@board_a, 0) > 0
+      assert elem(@board_b, 0) < 0
 
-      # -170 is 20 degrees past 170: a nudge, not a slam to the edge.
-      refute crossed_x == rested_x
-      assert abs(crossed_x - rested_x) < abs(elem(marker(at(45, 0)), 0) - rested_x)
+      for reading <- [@board_a, @board_b] do
+        %{roll: roll} = Tilt.update(Tilt.init(), reading)
+
+        assert abs(roll) <= 4
+      end
     end
 
-    test "anything other than Enter is ignored" do
-      assert Tilt.handle_key({:char, ?a}, Tilt.init()) == :ignore
-      assert Tilt.handle_key({:move, :up}, Tilt.init()) == :ignore
+    test "crossing the seam is a small move, not a full swing" do
+      {left_x, _y} = marker(at(-10, 0))
+      {right_x, _y2} = marker(at(10, 0))
+
+      refute left_x == right_x
+      assert abs(right_x - left_x) < abs(elem(marker(at(45, 0)), 0) - elem(marker(at(-45, 0)), 0))
+    end
+
+    test "no key is claimed, so a container owns them all" do
+      for event <- [{:char, ?a}, {:move, :up}, {:move, :left}, {:move, :right}, {:edit, :newline}] do
+        assert Tilt.handle_key(event, Tilt.init()) == :ignore
+      end
     end
   end
 
@@ -145,15 +152,15 @@ defmodule Badge.Page.TiltTest do
     end
 
     test "a sub-quantum wobble does not change state" do
-      assert Tilt.update(levelled(), {1, 0}) == Tilt.update(levelled(), {0, 0})
+      assert at(1, 0) == at(0, 0)
     end
 
     test "a real movement does change state" do
-      refute Tilt.update(levelled(), {0, 0}) == Tilt.update(levelled(), {30, 0})
+      refute at(0, 0) == at(30, 0)
     end
 
     test "equal readings give equal state, so the router stays clean" do
-      assert Tilt.update(levelled(), {12, -8}) == Tilt.update(levelled(), {12, -8})
+      assert at(12, -8) == at(12, -8)
     end
   end
 
@@ -172,13 +179,26 @@ defmodule Badge.Page.TiltTest do
       assert :binary.match(hd(texts), "-20") != :nomatch
     end
 
-    test "reads zero at rest, however the sensor is mounted" do
-      [body] =
-        for {:text, _x, _y, _f, _fg, _bg, body} <- Tilt.render(Tilt.update(Tilt.init(), @resting)),
-            do: body
+    test "reads near zero on a flat desk, however the sensor is mounted" do
+      for reading <- [@board_a, @board_b] do
+        %{roll: roll, pitch: pitch} = Tilt.update(Tilt.init(), reading)
+
+        assert abs(roll) <= 4
+        assert abs(pitch) <= 4
+      end
+    end
+
+    test "a perfectly level reading reads exactly zero" do
+      [body] = for {:text, _x, _y, _f, _fg, _bg, body} <- Tilt.render(levelled()), do: body
 
       assert :binary.match(body, "roll 0") != :nomatch
       assert :binary.match(body, "pitch 0") != :nomatch
+    end
+
+    test "no longer tells anyone to press Enter" do
+      [body] = for {:text, _x, _y, _f, _fg, _bg, body} <- Tilt.render(levelled()), do: body
+
+      assert :binary.match(body, "Enter") == :nomatch
     end
 
     test "the readout fits the panel" do
