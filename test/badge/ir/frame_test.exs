@@ -55,8 +55,8 @@ defmodule Badge.Ir.FrameTest do
     end
 
     test "a flipped crc bit is caught too" do
-      size = byte_size(frame())
-      <<head::binary-size(size - 1), crc>> = frame()
+      head_size = byte_size(frame()) - 1
+      <<head::binary-size(^head_size), crc>> = frame()
 
       assert {:bad, :crc, _rest} = Frame.decode(head <> <<Bitwise.bxor(crc, 0x80)>>)
     end

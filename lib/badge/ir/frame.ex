@@ -55,7 +55,7 @@ defmodule Badge.Ir.Frame do
   def decode(<<@preamble_a, @preamble_b, len, rest::binary>> = buffer)
       when len >= @id_bytes and len <= @max_len do
     case rest do
-      <<payload::binary-size(len), crc, tail::binary>> ->
+      <<payload::binary-size(^len), crc, tail::binary>> ->
         verify(<<len>> <> payload, payload, crc, tail)
 
       _short ->

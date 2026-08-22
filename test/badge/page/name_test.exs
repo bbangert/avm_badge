@@ -317,39 +317,20 @@ defmodule Badge.Page.NameTest do
       assert "A1B2C3D4E5F6" in texts(sharing())
     end
 
-    test "starts switched off" do
-      refute showing(%{name: "Gus"}).sharing
-      assert Enum.any?(texts(sharing()), &(:binary.match(&1, "off") != :nomatch))
+    test "says what to do rather than offering a switch" do
+      shown = texts(sharing())
+
+      assert Enum.any?(shown, &(:binary.match(&1, "hold another badge") != :nomatch))
+      refute Enum.any?(shown, &(:binary.match(&1, "sharing is") != :nomatch))
+      refute Enum.any?(shown, &(:binary.match(&1, "turn on") != :nomatch))
     end
 
-    test "enter turns it on and off again" do
-      on = press(sharing(), {:edit, :newline})
-
-      assert on.sharing
-      assert Enum.any?(texts(on), &(:binary.match(&1, "sharing is on") != :nomatch))
-      refute press(on, {:edit, :newline}).sharing
-    end
-
-    test "on reads as a good state, off as a quiet one" do
-      colour = fn state ->
-        [c] =
-          for {:text, _x, _y, _f, c, _b, body} <- Name.render(state),
-              :binary.match(body, "sharing is") != :nomatch,
-              do: c
-
-        c
-      end
-
-      assert colour.(press(sharing(), {:edit, :newline})) == Theme.ok()
-      refute colour.(sharing()) == Theme.ok()
-    end
-
-    test "says what turning it on will do" do
-      assert Enum.any?(texts(sharing()), &(:binary.match(&1, "IR") != :nomatch))
+    test "enter is no longer the share screen's key" do
+      assert Name.handle_key({:edit, :newline}, sharing()) == :ignore
     end
 
     defp met(greeting, name \\ "Pat") do
-      %{sharing() | sharing: true, link: self(), met: {name, greeting}}
+      %{sharing() | met: {name, greeting}}
     end
 
     defp colour_of(state, text) do
@@ -363,7 +344,7 @@ defmodule Badge.Page.NameTest do
 
     test "before anyone is heard it says what to do" do
       assert Enum.any?(
-               texts(%{sharing() | sharing: true}),
+               texts(sharing()),
                &(:binary.match(&1, "hold another badge") != :nomatch)
              )
     end
@@ -382,9 +363,9 @@ defmodule Badge.Page.NameTest do
       assert colour_of(met(:renamed), "name updated") == Theme.warn()
     end
 
-    test "the panel slows down while the link is feeding it" do
-      assert Name.refresh(%{sharing() | sharing: true}) == 333
-      assert Name.refresh(sharing()) == 100
+    test "the panel slows down on the screen that feeds it" do
+      assert Name.refresh(sharing()) == 333
+      assert Name.refresh(showing(%{name: "Gus"})) == 100
     end
   end
 
@@ -435,25 +416,69 @@ defmodule Badge.Page.NameTest do
   end
 
   describe "hearing a badge" do
-    test "the same badge beaconing again changes nothing" do
-      state = %{sharing() | sharing: true, link: self(), announced: {"aaaaaa", "Pat"}}
+    test "the same badge beaming again changes nothing" do
+      state = %{sharing() | announced: {"aaaaaa", "Pat"}}
 
-      assert Name.handle_info({:ir_peer, "aaaaaa", "Pat"}, state) == :ignore
+      assert Name.handle_ir("aaaaaa", "Pat", state) == :ignore
     end
 
     test "a badge already collected is reported without rewriting the list" do
       peers = [%{id: "aaaaaa", profile: %{name: "Pat"}}]
-      state = %{sharing() | sharing: true, link: self(), peers: peers}
+      state = %{sharing() | peers: peers}
 
-      {:ok, next} = Name.handle_info({:ir_peer, "aaaaaa", "Pat"}, state)
+      {:ok, next} = Name.handle_ir("aaaaaa", "Pat", state)
 
       assert next.met == {"Pat", :known}
       assert next.peers == peers
       assert next.announced == {"aaaaaa", "Pat"}
     end
 
-    test "a badge arriving after sharing stopped is dropped" do
-      assert Name.handle_info({:ir_peer, "aaaaaa", "Pat"}, sharing()) == :ignore
+    test "a new badge is collected" do
+      {:ok, next} = Name.handle_ir("aaaaaa", "Pat", sharing())
+
+      assert next.met == {"Pat", :new}
+      assert Peers.count(next.peers) == 1
+    end
+
+    test "a badge heard on any other screen is dropped" do
+      for other <- [0, 1, 3] do
+        state = %{sharing() | screen: other}
+
+        assert Name.handle_ir("aaaaaa", "Pat", state) == :ignore
+      end
+    end
+  end
+
+  describe "beaming the profile" do
+    # persist/1 writes to NVS unless the profile already matches the saved one.
+    defp beaming(state \\ sharing()), do: %{state | saved: state.profile}
+
+    test "transmits on every third tick and no other" do
+      assert Name.beam_ticks() == 3
+
+      one = Name.tick(beaming())
+      two = Name.tick(one)
+      three = Name.tick(two)
+
+      assert one.beam == 1
+      assert two.beam == 2
+      assert three.beam == 0
+    end
+
+    test "a screen that is not sharing never advances the counter" do
+      for other <- [0, 1, 3] do
+        state = beaming(%{sharing() | screen: other})
+
+        assert Name.tick(state).beam == 0
+        assert state |> Name.tick() |> Name.tick() |> Map.get(:beam) == 0
+      end
+    end
+
+    test "paging away resets the counter, so returning starts a fresh cycle" do
+      part_way = beaming() |> Name.tick() |> Name.tick()
+
+      assert part_way.beam == 2
+      assert Name.tick(%{part_way | screen: 3}).beam == 0
     end
   end
 
@@ -502,13 +527,11 @@ defmodule Badge.Page.NameTest do
       assert press(scrolled, {:move, :right}).top == 0
     end
 
-    test "enter belongs to the share screen alone" do
-      for other <- [0, 1, 3] do
-        assert Name.handle_key({:edit, :newline}, screen(showing(%{name: "Gus"}), other)) ==
+    test "enter is not a key this page uses on any screen" do
+      for screen <- [0, 1, 2, 3] do
+        assert Name.handle_key({:edit, :newline}, screen(showing(%{name: "Gus"}), screen)) ==
                  :ignore
       end
-
-      assert {:ok, _toggled} = Name.handle_key({:edit, :newline}, sharing())
     end
   end
 

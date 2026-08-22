@@ -4,6 +4,9 @@ defmodule Badge.Page.Name do
 
   The name is set in the editor and kept in NVS. Long names wrap onto a
   second line, and the rule sits under however many lines that takes.
+
+  The share screen beams the name over IR while it is showing, and records
+  the badges it hears. Turning away from it stops both.
   """
 
   use Badge.Page
@@ -12,7 +15,7 @@ defmodule Badge.Page.Name do
   alias Badge.Font
   alias Badge.Identity
   alias Badge.Icons
-  alias Badge.Ir.Link
+  alias Badge.Ir
   alias Badge.Peers
   alias Badge.Pixels
   alias Badge.Profile
@@ -82,13 +85,17 @@ defmodule Badge.Page.Name do
   @dot 6
   @dot_gap 10
 
+  # Every third UI tick, so the beam is quiet four fifths of the time and the
+  # other badge can be heard.
+  @beam_ticks 3
+
   @entry_label_y Theme.content_top() + 30
   @entry_value_y Theme.content_top() + 70
 
   # Sharing repaints whenever a badge is heard; the editor wants the cursor to
   # keep up, and only one of those two can have the panel.
   @impl true
-  def refresh(%{sharing: true}), do: 333
+  def refresh(%{screen: 2}), do: 333
   def refresh(_state), do: 100
 
   @impl true
@@ -105,8 +112,7 @@ defmodule Badge.Page.Name do
       profile: Profile.blank(),
       peers: [],
       chip: "",
-      sharing: false,
-      link: nil,
+      beam: 0,
       announced: nil,
       met: nil,
       top: 0,
@@ -119,7 +125,7 @@ defmodule Badge.Page.Name do
 
   # Hardware is only touched here, never from a key handler.
   @impl true
-  def tick(state), do: state |> load() |> link() |> persist()
+  def tick(state), do: state |> load() |> beam() |> persist()
 
   # The saved profile arrives on the first tick, so init/0 stays pure.
   defp load(%{loaded: true} = state), do: state
@@ -137,36 +143,41 @@ defmodule Badge.Page.Name do
     }
   end
 
-  # Sharing is a flag the key handler flips; the link process is opened and
-  # closed here so hardware stays out of key handling.
-  defp link(%{sharing: true, link: nil} = state) do
-    %{state | link: Link.start(), announced: nil, met: nil}
+  # Screen 2 is the whole protocol: on it we beam, off it we are silent.
+  defp beam(%{screen: 2} = state) do
+    %{state | beam: transmit(rem(state.beam + 1, @beam_ticks), state.profile)}
   end
 
-  defp link(%{sharing: false, link: nil} = state), do: state
+  defp beam(state), do: %{state | beam: 0}
 
-  defp link(%{sharing: false} = state) do
-    Link.stop(state.link)
+  defp transmit(0, profile) do
+    Ir.send(Profile.display_name(profile))
 
-    %{state | link: nil, announced: nil, met: nil}
+    0
   end
 
-  defp link(state), do: state
+  defp transmit(count, _profile), do: count
 
-  # Badges reach Badge.UI, not the page, so they arrive through here.
+  @doc "How many UI ticks pass between transmissions."
+  def beam_ticks, do: @beam_ticks
+
+  # Frames reach Badge.UI, not the page, so they arrive through here.
   #
-  # A badge held in front of this one beacons about once a second. Reacting to
+  # A badge held in front of this one beams three times a second. Reacting to
   # every frame would strobe the LEDs and rewrite NVS continuously, so nothing
   # happens until the chip id or the name actually changes.
   @impl true
-  def handle_info({:ir_peer, mac, name}, %{announced: {mac, name}}), do: :ignore
+  def handle_ir(from, name, %{screen: 2, announced: {from, name}}), do: :ignore
 
-  def handle_info({:ir_peer, mac, name}, %{link: link} = state) when link != nil do
-    {:ok, meet(state, mac, name, greeting(state.peers, mac, name))}
+  def handle_ir(from, name, %{screen: 2} = state) do
+    greeting = greeting(state.peers, from, name)
+
+    :io.format(~c"Name: ~p ~s ~s~n", [greeting, Identity.format(from), name])
+
+    {:ok, meet(state, from, name, greeting)}
   end
 
-  # A badge already in flight when sharing was switched off.
-  def handle_info(_message, _state), do: :ignore
+  def handle_ir(_from, _payload, _state), do: :ignore
 
   @doc """
   What hearing this badge means: unknown, known already, or known under a
@@ -205,9 +216,6 @@ defmodule Badge.Page.Name do
   defp hue(:new), do: @new_hue
   defp hue(:renamed), do: @renamed_hue
 
-  @impl true
-  def leave(state), do: Link.stop(state.link)
-
   # Written once the editor is closed, not on every keystroke.
   defp persist(%{mode: mode} = state) when mode != :show, do: state
   defp persist(%{profile: profile, saved: profile} = state), do: state
@@ -225,11 +233,6 @@ defmodule Badge.Page.Name do
 
   defp show_key({:char, char}, state) when char == ?e or char == ?E do
     {:ok, %{state | mode: :fields, cursor: 0}}
-  end
-
-  # Only flips the flag; tick/1 starts or stops the probe from it.
-  defp show_key({:edit, :newline}, %{screen: 2} = state) do
-    {:ok, %{state | sharing: not state.sharing}}
   end
 
   defp show_key({:move, :down}, %{screen: 3} = state), do: {:ok, scroll(state, 1)}
@@ -363,26 +366,11 @@ defmodule Badge.Page.Name do
     big_lines(rest, font, height, y + height, [item | acc])
   end
 
-  # Sharing runs the bring-up probe rather than a link: the traces show the
-  # LED blinking and what the phototransistor makes of it, on the panel so
-  # the badge can be carried to the light being tested.
-  defp share_screen(%{sharing: true} = state) do
-    [
-      centred("Share", Theme.content_top() + 16, @fg),
-      centred(state.chip, Theme.content_top() + 44, @dim),
-      centred(sharing_text(true), Theme.content_top() + 84, @ok),
-      centred("Enter to turn off", @hint_y, @dim)
-    ] ++ met_lines(state.met, Peers.count(state.peers))
-  end
-
   defp share_screen(state) do
     [
       centred("Share", Theme.content_top() + 16, @fg),
-      centred(state.chip, Theme.content_top() + 44, @dim),
-      centred(sharing_text(false), Theme.content_top() + 84, @muted),
-      centred("collect other badges over IR", Theme.content_top() + 110, @dim),
-      centred("Enter to turn on", @hint_y, @dim)
-    ]
+      centred(state.chip, Theme.content_top() + 44, @dim)
+    ] ++ met_lines(state.met, Peers.count(state.peers))
   end
 
   # Before anyone has been heard there is nothing to report but the count.
@@ -413,9 +401,6 @@ defmodule Badge.Page.Name do
     centred(:erlang.integer_to_binary(count) <> collected(count) <> " collected", @met_count_y, @dim)
   end
 
-
-  defp sharing_text(true), do: "sharing is on"
-  defp sharing_text(false), do: "sharing is off"
 
 
   defp peers_screen(%{peers: peers, top: top}) do
