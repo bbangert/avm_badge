@@ -13,7 +13,7 @@ defmodule Badge.Hardware do
   # 240x320 native; the badge mounts the panel landscape, so these are rotated.
   def display_width, do: 320
   def display_height, do: 240
-  # Needs AtomGL branch badge/st7789-rotation-3 (4319810); without it the panel is silently black.
+  # Needs AtomGL branch led-modes (11be5f9); without it the panel is silently black.
   def display_rotation, do: 3
   def display_sclk, do: 5
   def display_mosi, do: 8

@@ -72,7 +72,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   oldest.
 - Z-order is tail-to-head: background rect **last**, cursor **first**.
 - `:default16px` (8x16) is the only built-in font.
-- Rotation 3 needs AtomGL branch `badge/st7789-rotation-3` (`4319810`) in the
+- Rotation 3 needs AtomGL branch `led-modes` (`11be5f9`) in the
   base image. Without it the panel is **silently black** — no error anywhere in
   Elixir.
 
