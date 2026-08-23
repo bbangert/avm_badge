@@ -10,6 +10,8 @@ defmodule Badge.Rickroll do
   mapped flash, so these frames cost flash rather than heap.
   """
 
+  @compile {:no_warn_undefined, :atomvm}
+
   @dir Path.expand("../../assets/rickroll", __DIR__)
 
   # The directory itself, so adding or removing frames recompiles this module.
@@ -37,16 +39,15 @@ defmodule Badge.Rickroll do
 
   @scale 3
 
-  @frames (for file <- @files do
-             data = File.read!(file)
+  # The bytes are not kept, but a frame of the wrong size still fails the build.
+  for file <- @files do
+    data = File.read!(file)
 
-             byte_size(data) == @size * @size * 4 ||
-               raise "#{Path.basename(file)}: #{byte_size(data)} bytes, expected #{@size * @size * 4}"
+    byte_size(data) == @size * @size * 4 ||
+      raise "#{Path.basename(file)}: #{byte_size(data)} bytes, expected #{@size * @size * 4}"
+  end
 
-             data
-           end)
-
-  @count length(@frames)
+  @count length(@files)
 
   @count > 0 || raise "no frames in #{@dir}; run tools/gif.py"
 
@@ -63,7 +64,9 @@ defmodule Badge.Rickroll do
      [], {:rgba8888, @size, @size, frame(rem(index, @count))}}
   end
 
-  for {data, index} <- Enum.with_index(@frames) do
-    defp frame(unquote(index)), do: unquote(data)
+  # Names are fixed at compile time; the bytes come from the assets partition.
+  for {file, index} <- Enum.with_index(@files) do
+    name = ~c"rickroll/" ++ String.to_charlist(Path.basename(file))
+    defp frame(unquote(index)), do: :atomvm.read_priv(:assets, unquote(name))
   end
 end

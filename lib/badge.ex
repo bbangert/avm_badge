@@ -22,6 +22,12 @@ defmodule Badge do
   def start do
     :io.format(~c"Badge: starting~n")
 
+    # Rickroll frames live in their own partition, shared by both OTA slots.
+    case :atomvm.add_avm_pack_file(~c"/dev/partition/by-name/assets.avm", name: :assets) do
+      :ok -> :ok
+      {:error, reason} -> :io.format(~c"Badge: no assets partition: ~p~n", [reason])
+    end
+
     display_spi = open_display_spi()
     pixel_spi = open_pixel_spi()
 
