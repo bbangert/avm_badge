@@ -10,7 +10,7 @@ defmodule Badge.MixProject do
       deps: deps(),
       atomvm: [
         start: Badge,
-        flash_offset: 0x250000,
+        flash_offset: 0x2B8000,
         chip: "esp32s3",
         port: "auto"
       ]
