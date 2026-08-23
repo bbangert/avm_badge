@@ -1,6 +1,6 @@
 defmodule Badge.Icons do
   @moduledoc """
-  Converted artwork from `priv/icons`, baked into the module at compile time.
+  Converted artwork from `assets/icons`, baked into the module at compile time.
 
   Files are named `<name>@<width>x<height>.rgba` and hold raw `rgba8888`
   already composited onto black, every pixel fully opaque. That keeps AtomGL
@@ -15,7 +15,7 @@ defmodule Badge.Icons do
 
   @bg Theme.bg()
 
-  @dir Path.expand("../../priv/icons", __DIR__)
+  @dir Path.expand("../../assets/icons", __DIR__)
   @shapes [:square, :triangle, :cross, :circle, :clover, :diamond]
 
   File.dir?(@dir) || raise "no icon directory at #{@dir} — run tools/icons.py"

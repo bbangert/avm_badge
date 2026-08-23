@@ -61,11 +61,11 @@ defmodule Badge.UI do
   @wifi_x @battery_x - @status_gap - @status_w
   @char_w 8
 
-  @font_dogica File.read!("priv/fonts/dogica.uf")
-  @font_pixel_operator File.read!("priv/fonts/pixel_operator.uf")
+  @font_dogica File.read!("assets/fonts/dogica.uf")
+  @font_pixel_operator File.read!("assets/fonts/pixel_operator.uf")
   # Loaded only while a page asks for it: 18 kB is more than this badge can
   # spare for a font used on one screen.
-  @loadable %{w95fa: File.read!("priv/fonts/w95fa.uf")}
+  @loadable %{w95fa: File.read!("assets/fonts/w95fa.uf")}
 
   def start_link(spi) do
     GenServer.start_link(__MODULE__, spi, name: __MODULE__)

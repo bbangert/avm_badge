@@ -10,7 +10,7 @@ defmodule Badge.Rickroll do
   mapped flash, so these frames cost flash rather than heap.
   """
 
-  @dir Path.expand("../../priv/rickroll", __DIR__)
+  @dir Path.expand("../../assets/rickroll", __DIR__)
 
   # The directory itself, so adding or removing frames recompiles this module.
   @external_resource @dir
