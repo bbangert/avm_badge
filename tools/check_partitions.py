@@ -2,7 +2,7 @@
 """Check that build artifacts fit the partitions they are flashed to."""
 import csv, os, sys
 
-FLASH = 0x400000
+FLASH = 0x400000  # hardcoded: this tool only targets 4MB flash parts
 
 def parse_size(s):
     s = s.strip()
@@ -21,6 +21,11 @@ def main(argv):
                 continue
             name = row[0].strip()
             parts.append((name, parse_size(row[3]), parse_size(row[4])))
+
+    unknown = sorted(set(artifacts) - {name for name, _, _ in parts})
+    if unknown:
+        print(f"ERROR: unknown partition label(s): {', '.join(unknown)}", file=sys.stderr)
+        bad = True
 
     print(f"{'partition':<12}{'offset':>10}{'size':>10}{'used':>10}{'free':>10}  ")
     for name, off, size in parts:

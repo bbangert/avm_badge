@@ -50,10 +50,13 @@ reflash of every badge.
 AtomGL.** The badge's panel is mounted rotated relative to the ST7789's native
 orientation, and the upstream AtomGL ST7789 descriptor shipped `0xFF`
 (unsupported) in that rotation slot. The fix is a local patch living in the
-**AtomVM** repository, not this one: revision `4319810` on branch
-`badge/st7789-rotation-3`, under
+**AtomVM** repository, not this one: revision `11be5f9` on branch
+`led-modes`, checked out under
 `src/platforms/esp32/components/atomgl`. Any base image this firmware is
-flashed onto must include that patch.
+flashed onto must include that patch. That checkout is gitignored inside the
+AtomVM repo (`src/platforms/esp32/components/**`), so its revision is not
+captured by either repo -- verify it directly with `git -C
+src/platforms/esp32/components/atomgl log --oneline -1` before relying on it.
 
 The failure mode if it's missing is silent — no crash, no error printed
 anywhere in Elixir. `display_init` returns before its render task is created,

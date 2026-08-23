@@ -28,7 +28,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   `atomvm`/`boot_path` in NVS
 - `assets.avm` at `0x278000` holds the rickroll frames, mounted by
   `Badge.start/0`. Rebuild it with `firmware/tools/mkassets.sh` after running
-  `tools/gif.py`, then flash it by hand:
+  `firmware/tools/gif.py`, then flash it by hand:
   `esptool.py ... write_flash 0x278000 assets.avm` — it is **not** updated
   over the air
 - `python3 firmware/tools/check_partitions.py` (run from the project root)
