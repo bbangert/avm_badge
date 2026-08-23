@@ -26,6 +26,24 @@ auto-detected. Run `mix test` to run the unit tests (`Badge.TextBuffer` and
 `Badge.Keymap` are pure and tested on the host; most of the rest talks
 directly to GPIO/SPI/AtomGL and is verified on hardware instead).
 
+## Flash layout
+
+Partition table read back off the board (`esptool.py read_flash` +
+`gen_esp32part.py`):
+
+```
+nvs         data  nvs      0x9000     24K
+phy_init    data  phy      0xf000      4K
+factory     app   factory  0x10000  1920K
+boot.avm    data  phy      0x1f0000  544K
+assets.avm  data  phy      0x278000  256K
+main.avm    data  phy      0x2b8000  656K
+alt.avm     data  phy      0x35c000  656K
+```
+
+This table is compiled into the AtomVM image. Changing it means a serial
+reflash of every badge.
+
 ## Base image dependency
 
 **`display_rotation` of 3 (`lib/badge/hardware.ex`) only works with a patched

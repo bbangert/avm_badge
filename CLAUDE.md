@@ -5,16 +5,39 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 34 host tests, no board needed
+- `mix test` — 673 tests across 41 files, no board needed
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
 - `ls /dev/cu.usbmodem*` — board re-enumerates, path changes between sessions
 - Board resets after flashing, so chain flash and read to catch boot output:
   `( mix atomvm.esp32.flash >/dev/null 2>&1; stty -f <port> 115200 raw -echo; timeout 25 cat <port> )`
 - Never run unbounded `cat`/`screen` on the port — it blocks the next flash
+- Reflashing does not need `erase-flash`: `nvs` is unchanged by the
+  repartition, so wifi credentials, profile and peers survive
+- No `flash-elixir` target in this AtomVM revision — `idf.py flash` writes
+  `boot.avm` itself
 - Base image rebuild (rare): `. $IDF_PATH/export.sh; idf.py build` in
-  `AtomVM/src/platforms/esp32`, then flash `0x10000` only — app lives at
-  `0x250000` and survives
+  `AtomVM/src/platforms/esp32`, then flash `0x10000` only — the app lives at
+  `0x2B8000` and survives. Reproducing the build is documented in
+  `AtomVM/src/platforms/esp32/BADGE-BUILD.md`
+
+## Flash layout
+
+- Two packbeam slots: `main.avm` at `0x2B8000` and `alt.avm` at `0x35C000`,
+  656K each. NervesHub writes whichever one is not running and flips
+  `atomvm`/`boot_path` in NVS
+- `assets.avm` at `0x278000` holds the rickroll frames, mounted by
+  `Badge.start/0`. Rebuild it with `firmware/tools/mkassets.sh` after running
+  `tools/gif.py`, then flash it by hand:
+  `esptool.py ... write_flash 0x278000 assets.avm` — it is **not** updated
+  over the air
+- `python3 firmware/tools/check_partitions.py` (run from the project root)
+  fails if an artifact outgrows its partition
+- If `assets.avm` is missing or unflashed, the badge boots normally and
+  prints `Badge: no assets partition:` — but opening Sudo Mode kills the
+  `Badge.UI` GenServer, which restarts and resets the page to Home. It does
+  **not** crash-loop. What Sudo Mode should draw when frames are absent is a
+  pending follow-up decision.
 
 ## AtomVM is not the BEAM
 
