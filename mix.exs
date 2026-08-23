@@ -22,6 +22,6 @@ defmodule Badge.MixProject do
   end
 
   defp deps do
-    [{:exatomvm, git: "https://github.com/atomvm/ExAtomVM/"}]
+    [{:exatomvm, git: "https://github.com/atomvm/ExAtomVM/", runtime: false}]
   end
 end
