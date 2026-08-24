@@ -27,9 +27,11 @@ defmodule Badge.Chat.Socket do
 
   @compile {:no_warn_undefined, :websocket_client}
 
-  @host "a477-2001-7e8-fc14-7001-f8f9-ea8a-ec1f-f130.ngrok-free.app"
+  @host "a912-2001-7e8-fc14-7001-2963-dff6-e27b-c084.ngrok-free.app"
   @path "/badge/socket/websocket"
   @vsn "2.0.0"
+
+  @network_timeout 30_000
 
   @doc "The server this build talks to."
   @spec host() :: binary
@@ -47,8 +49,15 @@ defmodule Badge.Chat.Socket do
   """
   @spec open(binary, binary) :: {:ok, port} | {:error, term}
   def open(chip, name) do
-    # Without an explicit verify the driver disables verification and only warns.
-    :websocket_client.open(%{url: url(chip, name), owner: self(), verify: :crt_bundle})
+    :websocket_client.open(%{
+      url: url(chip, name),
+      owner: self(),
+      # Without an explicit verify the driver disables verification and warns.
+      verify: :crt_bundle,
+      # A TLS 1.3 handshake against the tunnel takes the badge past the ten
+      # second default, and a timeout there looks like a dead server.
+      network_timeout_ms: @network_timeout
+    })
   end
 
   @doc "Sends one frame, refusing rather than queueing while the link is down."

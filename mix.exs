@@ -22,6 +22,11 @@ defmodule Badge.MixProject do
   end
 
   defp deps do
-    [{:exatomvm, git: "https://github.com/atomvm/ExAtomVM/", runtime: false}]
+    [
+      {:exatomvm, git: "https://github.com/atomvm/ExAtomVM/", runtime: false},
+      # The Erlang side of the port driver built into the VM. A rebar3
+      # project, so mix is told which manager to use.
+      {:atomvm_websocket_client, path: "../atomvm_websocket_client", manager: :rebar3}
+    ]
   end
 end
