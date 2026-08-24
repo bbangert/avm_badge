@@ -27,11 +27,16 @@ defmodule Badge.Chat.Socket do
 
   @compile {:no_warn_undefined, :websocket_client}
 
-  @host "a912-2001-7e8-fc14-7001-2963-dff6-e27b-c084.ngrok-free.app"
+  @host "192.168.178.119:4443"
   @path "/badge/socket/websocket"
   @vsn "2.0.0"
 
   @network_timeout 30_000
+
+  # The dev CA from avm_badge_server/priv/cert, pinned. TLS terminates at
+  # Phoenix, not at a tunnel edge, and the chain is P-256 end to end - an
+  # all-software P-384 chain was slower than ngrok's edge would wait.
+  @cacert File.read!("assets/certs/badge-ca.pem")
 
   @doc "The server this build talks to."
   @spec host() :: binary
@@ -53,7 +58,7 @@ defmodule Badge.Chat.Socket do
       url: url(chip, name),
       owner: self(),
       # Without an explicit verify the driver disables verification and warns.
-      verify: :crt_bundle,
+      verify: {:cacert_pem, @cacert},
       # A TLS 1.3 handshake against the tunnel takes the badge past the ten
       # second default, and a timeout there looks like a dead server.
       network_timeout_ms: @network_timeout
