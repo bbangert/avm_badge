@@ -1,25 +1,25 @@
 defmodule Badge.Chat.Link do
   @moduledoc """
-  Keeps a Phoenix channel joined over long polling.
+  Keeps a Phoenix channel joined over a websocket.
 
-  Every request blocks for as long as the server holds it open - ten seconds
-  when the room is quiet - so each runs in a worker of its own and answers
-  with a message. This process only ever holds state.
+  Two lifetimes, not one. The socket opens as soon as the radio has an address
+  and then stays up for good, reconnecting on its own; the channel is joined
+  only while `Badge.Page.Chat` is showing. Leaving the room costs a `phx_leave`
+  rather than a disconnection, so coming back does not pay for a TLS handshake.
 
-  Phoenix hands back a fresh token on every response and expires the old one,
-  so the token is taken from whatever arrived last. A 410 means the session is
-  gone and the whole thing starts again.
+  `open/0` and `close/0` therefore mean join and leave, not connect and
+  disconnect. The page calls them on entry and exit as it always did.
 
-  Nothing is polled until a page asks. Holding the session open costs about
-  7 kB of heap, which this badge cannot spare while it is doing something
-  else, so `Badge.Page.Chat` opens the link on entry and closes it on the way
-  out. The room keeps no history, so nothing is missed that was not already
-  gone.
+  The socket carries the identity as connect params, so it is fixed for the
+  life of the connection: a display name changed while connected reaches the
+  server on the next reconnection, not immediately.
+
+  The room keeps no history, so nothing is missed that was not already gone.
   """
 
   use GenServer
 
-  alias Badge.Chat.Poll
+  alias Badge.Chat.Socket
   alias Badge.Chat.Wire
   alias Badge.Identity
   alias Badge.Profile
@@ -28,19 +28,23 @@ defmodule Badge.Chat.Link do
   @topic "chat:lobby"
   @join_ref "1"
 
-  # Long enough that a failed request does not hammer the tunnel.
+  # Phoenix drops a transport that goes quiet, and the heartbeat is what a
+  # quiet room otherwise has nothing to say.
+  @heartbeat_topic "phoenix"
+
   @tick 2_000
+  @beats 15
 
   # What the page can show; a badge cannot scroll far anyway.
   @keep 12
 
   def start_link(:ok), do: GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
 
-  @doc "Starts polling, if it is not already."
+  @doc "Joins the room, if it is not already joined."
   @spec open() :: :ok
   def open, do: GenServer.cast(__MODULE__, :open)
 
-  @doc "Stops polling and forgets the session."
+  @doc "Leaves the room. The socket stays up."
   @spec close() :: :ok
   def close, do: GenServer.cast(__MODULE__, :close)
 
@@ -55,11 +59,13 @@ defmodule Badge.Chat.Link do
   @impl true
   def init(:ok) do
     state = %{
-      state: :idle,
-      token: nil,
+      port: nil,
+      up: false,
+      channel: :out,
+      want: false,
       ref: 1,
+      beat: 0,
       messages: [],
-      worker: nil,
       chip: nil,
       name: nil
     }
@@ -71,144 +77,159 @@ defmodule Badge.Chat.Link do
 
   @impl true
   def handle_call(:status, _from, state) do
-    {:reply, %{state: state.state, messages: state.messages, host: Poll.host()}, state}
+    {:reply, %{state: state.channel, messages: state.messages, host: Socket.host()}, state}
   end
 
   @impl true
-  def handle_cast(:open, %{state: :idle} = state), do: {:noreply, %{state | state: :offline}}
+  def handle_cast(:open, %{want: true} = state), do: {:noreply, state}
 
-  def handle_cast(:open, state), do: {:noreply, state}
+  def handle_cast(:open, state), do: {:noreply, join(%{state | want: true})}
 
-  # An answer from a request still in flight is dropped by the :idle guard below.
-  def handle_cast(:close, state) do
-    {:noreply, %{state | state: :idle, token: nil, messages: []}}
-  end
+  def handle_cast(:close, %{want: false} = state), do: {:noreply, state}
 
-  def handle_cast({:say, _body}, %{state: joined} = state) when joined != :joined do
+  def handle_cast(:close, state), do: {:noreply, leave(%{state | want: false})}
+
+  def handle_cast({:say, _body}, %{channel: channel} = state) when channel != :joined do
     {:noreply, state}
   end
 
   def handle_cast({:say, body}, state) do
-    message = Wire.encode(@join_ref, ref(state), @topic, "new_msg", %{"body" => body})
-    token = state.token
-
-    {:noreply, work(%{state | ref: state.ref + 1}, :push, fn -> Poll.push(token, message) end)}
+    {:noreply, push(state, @topic, "new_msg", %{"body" => body})}
   end
 
   @impl true
-  # One request at a time: a second poll on the same token is refused anyway.
-  def handle_info(:tick, %{worker: worker} = state) when worker != nil, do: {:noreply, state}
-
-  def handle_info(:tick, %{state: :idle} = state), do: {:noreply, state}
-
-  def handle_info(:tick, %{state: :offline} = state), do: {:noreply, start(state)}
-
-  def handle_info(:tick, %{state: :joined} = state) do
-    token = state.token
-
-    {:noreply, work(state, :poll, fn -> Poll.poll(token) end)}
+  def handle_info(:tick, state) do
+    {:noreply, state |> connect() |> beat()}
   end
 
-  def handle_info(:tick, state), do: {:noreply, state}
+  def handle_info({:websocket, port, :connected}, %{port: port} = state) do
+    :io.format(~c"Chat: socket up~n")
 
-  # Closed while a request was in flight: its answer is no longer wanted.
-  def handle_info({:chat, _kind, _result}, %{state: :idle} = state) do
-    {:noreply, %{state | worker: nil}}
+    # Phoenix keeps channel state with the socket and loses it with the socket,
+    # so a reconnection has to re-join rather than assume it is still in.
+    {:noreply, join(%{state | up: true, channel: :out})}
   end
 
-  def handle_info({:chat, kind, result}, state) do
-    {:noreply, answered(kind, result, %{state | worker: nil})}
+  def handle_info({:websocket, port, {:text, frame}}, %{port: port} = state) do
+    {:noreply, received(Wire.decode_frame(frame), state)}
   end
 
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, %{worker: pid} = state) do
-    {:noreply, %{state | worker: nil}}
+  def handle_info({:websocket, port, {:closed, reason}}, %{port: port} = state) do
+    :io.format(~c"Chat: socket down ~p~n", [reason])
+
+    {:noreply, %{state | up: false, channel: :out}}
+  end
+
+  def handle_info({:websocket, port, {:error, reason}}, %{port: port} = state) do
+    :io.format(~c"Chat: socket error ~p~n", [reason])
+
+    {:noreply, %{state | up: false, channel: :out}}
   end
 
   def handle_info(_message, state), do: {:noreply, state}
 
   # Nothing can happen before there is an address to reach the server from.
-  defp start(state) do
+  defp connect(%{port: nil} = state) do
     case Wifi.status() do
       %{radio: :connected} -> opening(state)
       _down -> state
     end
   end
 
+  defp connect(state), do: state
+
   defp opening(state) do
-    profile = Profile.load()
     chip = Identity.format(Identity.chip_id())
-    name = Profile.display_name(profile)
+    name = Profile.display_name(Profile.load())
 
-    :io.format(~c"Chat: opening as ~s ~s~n", [chip, name])
+    :io.format(~c"Chat: connecting as ~s ~s~n", [chip, name])
 
-    work(%{state | chip: chip, name: name, state: :opening}, :session, fn ->
-      Poll.session(chip, name)
-    end)
+    case Socket.open(chip, name) do
+      {:ok, port} ->
+        %{state | port: port, chip: chip, name: name}
+
+      {:error, reason} ->
+        :io.format(~c"Chat: connect failed ~p~n", [reason])
+
+        state
+    end
   end
 
-  # 410 on a fresh session is Phoenix handing over the first token, not a fault.
-  defp answered(:session, {:ok, %{status: 410, token: token}}, state) when is_binary(token) do
-    join(%{state | token: token})
+  defp beat(%{up: true, beat: beat} = state) when beat >= @beats do
+    %{push(state, @heartbeat_topic, "heartbeat", %{}, nil) | beat: 0}
   end
 
-  defp answered(:join, {:ok, envelope}, state) do
-    :io.format(~c"Chat: joined ~s~n", [@topic])
+  defp beat(%{up: true} = state), do: %{state | beat: state.beat + 1}
 
-    %{keep_token(state, envelope) | state: :joined}
+  defp beat(state), do: state
+
+  defp join(%{want: true, up: true, channel: :out} = state) do
+    %{push(state, @topic, "phx_join", %{}) | channel: :joining}
   end
 
-  defp answered(:poll, {:ok, %{status: 410} = envelope}, state) do
-    :io.format(~c"Chat: session expired, opening a new one~n")
+  defp join(state), do: state
 
-    %{keep_token(state, envelope) | state: :offline, token: nil}
+  defp leave(%{channel: :joined} = state) do
+    %{push(state, @topic, "phx_leave", %{}) | channel: :out, messages: []}
   end
 
-  defp answered(:poll, {:ok, envelope}, state) do
-    state |> keep_token(envelope) |> receive_messages(envelope.messages)
+  defp leave(state), do: %{state | channel: :out, messages: []}
+
+  defp push(state, topic, event, payload, join_ref \\ @join_ref) do
+    frame = Wire.encode(join_ref, ref(state), topic, event, payload)
+
+    case Socket.send_frame(state.port, frame) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        :io.format(~c"Chat: ~s refused ~p~n", [event, reason])
+    end
+
+    %{state | ref: state.ref + 1}
   end
 
-  defp answered(:push, {:ok, envelope}, state), do: keep_token(state, envelope)
+  defp received(:error, state), do: state
 
-  defp answered(kind, {:ok, envelope}, state) do
-    :io.format(~c"Chat: ~p answered ~p~n", [kind, envelope.status])
-
-    %{keep_token(state, envelope) | state: :offline}
+  defp received({:ok, %{topic: @topic, event: "phx_reply", payload: payload}}, state) do
+    joined(Map.get(payload, "status"), state)
   end
 
-  defp answered(kind, {:error, reason}, state) do
-    :io.format(~c"Chat: ~p failed ~p~n", [kind, reason])
-
-    %{state | state: :offline, token: nil}
-  end
-
-  defp join(state) do
-    message = Wire.encode(@join_ref, ref(state), @topic, "phx_join", %{})
-    token = state.token
-
-    work(%{state | ref: state.ref + 1, state: :joining}, :join, fn ->
-      Poll.push(token, message)
-    end)
-  end
-
-  # Phoenix expires the old token on every answer, so the newest one wins.
-  defp keep_token(state, %{token: token}) when is_binary(token), do: %{state | token: token}
-  defp keep_token(state, _envelope), do: state
-
-  defp receive_messages(state, []), do: state
-
-  defp receive_messages(state, [%{event: "new_msg", payload: payload} | rest]) do
-    :io.format(~c"Chat: ~s: ~s~n", [line(payload, "from"), line(payload, "body")])
-
+  defp received({:ok, %{topic: @topic, event: "new_msg", payload: payload}}, state) do
     heard = %{
       from: line(payload, "from"),
       body: line(payload, "body"),
       mine: line(payload, "chip") == state.chip
     }
 
-    receive_messages(%{state | messages: keep([heard | state.messages], @keep, [])}, rest)
+    :io.format(~c"Chat: ~s: ~s~n", [heard.from, heard.body])
+
+    %{state | messages: keep([heard | state.messages], @keep, [])}
   end
 
-  defp receive_messages(state, [_other | rest]), do: receive_messages(state, rest)
+  # The server dropped the channel out from under us; the socket is still fine.
+  defp received({:ok, %{topic: @topic, event: event}}, state)
+       when event == "phx_error" or event == "phx_close" do
+    :io.format(~c"Chat: channel ~s~n", [event])
+
+    join(%{state | channel: :out})
+  end
+
+  defp received({:ok, _message}, state), do: state
+
+  defp joined("ok", %{channel: :joining} = state) do
+    :io.format(~c"Chat: joined ~s~n", [@topic])
+
+    %{state | channel: :joined}
+  end
+
+  defp joined("error", %{channel: :joining} = state) do
+    :io.format(~c"Chat: join refused~n")
+
+    %{state | channel: :out}
+  end
+
+  defp joined(_status, state), do: state
 
   defp line(payload, key) do
     case Map.get(payload, key) do
@@ -222,20 +243,6 @@ defmodule Badge.Chat.Link do
   defp keep([head | rest], left, acc), do: keep(rest, left - 1, [head | acc])
 
   defp ref(%{ref: ref}), do: :erlang.integer_to_binary(ref)
-
-  # Unlinked and monitored, so a request that dies cannot take the link down.
-  defp work(state, kind, request) do
-    link = self()
-    {pid, _ref} = :erlang.spawn_monitor(fn -> send(link, {:chat, kind, attempt(request)}) end)
-
-    %{state | worker: pid}
-  end
-
-  defp attempt(request) do
-    request.()
-  catch
-    kind, error -> {:error, {kind, error}}
-  end
 
   defp start_ticker do
     link = self()
