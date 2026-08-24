@@ -132,11 +132,13 @@ defmodule Badge.Chat.Link do
     {:noreply, state}
   end
 
-  # Nothing can happen before there is an address to reach the server from.
+  # A certificate is not yet valid at the epoch, so this waits for the clock as
+  # well as for an address. The long poll it replaced ran in the clear and
+  # could start as soon as the radio was up.
   defp connect(%{port: nil} = state) do
     case Wifi.status() do
-      %{radio: :connected} -> opening(state)
-      _down -> state
+      %{radio: :connected, synced: true} -> opening(state)
+      _not_ready -> state
     end
   end
 
