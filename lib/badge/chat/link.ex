@@ -102,7 +102,7 @@ defmodule Badge.Chat.Link do
     {:noreply, state |> connect() |> beat()}
   end
 
-  def handle_info({:websocket, port, :connected}, %{port: port} = state) do
+  def handle_info({:websocket, _port, :connected}, state) do
     :io.format(~c"Chat: socket up~n")
 
     # Phoenix keeps channel state with the socket and loses it with the socket,
@@ -110,23 +110,27 @@ defmodule Badge.Chat.Link do
     {:noreply, join(%{state | up: true, channel: :out})}
   end
 
-  def handle_info({:websocket, port, {:text, frame}}, %{port: port} = state) do
+  def handle_info({:websocket, _port, {:text, frame}}, state) do
     {:noreply, received(Wire.decode_frame(frame), state)}
   end
 
-  def handle_info({:websocket, port, {:closed, reason}}, %{port: port} = state) do
+  def handle_info({:websocket, _port, {:closed, reason}}, state) do
     :io.format(~c"Chat: socket down ~p~n", [reason])
 
     {:noreply, %{state | up: false, channel: :out}}
   end
 
-  def handle_info({:websocket, port, {:error, reason}}, %{port: port} = state) do
+  def handle_info({:websocket, _port, {:error, reason}}, state) do
     :io.format(~c"Chat: socket error ~p~n", [reason])
 
     {:noreply, %{state | up: false, channel: :out}}
   end
 
-  def handle_info(_message, state), do: {:noreply, state}
+  def handle_info(message, state) do
+    :io.format(~c"Chat: unhandled ~p~n", [message])
+
+    {:noreply, state}
+  end
 
   # Nothing can happen before there is an address to reach the server from.
   defp connect(%{port: nil} = state) do
