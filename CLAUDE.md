@@ -39,6 +39,22 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   **not** crash-loop. What Sudo Mode should draw when frames are absent is a
   pending follow-up decision.
 
+## Chat transport
+
+- The chat rides a websocket from the `atomvm_websocket_client` ESP-IDF
+  component; `Badge.Chat.Socket` wraps it, `Badge.Chat.Link` owns the port
+- **wss:// works, with two hard-won constraints.** TLS terminates at Phoenix
+  (`:4443`, chain in `avm_badge_server/priv/cert`, badges pin the CA from
+  `assets/certs/badge-ca.pem`). Never behind ngrok's https edge: it hangs up
+  ~1s after its server flight, and this hardware needs ~1.6s to verify a
+  public P-384 chain. For remote access use `ngrok tcp 4443` (raw bytes, no
+  edge TLS) - the cert's SAN already covers `*.tcp.eu.ngrok.io`
+- Match `{:websocket, _port, ...}` messages WITHOUT pinning the port: the
+  driver's port term is not the one `open_port` returned, and a pinned match
+  drops every message silently
+- The socket opens only after `Wifi.status()` shows `synced: true` - at the
+  epoch every certificate is "not yet valid"
+
 ## AtomVM is not the BEAM
 
 - **No `String` module.** Only the `String.Chars` protocol. Text is charlists or
