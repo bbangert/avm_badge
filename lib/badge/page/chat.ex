@@ -23,6 +23,8 @@ defmodule Badge.Page.Chat do
   @dim Theme.dim()
   @muted Theme.muted()
   @select Theme.select()
+  @warn Theme.warn()
+  @alert Theme.alert()
   @bg Theme.bg()
 
   @char_w 8
@@ -108,7 +110,7 @@ defmodule Badge.Page.Chat do
       [
         {:rect, @margin, @rule_y, Theme.width() - 2 * @margin, 1, @dim},
         draft(state)
-      ] ++ empty(state)
+      ] ++ counter(state.draft) ++ empty(state)
   end
 
   # Oldest at the top so the newest ends up against the draft line. A message
@@ -200,6 +202,28 @@ defmodule Badge.Page.Chat do
   defp idle(_state), do: prompt("connecting to the room", @muted)
 
   defp prompt(text, colour), do: {:text, @margin, @draft_y, :default16px, colour, @bg, text}
+
+  @doc "The colour for a count of characters left, or `nil` while there is room."
+  @spec counter_colour(non_neg_integer) :: integer | nil
+  def counter_colour(left) when left > 20, do: nil
+  def counter_colour(left) when left > 5, do: @warn
+  def counter_colour(_left), do: @alert
+
+  defp counter(field) do
+    left = Field.remaining(field)
+
+    case counter_colour(left) do
+      nil -> []
+      colour -> [count_item(:erlang.integer_to_binary(left), colour)]
+    end
+  end
+
+  # Right-aligned, in the columns the draft leaves free.
+  defp count_item(text, colour) do
+    x = Theme.width() - @margin - @char_w * byte_size(text)
+
+    {:text, x, @draft_y, :default16px, colour, @bg, text}
+  end
 
   defp colour(:joined), do: @select
   defp colour(_link), do: @muted

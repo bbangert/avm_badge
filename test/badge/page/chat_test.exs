@@ -25,6 +25,12 @@ defmodule Badge.Page.ChatTest do
 
   defp long(n), do: :erlang.list_to_binary(:lists.duplicate(n, ?x))
 
+  defp counters(state) do
+    for {:text, _x, 214, _f, colour, _b, body} <- Chat.render(state),
+        colour == Theme.warn() or colour == Theme.alert(),
+        do: {body, colour}
+  end
+
   describe "identity" do
     test "announces itself for the home grid" do
       assert Chat.title() == "Chat"
@@ -307,6 +313,41 @@ defmodule Badge.Page.ChatTest do
         )
 
       assert :binary.match(draft_line(state), "_") != :nomatch
+    end
+  end
+
+  describe "the counter" do
+    test "stays hidden while there is room" do
+      assert Chat.counter_colour(21) == nil
+    end
+
+    test "turns yellow as the cap approaches" do
+      assert Chat.counter_colour(20) == Theme.warn()
+      assert Chat.counter_colour(6) == Theme.warn()
+    end
+
+    test "turns red when nearly out" do
+      assert Chat.counter_colour(5) == Theme.alert()
+      assert Chat.counter_colour(0) == Theme.alert()
+    end
+
+    test "is not drawn on a short draft" do
+      assert counters(typed(Chat.init(), "hi")) == []
+    end
+
+    test "shows the characters left once close to the cap" do
+      assert counters(typed(Chat.init(), long(100))) == [{"14", Theme.warn()}]
+    end
+
+    test "shows red at the very end" do
+      assert counters(typed(Chat.init(), long(112))) == [{"2", Theme.alert()}]
+    end
+
+    test "reads zero at the cap and refuses more" do
+      state = typed(Chat.init(), long(200))
+
+      assert counters(state) == [{"0", Theme.alert()}]
+      assert byte_size(Badge.Field.value(state.draft)) == 114
     end
   end
 end
