@@ -84,6 +84,10 @@ defmodule Badge.Page.Chat do
 
   def handle_key({:edit, :newline}, state), do: send_draft(Field.value(state.draft), state)
 
+  def handle_key({:move, :left}, state), do: {:ok, %{state | draft: Field.left(state.draft)}}
+
+  def handle_key({:move, :right}, state), do: {:ok, %{state | draft: Field.right(state.draft)}}
+
   def handle_key(_event, _state), do: :ignore
 
   # Nothing to say is not a message; let the router keep the key.

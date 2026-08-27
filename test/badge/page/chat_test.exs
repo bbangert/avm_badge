@@ -56,6 +56,35 @@ defmodule Badge.Page.ChatTest do
     test "escape is left to the router, so the page can be left" do
       assert Chat.handle_key({:nav, :home}, Chat.init()) == :ignore
     end
+
+    test "left arrow moves the cursor back through the draft" do
+      state = typed(Chat.init(), "hi") |> press({:move, :left})
+
+      assert Badge.Field.cursor(state.draft) == 1
+    end
+
+    test "right arrow moves it forward again" do
+      state = typed(Chat.init(), "hi") |> press({:move, :left}) |> press({:move, :right})
+
+      assert Badge.Field.cursor(state.draft) == 2
+    end
+
+    test "typing mid-draft inserts rather than appends" do
+      state = typed(Chat.init(), "ac") |> press({:move, :left}) |> typed("b")
+
+      assert Badge.Field.value(state.draft) == "abc"
+    end
+
+    test "backspace mid-draft removes the character before the cursor" do
+      state = typed(Chat.init(), "abc") |> press({:move, :left}) |> press({:edit, :backspace})
+
+      assert Badge.Field.value(state.draft) == "ac"
+    end
+
+    test "up and down are left alone, so the router keeps them" do
+      assert Chat.handle_key({:move, :up}, Chat.init()) == :ignore
+      assert Chat.handle_key({:move, :down}, Chat.init()) == :ignore
+    end
   end
 
   describe "showing the room" do
