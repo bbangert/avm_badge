@@ -27,7 +27,7 @@ defmodule Badge.Chat.Socket do
 
   @compile {:no_warn_undefined, :websocket_client}
 
-  @host "192.168.178.119:4443"
+  @host "6.tcp.eu.ngrok.io:16113"
   @path "/badge/socket/websocket"
   @vsn "2.0.0"
 
