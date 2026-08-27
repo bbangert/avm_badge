@@ -5,7 +5,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 673 tests across 41 files, no board needed
+- `mix test` — 671 tests across 42 files, no board needed
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
 - `ls /dev/cu.usbmodem*` — board re-enumerates, path changes between sessions
@@ -26,18 +26,21 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - Two packbeam slots: `main.avm` at `0x2B8000` and `alt.avm` at `0x35C000`,
   656K each. NervesHub writes whichever one is not running and flips
   `atomvm`/`boot_path` in NVS
-- `assets.avm` at `0x278000` holds the rickroll frames, mounted by
-  `Badge.start/0`. Rebuild it with `firmware/tools/mkassets.sh` after running
-  `firmware/tools/gif.py`, then flash it by hand:
-  `esptool.py ... write_flash 0x278000 assets.avm` — it is **not** updated
-  over the air
-- `python3 firmware/tools/check_partitions.py` (run from the project root)
-  fails if an artifact outgrows its partition
+- `assets.avm` at `0x278000` holds the rickroll frames and the `.uf` fonts,
+  mounted by `Badge.start/0`. `firmware/tools/flashassets.sh` packs it and
+  writes it in one step, auto-detecting the port; it is **not** updated over
+  the air. Run `firmware/tools/gif.py` first if the frames changed
+- `python3 firmware/tools/check_partitions.py <partitions.csv> [label=path ...]`
+  fails if an artifact outgrows its partition. `flashassets.sh` checks the
+  assets partition itself
 - If `assets.avm` is missing or unflashed, the badge boots normally and
   prints `Badge: no assets partition:` — but opening Sudo Mode kills the
   `Badge.UI` GenServer, which restarts and resets the page to Home. It does
   **not** crash-loop. What Sudo Mode should draw when frames are absent is a
   pending follow-up decision.
+- `dogica` and `pixel_operator` are compiled into `main.avm`, so text survives
+  a missing assets partition. `w95fa` is read from it on demand; a failed read
+  logs `UI: font ~p not in assets partition` once and is not retried.
 
 ## Chat transport
 

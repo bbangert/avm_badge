@@ -64,8 +64,9 @@ defmodule Badge.UI do
   @font_dogica File.read!("assets/fonts/dogica.uf")
   @font_pixel_operator File.read!("assets/fonts/pixel_operator.uf")
   # Loaded only while a page asks for it: 18 kB is more than this badge can
-  # spare for a font used on one screen.
-  @loadable %{w95fa: File.read!("assets/fonts/w95fa.uf")}
+  # spare for a font used on one screen, so the bytes live in the assets
+  # partition rather than in this image.
+  @loadable %{w95fa: ~c"fonts/w95fa.uf"}
 
   def start_link(spi) do
     GenServer.start_link(__MODULE__, spi, name: __MODULE__)
@@ -112,6 +113,7 @@ defmodule Badge.UI do
       status: placeholder_status(),
       status_countdown: 0,
       fonts: [],
+      missing: [],
       idle: 0,
       asleep: false
     }
@@ -265,7 +267,7 @@ defmodule Badge.UI do
 
     state
     |> free_fonts(state.fonts -- wanted)
-    |> load_fonts(wanted -- state.fonts)
+    |> load_fonts(wanted -- state.fonts -- state.missing)
   end
 
   defp free_fonts(state, []), do: state
@@ -279,9 +281,24 @@ defmodule Badge.UI do
   defp load_fonts(state, []), do: state
 
   defp load_fonts(state, [name | rest]) do
-    :port.call(state.port, {:register_font, name, Map.fetch!(@loadable, name)})
+    case font_bytes(Map.fetch!(@loadable, name)) do
+      nil ->
+        :io.format(~c"UI: font ~p not in assets partition~n", [name])
 
-    load_fonts(%{state | fonts: [name | state.fonts]}, rest)
+        load_fonts(%{state | missing: [name | state.missing]}, rest)
+
+      bytes ->
+        :port.call(state.port, {:register_font, name, bytes})
+
+        load_fonts(%{state | fonts: [name | state.fonts]}, rest)
+    end
+  end
+
+  # An unflashed assets partition costs this one font, not the whole display.
+  defp font_bytes(path) do
+    :atomvm.read_priv(:assets, path)
+  catch
+    _, _ -> nil
   end
 
   defp reload(page, page_state), do: max(div(page.refresh(page_state), @base_interval), 1) - 1
