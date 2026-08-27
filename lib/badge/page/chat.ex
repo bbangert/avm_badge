@@ -45,8 +45,9 @@ defmodule Badge.Page.Chat do
   @pitch 20
   @top Theme.content_top() + 8
 
-  # Three panel lines' worth. The server's cap of 200 is the outer bound.
-  @capacity 114
+  # Three panel lines' worth, shared with the name the message is drawn under.
+  # The server's cap of 200 is the outer bound.
+  @budget 3 * @columns
 
   # How much ragged gap a space may leave before a word is dashed instead.
   # Without it a long unbroken word pushes the sender's name onto a line of
@@ -67,7 +68,7 @@ defmodule Badge.Page.Chat do
 
   @impl true
   def init do
-    %{messages: [], link: :offline, draft: Field.new(@capacity)}
+    %{messages: [], link: :offline, draft: Field.new(@budget)}
   end
 
   # Hardware is only touched here, never from a key handler.
@@ -76,7 +77,9 @@ defmodule Badge.Page.Chat do
     Link.open()
     status = Link.status()
 
-    %{state | messages: status.messages, link: status.state}
+    draft = Field.resize(state.draft, limit_for(status.name))
+
+    %{state | messages: status.messages, link: status.state, draft: draft}
   end
 
   # A page is not a process, so the session has nowhere else to be given back.
@@ -104,7 +107,7 @@ defmodule Badge.Page.Chat do
   defp send_draft(body, state) do
     Link.say(body)
 
-    {:ok, %{state | draft: Field.new(@capacity)}}
+    {:ok, %{state | draft: Field.new(Field.capacity(state.draft))}}
   end
 
   @impl true
@@ -205,6 +208,11 @@ defmodule Badge.Page.Chat do
   defp idle(_state), do: prompt("connecting to the room", @muted)
 
   defp prompt(text, colour), do: {:text, @margin, @draft_y, :default16px, colour, @bg, text}
+
+  @doc "What a message may hold once the name it is drawn under is taken out."
+  @spec limit_for(binary | nil) :: non_neg_integer
+  def limit_for(nil), do: @budget
+  def limit_for(name), do: max(@budget - byte_size(name) - 2, 0)
 
   @doc "The colour for a count of characters left, or `nil` while there is room."
   @spec counter_colour(non_neg_integer) :: integer | nil

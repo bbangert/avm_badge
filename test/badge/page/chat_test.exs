@@ -374,4 +374,22 @@ defmodule Badge.Page.ChatTest do
       assert byte_size(Badge.Field.value(state.draft)) == 114
     end
   end
+
+  describe "the limit" do
+    test "three panel lines before anyone is named" do
+      assert Chat.limit_for(nil) == 114
+    end
+
+    test "leaves room for the name, colon and space" do
+      assert Chat.limit_for("Gustavo") == 114 - 9
+    end
+
+    test "a long name eats further into the budget" do
+      assert Chat.limit_for("Bartholomew") == 114 - 13
+    end
+
+    test "never goes negative on an absurd name" do
+      assert Chat.limit_for(long(200)) == 0
+    end
+  end
 end

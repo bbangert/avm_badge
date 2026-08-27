@@ -58,7 +58,15 @@ defmodule Badge.Field do
 
   @doc "How many characters may still be entered."
   @spec remaining(map) :: non_neg_integer
-  def remaining(field), do: field.capacity - field.count
+  def remaining(field), do: max(field.capacity - field.count, 0)
+
+  @doc "How many characters the field accepts in total."
+  @spec capacity(map) :: non_neg_integer
+  def capacity(field), do: field.capacity
+
+  @doc "Changes the capacity, keeping whatever has already been entered."
+  @spec resize(map, non_neg_integer) :: map
+  def resize(field, capacity), do: %{field | capacity: capacity}
 
   @doc "One asterisk per character, for display."
   @spec masked(map) :: binary

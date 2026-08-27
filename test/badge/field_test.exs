@@ -166,4 +166,26 @@ defmodule Badge.FieldTest do
       assert Field.remaining(type(Field.new(3), "abcdef")) == 0
     end
   end
+
+  describe "capacity/1" do
+    test "reports what the field was built with" do
+      assert Field.capacity(Field.new(10)) == 10
+    end
+  end
+
+  describe "resize/2" do
+    test "changes what is left without touching the value" do
+      field = Field.resize(type(Field.new(10), "abc"), 5)
+
+      assert Field.value(field) == "abc"
+      assert Field.remaining(field) == 2
+    end
+
+    test "a field shrunk past what it holds refuses more and reads zero" do
+      field = Field.resize(type(Field.new(10), "abcde"), 3)
+
+      assert Field.value(type(field, "z")) == "abcde"
+      assert Field.remaining(field) == 0
+    end
+  end
 end

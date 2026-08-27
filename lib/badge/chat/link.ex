@@ -77,7 +77,14 @@ defmodule Badge.Chat.Link do
 
   @impl true
   def handle_call(:status, _from, state) do
-    {:reply, %{state: state.channel, messages: state.messages, host: Socket.host()}, state}
+    status = %{
+      state: state.channel,
+      messages: state.messages,
+      host: Socket.host(),
+      name: state.name
+    }
+
+    {:reply, status, state}
   end
 
   @impl true
