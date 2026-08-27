@@ -17,8 +17,14 @@ defmodule Badge.Page.ChatTest do
 
   defp heard(state, messages), do: %{state | messages: messages, link: :joined}
 
+  # Bodies carry their own index, newest first, so a selection reads directly.
   defp said(n) do
-    for i <- :lists.seq(1, n), do: %{from: "Ana", body: "message " <> :erlang.integer_to_binary(i)}
+    for i <- :lists.seq(0, n - 1),
+        do: %{from: "Ana", body: "message " <> :erlang.integer_to_binary(i)}
+  end
+
+  defp downs(state, n) do
+    :lists.foldl(fn _i, acc -> press(acc, {:move, :down}) end, state, :lists.seq(1, n))
   end
 
   defp ups(state, n) do
@@ -470,6 +476,82 @@ defmodule Badge.Page.ChatTest do
       state = heard(Chat.init(), said(3)) |> ups(2)
 
       assert Chat.handle_key({:nav, :home}, state) == :ignore
+    end
+  end
+
+  describe "the view follows the selection" do
+    test "holds still while the selection is on screen" do
+      state = heard(Chat.init(), said(12)) |> ups(8)
+
+      assert state.selected == 7
+      assert state.offset == 0
+    end
+
+    test "moves once the selection would pass the top" do
+      state = heard(Chat.init(), said(12)) |> ups(9)
+
+      assert state.selected == 8
+      assert state.offset == 1
+    end
+
+    test "stays put on the way back down until the selection would leave it" do
+      state = heard(Chat.init(), said(12)) |> ups(9) |> press({:move, :down})
+
+      assert state.selected == 7
+      assert state.offset == 1
+    end
+
+    test "comes back to the newest" do
+      state = heard(Chat.init(), said(12)) |> ups(9) |> downs(8)
+
+      assert state.selected == 0
+      assert state.offset == 0
+    end
+
+    test "returning to the draft resets the view" do
+      state = heard(Chat.init(), said(12)) |> ups(9) |> typed("x")
+
+      assert state.selected == nil
+      assert state.offset == 0
+    end
+
+    test "the selected message is drawn even when scrolled back" do
+      state = heard(Chat.init(), said(12)) |> ups(11)
+      shown = texts(state)
+
+      assert state.selected == 10
+      assert Enum.any?(shown, &(&1 == "message 10"))
+      refute Enum.any?(shown, &(&1 == "message 0"))
+    end
+  end
+
+  describe "drift" do
+    test "the selection stays on its message when newer ones arrive" do
+      state = heard(Chat.init(), said(12)) |> ups(3)
+      moved = Chat.drift(heard(state, said(14)), 2)
+
+      assert moved.selected == 4
+    end
+
+    test "a selection pushed off the end clamps to the oldest" do
+      state = heard(Chat.init(), said(12)) |> ups(12)
+      moved = Chat.drift(heard(state, said(12)), 3)
+
+      assert moved.selected == 11
+    end
+
+    test "an emptied room puts the focus back on the draft" do
+      state = heard(Chat.init(), said(12)) |> ups(3)
+      moved = Chat.drift(heard(state, []), 0)
+
+      assert moved.selected == nil
+      assert moved.offset == 0
+    end
+
+    test "nothing drifts while the draft has focus" do
+      state = heard(Chat.init(), said(12))
+
+      assert Chat.drift(state, 4).selected == nil
     end
   end
 end

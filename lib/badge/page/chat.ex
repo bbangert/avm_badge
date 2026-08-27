@@ -71,7 +71,7 @@ defmodule Badge.Page.Chat do
 
   @impl true
   def init do
-    %{messages: [], link: :offline, draft: Field.new(@budget), selected: nil, offset: 0}
+    %{messages: [], link: :offline, draft: Field.new(@budget), selected: nil, offset: 0, heard: 0}
   end
 
   # Hardware is only touched here, never from a key handler.
@@ -82,7 +82,8 @@ defmodule Badge.Page.Chat do
 
     draft = Field.resize(state.draft, limit_for(status.name))
 
-    %{state | messages: status.messages, link: status.state, draft: draft}
+    %{state | messages: status.messages, link: status.state, draft: draft, heard: status.heard}
+    |> drift(status.heard - state.heard)
   end
 
   # A page is not a process, so the session has nowhere else to be given back.
@@ -135,8 +136,26 @@ defmodule Badge.Page.Chat do
   # Nothing to say is not a message; let the router keep the key.
   defp send_draft("", _state), do: :ignore
 
-  # Placed so the selection stays on screen; the view rule lands in show/2.
-  defp show(state, selected), do: %{state | selected: selected}
+  # The view holds still until the selection would leave it.
+  defp show(state, selected) do
+    %{state | selected: selected, offset: place(state.messages, state.offset, selected)}
+  end
+
+  defp place(_messages, offset, selected) when selected <= offset, do: selected
+
+  defp place(messages, offset, selected) do
+    case selected < offset + shown(messages, offset) do
+      true -> offset
+      false -> place(messages, offset + 1, selected)
+    end
+  end
+
+  # How many whole messages the rows hold, counting back from `offset`.
+  defp shown(messages, offset), do: length(newest(drop(messages, offset), @rows, []))
+
+  defp drop(list, 0), do: list
+  defp drop([], _n), do: []
+  defp drop([_head | rest], n), do: drop(rest, n - 1)
 
   defp send_draft(body, state) do
     Link.say(body)
@@ -146,7 +165,7 @@ defmodule Badge.Page.Chat do
 
   @impl true
   def render(state) do
-    rows(state.messages, @rows, @top, []) ++
+    rows(drop(state.messages, state.offset), @rows, @top, []) ++
       [
         {:rect, @margin, @rule_y, Theme.width() - 2 * @margin, 1, @dim},
         draft(state)
@@ -199,8 +218,7 @@ defmodule Badge.Page.Chat do
         rest = :binary.part(first, byte_size(name), byte_size(first) - byte_size(name))
 
         [
-          {:text, @margin + @char_w * byte_size(name), y, :default16px, @fg, @bg,
-           rest},
+          {:text, @margin + @char_w * byte_size(name), y, :default16px, @fg, @bg, rest},
           {:text, @margin, y, :default16px, name_colour(message), @bg, name}
         ]
 
@@ -242,6 +260,20 @@ defmodule Badge.Page.Chat do
   defp idle(_state), do: prompt("connecting to the room", @muted)
 
   defp prompt(text, colour), do: {:text, @margin, @draft_y, :default16px, colour, @bg, text}
+
+  @doc "Keeps the selection on its message as newer ones push it down the list."
+  @spec drift(map, integer) :: map
+  def drift(%{selected: nil} = state, _arrived), do: state
+
+  def drift(state, arrived), do: drifted(state, arrived, length(state.messages))
+
+  defp drifted(state, _arrived, 0), do: focus(state)
+
+  defp drifted(state, arrived, count) do
+    offset = min(max(state.offset + arrived, 0), count - 1)
+
+    show(%{state | offset: offset}, min(max(state.selected + arrived, 0), count - 1))
+  end
 
   @doc "What a message may hold once the name it is drawn under is taken out."
   @spec limit_for(binary | nil) :: non_neg_integer

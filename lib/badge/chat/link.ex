@@ -53,7 +53,13 @@ defmodule Badge.Chat.Link do
   def say(body), do: GenServer.cast(__MODULE__, {:say, body})
 
   @doc "Where the link is and what it has heard."
-  @spec status() :: %{state: atom, messages: [map], host: binary}
+  @spec status() :: %{
+          state: atom,
+          messages: [map],
+          host: binary,
+          name: binary | nil,
+          heard: non_neg_integer
+        }
   def status, do: GenServer.call(__MODULE__, :status)
 
   @impl true
@@ -67,7 +73,8 @@ defmodule Badge.Chat.Link do
       beat: 0,
       messages: [],
       chip: nil,
-      name: nil
+      name: nil,
+      heard: 0
     }
 
     start_ticker()
@@ -81,7 +88,8 @@ defmodule Badge.Chat.Link do
       state: state.channel,
       messages: state.messages,
       host: Socket.host(),
-      name: state.name
+      name: state.name,
+      heard: state.heard
     }
 
     {:reply, status, state}
@@ -217,7 +225,7 @@ defmodule Badge.Chat.Link do
 
     :io.format(~c"Chat: ~s: ~s~n", [heard.from, heard.body])
 
-    %{state | messages: keep([heard | state.messages], @keep, [])}
+    %{state | messages: keep([heard | state.messages], @keep, []), heard: state.heard + 1}
   end
 
   # The server dropped the channel out from under us; the socket is still fine.
