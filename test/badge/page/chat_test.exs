@@ -17,6 +17,14 @@ defmodule Badge.Page.ChatTest do
 
   defp heard(state, messages), do: %{state | messages: messages, link: :joined}
 
+  defp draft_line(state) do
+    texts = texts(state)
+
+    :lists.nth(length(texts), texts)
+  end
+
+  defp long(n), do: :erlang.list_to_binary(:lists.duplicate(n, ?x))
+
   describe "identity" do
     test "announces itself for the home grid" do
       assert Chat.title() == "Chat"
@@ -258,6 +266,47 @@ defmodule Badge.Page.ChatTest do
       # The first line carries the name and some of the word, not the name alone.
       assert Enum.any?(lines, &(:binary.match(&1, "-") != :nomatch))
       refute Enum.any?(lines, &(&1 == "Gus:"))
+    end
+  end
+
+  describe "the caret" do
+    test "sits at the end while typing" do
+      assert draft_line(typed(Chat.init(), "hi")) == "> hi_"
+    end
+
+    test "moves back into the draft with the cursor" do
+      state = typed(Chat.init(), "abc") |> press({:move, :left})
+
+      assert draft_line(state) == "> ab_c"
+    end
+
+    test "reaches the front of the draft" do
+      state =
+        typed(Chat.init(), "abc")
+        |> press({:move, :left})
+        |> press({:move, :left})
+        |> press({:move, :left})
+
+      assert draft_line(state) == "> _abc"
+    end
+
+    test "a long draft is windowed to the drawn width" do
+      assert byte_size(draft_line(typed(Chat.init(), long(60)))) == 34
+    end
+
+    test "a windowed draft still ends at the caret" do
+      assert :binary.part(draft_line(typed(Chat.init(), long(60))), 33, 1) == "_"
+    end
+
+    test "moving left in a long draft keeps the caret visible" do
+      state =
+        :lists.foldl(
+          fn _i, acc -> press(acc, {:move, :left}) end,
+          typed(Chat.init(), long(60)),
+          :lists.seq(1, 40)
+        )
+
+      assert :binary.match(draft_line(state), "_") != :nomatch
     end
   end
 end

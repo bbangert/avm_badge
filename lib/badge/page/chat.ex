@@ -31,14 +31,17 @@ defmodule Badge.Page.Chat do
   # What a line can hold before it runs off the panel.
   @columns div(Theme.width() - 2 * @margin, @char_w)
 
+  # The counter needs the right-hand end of the draft line.
+  @draft_columns @columns - 4
+
   @draft_y 214
   @rule_y 206
   @rows 8
   @pitch 20
   @top Theme.content_top() + 8
 
-  # Matches the server's cap, so nothing is typed that would be cut on arrival.
-  @capacity 200
+  # Three panel lines' worth. The server's cap of 200 is the outer bound.
+  @capacity 114
 
   # How much ragged gap a space may leave before a word is dashed instead.
   # Without it a long unbroken word pushes the sender's name onto a line of
@@ -179,8 +182,17 @@ defmodule Badge.Page.Chat do
   defp draft(%{draft: field} = state) do
     case Field.value(field) do
       "" -> idle(state)
-      value -> prompt(tail("> " <> value <> "_"), colour(state.link))
+      value -> prompt(window(value, Field.cursor(field)), colour(state.link))
     end
+  end
+
+  # The caret is drawn between the two halves rather than after the value.
+  defp window(value, at) do
+    line =
+      :binary.part(value, 0, at) <>
+        "_" <> :binary.part(value, at, byte_size(value) - at)
+
+    clip(line, 2 + at)
   end
 
   # An empty draft is the only time there is room to say the link is still coming up.
@@ -200,9 +212,13 @@ defmodule Badge.Page.Chat do
   defp empty(_state), do: []
 
   # Typing runs off the left rather than the right, so the caret stays in view.
-  defp tail(text) when byte_size(text) > @columns do
-    :binary.part(text, byte_size(text) - @columns, @columns)
-  end
+  defp clip(line, at), do: clipped("> " <> line, at)
 
-  defp tail(text), do: text
+  defp clipped(line, _at) when byte_size(line) <= @draft_columns, do: line
+
+  defp clipped(line, at) do
+    start = min(max(at + 1 - @draft_columns, 0), byte_size(line) - @draft_columns)
+
+    :binary.part(line, start, @draft_columns)
+  end
 end
