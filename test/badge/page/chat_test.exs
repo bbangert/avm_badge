@@ -374,32 +374,32 @@ defmodule Badge.Page.ChatTest do
     end
 
     test "shows the characters left once close to the cap" do
-      assert counters(typed(Chat.init(), long(100))) == [{"14", Theme.warn()}]
+      assert counters(typed(Chat.init(), long(100))) == [{"8", Theme.warn()}]
     end
 
     test "shows red at the very end" do
-      assert counters(typed(Chat.init(), long(112))) == [{"2", Theme.alert()}]
+      assert counters(typed(Chat.init(), long(105))) == [{"3", Theme.alert()}]
     end
 
     test "reads zero at the cap and refuses more" do
       state = typed(Chat.init(), long(200))
 
       assert counters(state) == [{"0", Theme.alert()}]
-      assert byte_size(Badge.Field.value(state.draft)) == 114
+      assert byte_size(Badge.Field.value(state.draft)) == 108
     end
   end
 
   describe "the limit" do
     test "three panel lines less the hyphens, before anyone is named" do
-      assert Chat.limit_for(nil) == 111
+      assert Chat.limit_for(nil) == 108
     end
 
     test "leaves room for the name, colon and space" do
-      assert Chat.limit_for("Gustavo") == 111 - 9
+      assert Chat.limit_for("Gustavo") == 108 - 9
     end
 
     test "a long name eats further into the budget" do
-      assert Chat.limit_for("Bartholomew") == 111 - 13
+      assert Chat.limit_for("Bartholomew") == 108 - 13
     end
 
     test "never goes negative on an absurd name" do
@@ -552,6 +552,63 @@ defmodule Badge.Page.ChatTest do
       state = heard(Chat.init(), said(12))
 
       assert Chat.drift(state, 4).selected == nil
+    end
+  end
+
+  describe "showing where the focus is" do
+    defp markers(state) do
+      for {:text, 8, y, _f, _c, _b, ">"} <- Chat.render(state), do: y
+    end
+
+    defp draft_item(state) do
+      items = for {:text, _x, 214, _f, colour, _b, body} <- Chat.render(state), do: {body, colour}
+
+      hd(items)
+    end
+
+    test "no marker while the draft has focus" do
+      assert markers(heard(Chat.init(), said(3))) == []
+    end
+
+    test "the selected message is marked" do
+      assert length(markers(heard(Chat.init(), said(3)) |> press({:move, :up}))) == 1
+    end
+
+    test "every line of a long selected message is marked" do
+      long_one = [%{from: "Ana", body: :erlang.list_to_binary(:lists.duplicate(80, ?y))}]
+
+      assert length(markers(heard(Chat.init(), long_one) |> press({:move, :up}))) == 3
+    end
+
+    test "message text is indented past the marker" do
+      state = heard(Chat.init(), said(3))
+      xs = for {:text, x, y, _f, _c, _b, _body} <- Chat.render(state), y < 206, do: x
+
+      assert :lists.min(xs) == 16
+    end
+
+    test "the draft keeps its caret while it has focus" do
+      {body, colour} = draft_item(heard(typed(Chat.init(), "hi"), []))
+
+      assert body == "> hi_"
+      assert colour != Theme.muted()
+    end
+
+    test "the draft loses its caret and dims while scrolled" do
+      state = heard(typed(Chat.init(), "hi"), said(3)) |> press({:move, :up})
+      {body, colour} = draft_item(state)
+
+      assert body == "> hi"
+      assert colour == Theme.muted()
+    end
+
+    test "coming back to the draft restores the caret" do
+      state =
+        heard(typed(Chat.init(), "hi"), said(3))
+        |> press({:move, :up})
+        |> press({:move, :down})
+
+      assert elem(draft_item(state), 0) == "> hi_"
     end
   end
 end

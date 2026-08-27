@@ -31,10 +31,14 @@ defmodule Badge.Page.Chat do
   @margin 8
 
   # What a line can hold before it runs off the panel.
-  @columns div(Theme.width() - 2 * @margin, @char_w)
+  @line_columns div(Theme.width() - 2 * @margin, @char_w)
+
+  # A message gives up its first column to the selection marker.
+  @columns @line_columns - 1
+  @body_x @margin + @char_w
 
   # The counter needs the right-hand end of the draft line: two digits and a gap.
-  @draft_columns @columns - 3
+  @draft_columns @line_columns - 3
 
   # Where the caret settles once the draft is long enough to scroll.
   @caret_rest div(@draft_columns, 2)
@@ -71,7 +75,7 @@ defmodule Badge.Page.Chat do
 
   @impl true
   def init do
-    %{messages: [], link: :offline, draft: Field.new(@budget), selected: nil, offset: 0, heard: 0}
+    %{messages: [], link: :offline, draft: Field.new(limit_for(nil)), selected: nil, offset: 0, heard: 0}
   end
 
   # Hardware is only touched here, never from a key handler.
@@ -165,7 +169,7 @@ defmodule Badge.Page.Chat do
 
   @impl true
   def render(state) do
-    rows(drop(state.messages, state.offset), @rows, @top, []) ++
+    rows(drop(state.messages, state.offset), @rows, @top, marked(state)) ++
       [
         {:rect, @margin, @rule_y, Theme.width() - 2 * @margin, 1, @dim},
         draft(state)
@@ -174,11 +178,15 @@ defmodule Badge.Page.Chat do
 
   # Oldest at the top so the newest ends up against the draft line. A message
   # can take several lines, so the newest are taken until the room runs out.
-  defp rows(messages, left, top, _acc) do
-    messages
-    |> newest(left, [])
-    |> lines(top, [])
+  defp rows(messages, left, top, selected) do
+    drawn = newest(messages, left, [])
+
+    lines(drawn, top, length(drawn) - 1 - selected, [])
   end
+
+  # Nothing is marked while the draft has focus; -1 never matches a position.
+  defp marked(%{selected: nil}), do: -1
+  defp marked(state), do: state.selected - state.offset
 
   # Walks newest first, keeping whole messages until the lines are spent.
   defp newest([], _left, acc), do: acc
@@ -201,12 +209,26 @@ defmodule Badge.Page.Chat do
 
   defp prefix(message), do: Map.get(message, :from, "") <> ": "
 
-  defp lines([], _y, acc), do: :lists.reverse(acc)
+  defp lines([], _y, _at, acc), do: :lists.reverse(acc)
 
-  defp lines([{message, [first | rest_lines]} | rest], y, acc) do
-    items = head_items(message, first, y) ++ tail_items(message, rest_lines, y + @pitch, [])
+  defp lines([{message, [first | rest_lines]} | rest], y, at, acc) do
+    count = length(rest_lines) + 1
 
-    lines(rest, y + @pitch * (length(rest_lines) + 1), items ++ acc)
+    items =
+      head_items(message, first, y) ++
+        tail_items(rest_lines, y + @pitch, []) ++ markers(at == 0, y, count, [])
+
+    lines(rest, y + @pitch * count, at - 1, items ++ acc)
+  end
+
+  # One marker per line, so a message that wraps is marked all the way down.
+  defp markers(false, _y, _count, acc), do: acc
+  defp markers(true, _y, 0, acc), do: acc
+
+  defp markers(true, y, count, acc) do
+    item = {:text, @margin, y, :default16px, @select, @bg, ">"}
+
+    markers(true, y + @pitch, count - 1, [item | acc])
   end
 
   # The name is drawn separately so it can carry its own colour.
@@ -218,26 +240,34 @@ defmodule Badge.Page.Chat do
         rest = :binary.part(first, byte_size(name), byte_size(first) - byte_size(name))
 
         [
-          {:text, @margin + @char_w * byte_size(name), y, :default16px, @fg, @bg, rest},
-          {:text, @margin, y, :default16px, name_colour(message), @bg, name}
+          {:text, @body_x + @char_w * byte_size(name), y, :default16px, @fg, @bg, rest},
+          {:text, @body_x, y, :default16px, name_colour(message), @bg, name}
         ]
 
       false ->
-        [{:text, @margin, y, :default16px, name_colour(message), @bg, first}]
+        [{:text, @body_x, y, :default16px, name_colour(message), @bg, first}]
     end
   end
 
-  defp tail_items(_message, [], _y, acc), do: acc
+  defp tail_items([], _y, acc), do: acc
 
-  defp tail_items(message, [body | rest], y, acc) do
-    item = {:text, @margin, y, :default16px, @fg, @bg, body}
+  defp tail_items([body | rest], y, acc) do
+    item = {:text, @body_x, y, :default16px, @fg, @bg, body}
 
-    tail_items(message, rest, y + @pitch, [item | acc])
+    tail_items(rest, y + @pitch, [item | acc])
   end
 
   # Every message reads the same; only the name says who is speaking.
   defp name_colour(%{mine: true}), do: @select
   defp name_colour(_message), do: @accent
+
+  # Scrolled away, the draft keeps its text but gives up the caret that says
+  # a keystroke would land there.
+  defp draft(%{selected: selected} = state) when selected != nil do
+    line = "> " <> Field.value(state.draft)
+
+    prompt(clipped(line, byte_size(line) - 1), @muted)
+  end
 
   defp draft(%{draft: field} = state) do
     case Field.value(field) do
