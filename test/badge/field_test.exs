@@ -75,4 +75,95 @@ defmodule Badge.FieldTest do
       assert byte_size(masked) == 7
     end
   end
+
+  describe "cursor/1" do
+    test "a fresh field has its cursor at the start" do
+      assert Field.cursor(Field.new(10)) == 0
+    end
+
+    test "typing leaves the cursor at the end" do
+      assert Field.cursor(type(Field.new(10), "abc")) == 3
+    end
+  end
+
+  describe "left/1 and right/1" do
+    test "left moves the cursor back one character" do
+      assert Field.cursor(Field.left(type(Field.new(10), "abc"))) == 2
+    end
+
+    test "left stops at the start rather than going negative" do
+      field = Field.left(Field.left(Field.left(Field.left(type(Field.new(10), "abc")))))
+
+      assert Field.cursor(field) == 0
+    end
+
+    test "right moves the cursor forward one character" do
+      field = type(Field.new(10), "abc") |> Field.left() |> Field.left() |> Field.right()
+
+      assert Field.cursor(field) == 2
+    end
+
+    test "right stops at the end rather than running past it" do
+      assert Field.cursor(Field.right(type(Field.new(10), "abc"))) == 3
+    end
+
+    test "moving the cursor never changes the value" do
+      field = type(Field.new(10), "abc")
+
+      assert Field.value(Field.left(field)) == "abc"
+      assert Field.value(Field.right(Field.left(field))) == "abc"
+    end
+
+    test "left on an empty field is a no-op rather than a crash" do
+      field = Field.new(10)
+
+      assert Field.left(field) == field
+    end
+  end
+
+  describe "editing mid-buffer" do
+    test "insert lands at the cursor" do
+      field = type(Field.new(10), "ac") |> Field.left()
+
+      assert Field.value(type(field, "b")) == "abc"
+    end
+
+    test "insert mid-buffer leaves the cursor after what was typed" do
+      field = type(Field.new(10), "ac") |> Field.left()
+
+      assert Field.cursor(type(field, "b")) == 2
+    end
+
+    test "backspace removes the character before the cursor" do
+      field = type(Field.new(10), "abc") |> Field.left()
+
+      assert Field.value(Field.backspace(field)) == "ac"
+    end
+
+    test "backspace at the start deletes nothing" do
+      field = type(Field.new(10), "abc") |> Field.left() |> Field.left() |> Field.left()
+
+      assert Field.value(Field.backspace(field)) == "abc"
+    end
+
+    test "a full field still refuses mid-buffer insertions" do
+      field = type(Field.new(3), "abc") |> Field.left()
+
+      assert Field.value(type(field, "z")) == "abc"
+    end
+  end
+
+  describe "remaining/1" do
+    test "a fresh field has its whole capacity left" do
+      assert Field.remaining(Field.new(10)) == 10
+    end
+
+    test "counts down as characters are typed" do
+      assert Field.remaining(type(Field.new(10), "abc")) == 7
+    end
+
+    test "reaches zero at capacity and stays there" do
+      assert Field.remaining(type(Field.new(3), "abcdef")) == 0
+    end
+  end
 end

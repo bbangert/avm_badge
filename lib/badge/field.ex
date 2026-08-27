@@ -1,39 +1,64 @@
 defmodule Badge.Field do
   @moduledoc """
-  A single-line text field with a capacity, for entering a passphrase.
+  A single-line text field with a capacity and a cursor.
 
   `Badge.TextBuffer` is a full grid editor with wrapping and scrolling, which
-  is the wrong shape here. Characters accumulate as a reversed charlist for
-  O(1) insertion and become a binary only in `value/1`.
+  is the wrong shape here. The text is split around the cursor: `left` holds
+  what precedes it, reversed, so insertion stays O(1); `right` holds what
+  follows, in order.
 
   State is a plain map, not a struct.
   """
 
   @doc "An empty field holding at most `capacity` characters."
   @spec new(pos_integer) :: map
-  def new(capacity), do: %{chars: [], count: 0, capacity: capacity}
+  def new(capacity), do: %{left: [], right: [], count: 0, cursor: 0, capacity: capacity}
 
-  @doc "Appends one character, or leaves the field alone when it is full."
+  @doc "Inserts one character at the cursor, or leaves the field alone when it is full."
   @spec insert(map, integer) :: map
   def insert(%{count: count, capacity: capacity} = field, _char) when count >= capacity do
     field
   end
 
   def insert(field, char) do
-    %{field | chars: [char | field.chars], count: field.count + 1}
+    %{field | left: [char | field.left], count: field.count + 1, cursor: field.cursor + 1}
   end
 
-  @doc "Removes the last character, or leaves an empty field alone."
+  @doc "Removes the character before the cursor, or leaves the field alone at the start."
   @spec backspace(map) :: map
-  def backspace(%{chars: []} = field), do: field
+  def backspace(%{left: []} = field), do: field
 
-  def backspace(%{chars: [_last | rest]} = field) do
-    %{field | chars: rest, count: field.count - 1}
+  def backspace(%{left: [_last | rest]} = field) do
+    %{field | left: rest, count: field.count - 1, cursor: field.cursor - 1}
+  end
+
+  @doc "Moves the cursor one character towards the start."
+  @spec left(map) :: map
+  def left(%{left: []} = field), do: field
+
+  def left(%{left: [char | rest]} = field) do
+    %{field | left: rest, right: [char | field.right], cursor: field.cursor - 1}
+  end
+
+  @doc "Moves the cursor one character towards the end."
+  @spec right(map) :: map
+  def right(%{right: []} = field), do: field
+
+  def right(%{right: [char | rest]} = field) do
+    %{field | left: [char | field.left], right: rest, cursor: field.cursor + 1}
   end
 
   @doc "The text entered so far."
   @spec value(map) :: binary
-  def value(field), do: :erlang.list_to_binary(:lists.reverse(field.chars))
+  def value(field), do: :erlang.list_to_binary(:lists.reverse(field.left) ++ field.right)
+
+  @doc "Where the cursor sits, counted from the start."
+  @spec cursor(map) :: non_neg_integer
+  def cursor(field), do: field.cursor
+
+  @doc "How many characters may still be entered."
+  @spec remaining(map) :: non_neg_integer
+  def remaining(field), do: field.capacity - field.count
 
   @doc "One asterisk per character, for display."
   @spec masked(map) :: binary
