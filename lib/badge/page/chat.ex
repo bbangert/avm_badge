@@ -54,6 +54,9 @@ defmodule Badge.Page.Chat do
   # its own and wastes most of the one below.
   @orphan 6
 
+  # Room for the hyphens `Text.wrap/3` adds when one long word is broken.
+  @hyphens 3
+
   @none "No messages yet"
 
   @impl true
@@ -211,8 +214,8 @@ defmodule Badge.Page.Chat do
 
   @doc "What a message may hold once the name it is drawn under is taken out."
   @spec limit_for(binary | nil) :: non_neg_integer
-  def limit_for(nil), do: @budget
-  def limit_for(name), do: max(@budget - byte_size(name) - 2, 0)
+  def limit_for(nil), do: @budget - @hyphens
+  def limit_for(name), do: max(@budget - @hyphens - byte_size(name) - 2, 0)
 
   @doc "The colour for a count of characters left, or `nil` while there is room."
   @spec counter_colour(non_neg_integer) :: integer | nil

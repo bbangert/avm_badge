@@ -376,16 +376,16 @@ defmodule Badge.Page.ChatTest do
   end
 
   describe "the limit" do
-    test "three panel lines before anyone is named" do
-      assert Chat.limit_for(nil) == 114
+    test "three panel lines less the hyphens, before anyone is named" do
+      assert Chat.limit_for(nil) == 111
     end
 
     test "leaves room for the name, colon and space" do
-      assert Chat.limit_for("Gustavo") == 114 - 9
+      assert Chat.limit_for("Gustavo") == 111 - 9
     end
 
     test "a long name eats further into the budget" do
-      assert Chat.limit_for("Bartholomew") == 114 - 13
+      assert Chat.limit_for("Bartholomew") == 111 - 13
     end
 
     test "never goes negative on an absurd name" do
