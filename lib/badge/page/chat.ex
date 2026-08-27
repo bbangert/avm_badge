@@ -33,8 +33,11 @@ defmodule Badge.Page.Chat do
   # What a line can hold before it runs off the panel.
   @columns div(Theme.width() - 2 * @margin, @char_w)
 
-  # The counter needs the right-hand end of the draft line.
-  @draft_columns @columns - 4
+  # The counter needs the right-hand end of the draft line: two digits and a gap.
+  @draft_columns @columns - 3
+
+  # Where the caret settles once the draft is long enough to scroll.
+  @caret_rest div(@draft_columns, 2)
 
   @draft_y 214
   @rule_y 206
@@ -240,8 +243,9 @@ defmodule Badge.Page.Chat do
 
   defp clipped(line, _at) when byte_size(line) <= @draft_columns, do: line
 
+  # The caret walks in to the middle before the text starts moving under it.
   defp clipped(line, at) do
-    start = min(max(at + 1 - @draft_columns, 0), byte_size(line) - @draft_columns)
+    start = min(max(at - @caret_rest, 0), byte_size(line) - @draft_columns)
 
     :binary.part(line, start, @draft_columns)
   end

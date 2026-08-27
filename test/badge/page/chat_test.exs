@@ -25,6 +25,16 @@ defmodule Badge.Page.ChatTest do
 
   defp long(n), do: :erlang.list_to_binary(:lists.duplicate(n, ?x))
 
+  defp lefts(state, n) do
+    :lists.foldl(fn _i, acc -> press(acc, {:move, :left}) end, state, :lists.seq(1, n))
+  end
+
+  defp caret_at(state) do
+    {at, 1} = :binary.match(draft_line(state), "_")
+
+    at
+  end
+
   defp counters(state) do
     for {:text, _x, 214, _f, colour, _b, body} <- Chat.render(state),
         colour == Theme.warn() or colour == Theme.alert(),
@@ -297,22 +307,36 @@ defmodule Badge.Page.ChatTest do
     end
 
     test "a long draft is windowed to the drawn width" do
-      assert byte_size(draft_line(typed(Chat.init(), long(60)))) == 34
+      assert byte_size(draft_line(typed(Chat.init(), long(60)))) == 35
     end
 
     test "a windowed draft still ends at the caret" do
-      assert :binary.part(draft_line(typed(Chat.init(), long(60))), 33, 1) == "_"
+      assert caret_at(typed(Chat.init(), long(60))) == 34
+    end
+
+    test "the window holds still while the caret walks in from the edge" do
+      state = typed(Chat.init(), long(60))
+
+      assert caret_at(press(state, {:move, :left})) == 33
+      assert caret_at(lefts(state, 10)) == 24
+    end
+
+    test "the caret stops at the middle and the text scrolls instead" do
+      state = typed(Chat.init(), long(60))
+
+      assert caret_at(lefts(state, 17)) == 17
+      assert caret_at(lefts(state, 30)) == 17
+    end
+
+    test "the window reaches the front of a long draft, prompt included" do
+      state = lefts(typed(Chat.init(), long(60)), 60)
+
+      assert caret_at(state) == 2
+      assert :binary.part(draft_line(state), 0, 3) == "> _"
     end
 
     test "moving left in a long draft keeps the caret visible" do
-      state =
-        :lists.foldl(
-          fn _i, acc -> press(acc, {:move, :left}) end,
-          typed(Chat.init(), long(60)),
-          :lists.seq(1, 40)
-        )
-
-      assert :binary.match(draft_line(state), "_") != :nomatch
+      assert :binary.match(draft_line(lefts(typed(Chat.init(), long(60)), 40)), "_") != :nomatch
     end
   end
 
