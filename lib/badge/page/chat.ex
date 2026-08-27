@@ -71,7 +71,7 @@ defmodule Badge.Page.Chat do
 
   @impl true
   def init do
-    %{messages: [], link: :offline, draft: Field.new(@budget)}
+    %{messages: [], link: :offline, draft: Field.new(@budget), selected: nil, offset: 0}
   end
 
   # Hardware is only touched here, never from a key handler.
@@ -90,22 +90,53 @@ defmodule Badge.Page.Chat do
   def leave(_state), do: Link.close()
 
   @impl true
-  def handle_key({:char, char}, state), do: {:ok, %{state | draft: Field.insert(state.draft, char)}}
+  def handle_key({:move, :up}, state), do: older(state, length(state.messages))
 
-  def handle_key({:edit, :backspace}, state) do
-    {:ok, %{state | draft: Field.backspace(state.draft)}}
+  def handle_key({:move, :down}, state), do: newer(state)
+
+  # Anything that is not a scroll puts the focus back where it is typed.
+  def handle_key({:char, char}, state) do
+    {:ok, %{focus(state) | draft: Field.insert(state.draft, char)}}
   end
 
-  def handle_key({:edit, :newline}, state), do: send_draft(Field.value(state.draft), state)
+  def handle_key({:edit, :backspace}, state) do
+    {:ok, %{focus(state) | draft: Field.backspace(state.draft)}}
+  end
 
-  def handle_key({:move, :left}, state), do: {:ok, %{state | draft: Field.left(state.draft)}}
+  def handle_key({:edit, :newline}, state), do: send_draft(Field.value(state.draft), focus(state))
 
-  def handle_key({:move, :right}, state), do: {:ok, %{state | draft: Field.right(state.draft)}}
+  def handle_key({:move, :left}, state) do
+    {:ok, %{focus(state) | draft: Field.left(state.draft)}}
+  end
+
+  def handle_key({:move, :right}, state) do
+    {:ok, %{focus(state) | draft: Field.right(state.draft)}}
+  end
 
   def handle_key(_event, _state), do: :ignore
 
+  # Nothing heard is nothing to scroll through; let the router keep the key.
+  defp older(_state, 0), do: :ignore
+
+  defp older(%{selected: nil} = state, _count), do: {:ok, show(state, 0)}
+
+  defp older(%{selected: selected} = state, count) do
+    {:ok, show(state, min(selected + 1, count - 1))}
+  end
+
+  defp newer(%{selected: nil}), do: :ignore
+
+  defp newer(%{selected: 0} = state), do: {:ok, focus(state)}
+
+  defp newer(%{selected: selected} = state), do: {:ok, show(state, selected - 1)}
+
+  defp focus(state), do: %{state | selected: nil, offset: 0}
+
   # Nothing to say is not a message; let the router keep the key.
   defp send_draft("", _state), do: :ignore
+
+  # Placed so the selection stays on screen; the view rule lands in show/2.
+  defp show(state, selected), do: %{state | selected: selected}
 
   defp send_draft(body, state) do
     Link.say(body)

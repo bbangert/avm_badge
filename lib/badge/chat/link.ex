@@ -35,8 +35,8 @@ defmodule Badge.Chat.Link do
   @tick 2_000
   @beats 15
 
-  # What the page can show; a badge cannot scroll far anyway.
-  @keep 12
+  # How far back the page can scroll.
+  @keep 16
 
   def start_link(:ok), do: GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
 

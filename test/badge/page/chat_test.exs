@@ -17,6 +17,14 @@ defmodule Badge.Page.ChatTest do
 
   defp heard(state, messages), do: %{state | messages: messages, link: :joined}
 
+  defp said(n) do
+    for i <- :lists.seq(1, n), do: %{from: "Ana", body: "message " <> :erlang.integer_to_binary(i)}
+  end
+
+  defp ups(state, n) do
+    :lists.foldl(fn _i, acc -> press(acc, {:move, :up}) end, state, :lists.seq(1, n))
+  end
+
   defp draft_line(state) do
     texts = texts(state)
 
@@ -390,6 +398,78 @@ defmodule Badge.Page.ChatTest do
 
     test "never goes negative on an absurd name" do
       assert Chat.limit_for(long(200)) == 0
+    end
+  end
+
+  describe "scrolling back" do
+    test "the draft is what has focus to begin with" do
+      assert Chat.init().selected == nil
+    end
+
+    test "up selects the newest message" do
+      state = heard(Chat.init(), said(3)) |> press({:move, :up})
+
+      assert state.selected == 0
+    end
+
+    test "up again walks towards the oldest" do
+      state = heard(Chat.init(), said(3)) |> ups(3)
+
+      assert state.selected == 2
+    end
+
+    test "up stops at the oldest held rather than running off" do
+      state = heard(Chat.init(), said(3)) |> ups(9)
+
+      assert state.selected == 2
+    end
+
+    test "up with nothing heard is left to the router" do
+      assert Chat.handle_key({:move, :up}, Chat.init()) == :ignore
+    end
+
+    test "down walks back towards the newest" do
+      state = heard(Chat.init(), said(3)) |> ups(3) |> press({:move, :down})
+
+      assert state.selected == 1
+    end
+
+    test "down from the newest returns to the draft" do
+      state = heard(Chat.init(), said(3)) |> press({:move, :up}) |> press({:move, :down})
+
+      assert state.selected == nil
+    end
+
+    test "down on the draft is left to the router" do
+      assert Chat.handle_key({:move, :down}, Chat.init()) == :ignore
+    end
+
+    test "typing snaps back to the draft and lands the character" do
+      state = heard(Chat.init(), said(3)) |> ups(2) |> typed("hi")
+
+      assert state.selected == nil
+      assert Badge.Field.value(state.draft) == "hi"
+    end
+
+    test "backspace snaps back to the draft" do
+      state =
+        heard(Chat.init(), said(3)) |> typed("hi") |> ups(2) |> press({:edit, :backspace})
+
+      assert state.selected == nil
+      assert Badge.Field.value(state.draft) == "h"
+    end
+
+    test "left and right snap back so the caret is where you look" do
+      state = heard(Chat.init(), said(3)) |> typed("hi") |> ups(2) |> press({:move, :left})
+
+      assert state.selected == nil
+      assert Badge.Field.cursor(state.draft) == 1
+    end
+
+    test "escape is still left to the router while scrolled" do
+      state = heard(Chat.init(), said(3)) |> ups(2)
+
+      assert Chat.handle_key({:nav, :home}, state) == :ignore
     end
   end
 end
