@@ -32,6 +32,10 @@ defmodule Mix.Tasks.Atomvm.ApplicationBin do
     File.mkdir_p!("priv")
     File.write!("priv/application.bin", :erlang.term_to_binary(term))
 
+    # Mix links priv into _build when it compiles. On a clean tree priv did not
+    # exist then, so the packer would not see this file without the link.
+    Mix.Project.build_structure()
+
     Mix.shell().info("priv/application.bin: #{app} #{config[:version]}")
   end
 end
