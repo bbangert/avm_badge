@@ -68,9 +68,13 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   only renders its `status/0` map. Updates and reboots are both `manual`, so
   nothing installs or restarts without a keypress
 - Credentials are NVS keys `nh_key`, `nh_secret` and optional `nh_host` in the
-  `:badge` namespace, written by `tools/provision_nerves_hub.py`. That tool
-  replaces the whole partition, so it takes the wifi credentials too and the
-  display name and peer list are lost
+  `:badge` namespace, written by `tools/provision.py`. It reads the partition,
+  merges what you pass, and writes it back, so anything you do not pass is
+  kept. Values come from a flag, else `BADGE_NH_KEY`-style env vars, else the
+  badge. `--dry-run` reads and shows the merge without writing
+- `provision.py` does not preserve ESP-IDF's own `nvs.net80211`, `phy` and
+  `misc` namespaces; they rebuild on the next boot, costing one slower wifi
+  connect while the PHY recalibrates
 - **ExAtomVM writes no `priv/application.bin`**, and `firmware: boot` needs one.
   Without it the agent refuses to start and NervesHub cannot parse an upload.
   `mix atomvm.application_bin` writes it and is aliased onto `atomvm.packbeam`
