@@ -44,7 +44,8 @@ defmodule Badge do
       {Badge.Sensors, :ok},
       {Badge.Power, :ok},
       {Badge.Ir.Link, :ok},
-      {Badge.Chat.Link, :ok}
+      {Badge.Chat.Link, :ok},
+      {Badge.Update.Link, :ok}
     ]
 
     {:ok, _supervisor} = Supervisor.start_link(children, strategy: :one_for_one)
