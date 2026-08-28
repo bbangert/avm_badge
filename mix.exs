@@ -8,6 +8,9 @@ defmodule Badge.MixProject do
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      # ExAtomVM writes no application.bin, and NervesHub cannot identify
+      # firmware without one.
+      aliases: ["atomvm.packbeam": ["atomvm.application_bin", "atomvm.packbeam"]],
       atomvm: [
         start: Badge,
         flash_offset: 0x2B8000,
