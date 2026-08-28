@@ -223,6 +223,20 @@ defmodule Badge.Update.Link do
     {:noreply, failed(state, reason)}
   end
 
+  # `:nh_ota.start_update/3` monitors the downloader for us, so a crash arrives
+  # here rather than as a result. Without this the screen sits on a bar that
+  # has stopped moving.
+  def handle_info({:DOWN, _ref, :process, pid, reason}, %{download: pid} = state)
+      when reason != :normal do
+    :io.format(~c"Update: downloader died ~p~n", [reason])
+
+    report_failure(state, reason)
+
+    {:noreply, failed(state, reason)}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state), do: {:noreply, state}
+
   def handle_info(message, state) do
     :io.format(~c"Update: unhandled ~p~n", [message])
 
@@ -309,7 +323,8 @@ defmodule Badge.Update.Link do
       reboot: :manual,
       firmware: {:metadata, state.metadata},
       console: true,
-      extensions: :all
+      extensions: :all,
+      capture_io: true
     ]
 
     spawn(fn -> send(link, {:agent, NervesHubLink.start(options)}) end)
