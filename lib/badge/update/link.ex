@@ -82,6 +82,8 @@ defmodule Badge.Update.Link do
       slot: nil,
       target: nil,
       trial: false,
+      starting: false,
+      metadata: nil,
       download: nil
     }
 
@@ -109,8 +111,12 @@ defmodule Badge.Update.Link do
   @impl true
   def handle_cast(:open, %{want: true} = state), do: {:noreply, state}
 
+  # Neither reading flash nor opening a socket happens here: `status/0` is
+  # called from the render loop and must never queue behind either.
   def handle_cast(:open, state) do
-    {:noreply, start_agent(describe(%{state | want: true, state: :waiting}))}
+    describe_later()
+
+    {:noreply, %{state | want: true, state: :waiting}}
   end
 
   def handle_cast(:close, %{want: false} = state), do: {:noreply, state}
@@ -159,6 +165,41 @@ defmodule Badge.Update.Link do
   def handle_info(:tick, state), do: {:noreply, start_agent(state)}
 
   def handle_info({:nerves_hub, event}, state), do: {:noreply, hub(event, state)}
+
+  # The tab was left while the handshake was still running.
+  def handle_info({:agent, {:ok, agent}}, %{want: false} = state) do
+    NervesHubLink.stop(agent)
+
+    {:noreply, %{state | starting: false}}
+  end
+
+  def handle_info({:agent, {:ok, agent}}, state) do
+    {:noreply, %{state | agent: agent, starting: false}}
+  end
+
+  def handle_info({:agent, {:error, reason}}, state) do
+    :io.format(~c"Update: connect failed ~p~n", [reason])
+
+    {:noreply, %{failed(state, reason) | starting: false}}
+  end
+
+  def handle_info({:described, %{metadata: nil} = running}, state) do
+    described = %{state | slot: running.slot, firmware: nil, trial: running.trial}
+
+    {:noreply, %{described | state: :failed, reason: "no firmware metadata"}}
+  end
+
+  def handle_info({:described, running}, state) do
+    described = %{
+      state
+      | slot: running.slot,
+        firmware: running.firmware,
+        trial: running.trial,
+        metadata: running.metadata
+    }
+
+    {:noreply, start_agent(described)}
+  end
 
   def handle_info({:nh_ota, _pid, {:progress, percent}}, state) do
     report(state, percent)
@@ -227,6 +268,8 @@ defmodule Badge.Update.Link do
 
   defp start_agent(%{want: false} = state), do: state
   defp start_agent(%{agent: agent} = state) when agent != nil, do: state
+  defp start_agent(%{starting: true} = state), do: state
+  defp start_agent(%{metadata: nil} = state), do: state
 
   defp start_agent(state) do
     case credentials() do
@@ -241,29 +284,28 @@ defmodule Badge.Update.Link do
 
   defp ready(_status, _key, _secret, state), do: %{state | state: :waiting}
 
+  # Signing the shared secret is a thousand rounds of PBKDF2 and the handshake
+  # is a second or more, so both run somewhere the page cannot be stuck behind.
   defp connect(key, secret, state) do
     identifier = Identity.format(Identity.chip_id())
 
     :io.format(~c"Update: connecting as ~s~n", [identifier])
 
+    link = self()
+
     options = [
-      handler: self(),
+      handler: link,
       identifier: identifier,
       shared_secret: {key, secret},
       host: host(),
       updates: :manual,
-      reboot: :manual
+      reboot: :manual,
+      firmware: {:metadata, state.metadata}
     ]
 
-    case NervesHubLink.start(options) do
-      {:ok, agent} ->
-        %{state | agent: agent, state: :connecting, reason: nil}
+    spawn(fn -> send(link, {:agent, NervesHubLink.start(options)}) end)
 
-      {:error, reason} ->
-        :io.format(~c"Update: connect failed ~p~n", [reason])
-
-        %{state | state: :failed, reason: describe_reason(reason)}
-    end
+    %{state | starting: true, state: :connecting, reason: nil}
   end
 
   defp stop_agent(%{agent: nil} = state), do: idle(state)
@@ -283,6 +325,8 @@ defmodule Badge.Update.Link do
         percent: 0,
         offer: nil,
         payload: nil,
+        starting: false,
+        metadata: nil,
         download: nil
     }
   end
@@ -301,8 +345,15 @@ defmodule Badge.Update.Link do
     NervesHubLink.update_failed(state.agent, describe_reason(reason))
   end
 
-  # Read once, off the render loop: this walks and hashes the whole partition.
-  defp describe(state) do
+  # Walking and hashing the whole partition takes long enough to show as a
+  # stalled page, so it runs in its own process and reports back.
+  defp describe_later do
+    link = self()
+
+    spawn(fn -> send(link, {:described, running_firmware()}) end)
+  end
+
+  defp running_firmware do
     slot = :nh_flash.boot_partition()
 
     case :nh_flash.read_metadata() do
@@ -316,12 +367,12 @@ defmodule Badge.Update.Link do
           slot
         ])
 
-        %{state | slot: slot, trial: pending?(), firmware: running}
+        %{slot: slot, firmware: running, trial: pending?(), metadata: metadata}
 
       {:error, reason} ->
         :io.format(~c"Update: no firmware metadata ~p~n", [reason])
 
-        %{state | slot: slot, trial: pending?()}
+        %{slot: slot, firmware: nil, trial: pending?(), metadata: nil}
     end
   end
 

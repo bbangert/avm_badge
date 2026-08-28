@@ -119,6 +119,11 @@ defmodule Badge.Chat.Link do
     {:noreply, state |> connect() |> beat()}
   end
 
+  # The page was left before the handshake landed; the port is already closed.
+  def handle_info({:websocket, _port, :connected}, %{want: false} = state) do
+    {:noreply, state}
+  end
+
   def handle_info({:websocket, _port, :connected}, state) do
     :io.format(~c"Chat: socket up~n")
 
