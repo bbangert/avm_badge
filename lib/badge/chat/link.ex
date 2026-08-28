@@ -2,13 +2,13 @@ defmodule Badge.Chat.Link do
   @moduledoc """
   Keeps a Phoenix channel joined over a websocket.
 
-  Two lifetimes, not one. The socket opens as soon as the radio has an address
-  and then stays up for good, reconnecting on its own; the channel is joined
-  only while `Badge.Page.Chat` is showing. Leaving the room costs a `phx_leave`
-  rather than a disconnection, so coming back does not pay for a TLS handshake.
+  Socket and channel share one lifetime, and it is the chat page's. `open/0`
+  connects and joins; `close/0` leaves and disconnects. A badge on the home
+  grid holds no socket at all, which is what lets `Badge.Update.Link` have one
+  when it needs it.
 
-  `open/0` and `close/0` therefore mean join and leave, not connect and
-  disconnect. The page calls them on entry and exit as it always did.
+  Entering the page therefore costs a TLS handshake before the first line can
+  be sent, and the page reads as connecting until it lands.
 
   The socket carries the identity as connect params, so it is fixed for the
   life of the connection: a display name changed while connected reaches the
@@ -96,7 +96,11 @@ defmodule Badge.Chat.Link do
   @impl true
   def handle_cast(:open, %{want: true} = state), do: {:noreply, state}
 
-  def handle_cast(:open, state), do: {:noreply, join(%{state | want: true})}
+  # Connected here rather than left to the next tick, which is two seconds of
+  # nothing on a page someone just opened.
+  def handle_cast(:open, state) do
+    {:noreply, %{state | want: true} |> connect() |> join()}
+  end
 
   def handle_cast(:close, %{want: false} = state), do: {:noreply, state}
 
@@ -148,7 +152,7 @@ defmodule Badge.Chat.Link do
   # A certificate is not yet valid at the epoch, so this waits for the clock as
   # well as for an address. The long poll it replaced ran in the clear and
   # could start as soon as the radio was up.
-  defp connect(%{port: nil} = state) do
+  defp connect(%{want: true, port: nil} = state) do
     case Wifi.status() do
       %{radio: :connected, synced: true} -> opening(state)
       _not_ready -> state
@@ -188,11 +192,15 @@ defmodule Badge.Chat.Link do
 
   defp join(state), do: state
 
-  defp leave(%{channel: :joined} = state) do
-    %{push(state, @topic, "phx_leave", %{}) | channel: :out, messages: []}
-  end
+  # No `phx_leave` first: closing the socket says the same thing, and the frame
+  # would be racing the close.
+  defp leave(%{port: nil} = state), do: %{state | channel: :out, messages: []}
 
-  defp leave(state), do: %{state | channel: :out, messages: []}
+  defp leave(state) do
+    Socket.close(state.port)
+
+    %{state | port: nil, up: false, channel: :out, messages: []}
+  end
 
   defp push(state, topic, event, payload, join_ref \\ @join_ref) do
     frame = Wire.encode(join_ref, ref(state), topic, event, payload)
