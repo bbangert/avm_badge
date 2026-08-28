@@ -27,7 +27,7 @@ defmodule Badge.Page.SensorsTest do
   describe "identity" do
     test "announces itself for the home grid" do
       assert Sensors.title() == "Sensors"
-      assert Sensors.icon() == :triangle
+      assert Sensors.icon() == :clover
     end
 
     test "carries both sensor pages, tilt first" do

@@ -27,7 +27,7 @@ defmodule Badge.Page.Text do
   def title, do: "Text"
 
   @impl true
-  def icon, do: :square
+  def icon, do: :cross
 
   @impl true
   def init, do: TextBuffer.new(@cols, @rows)

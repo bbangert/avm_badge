@@ -68,7 +68,7 @@ defmodule Badge.Page.Chat do
   def title, do: "Chat"
 
   @impl true
-  def icon, do: :cross
+  def icon, do: :triangle
 
   # A frame is a whole panel, and messages arrive at walking pace.
   @impl true

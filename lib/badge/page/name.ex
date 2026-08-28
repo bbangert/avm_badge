@@ -108,7 +108,7 @@ defmodule Badge.Page.Name do
   def title, do: "Name"
 
   @impl true
-  def icon, do: :diamond
+  def icon, do: :square
 
   @impl true
   def init do

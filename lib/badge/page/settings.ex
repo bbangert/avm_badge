@@ -42,7 +42,7 @@ defmodule Badge.Page.Settings do
   def title, do: "Settings"
 
   @impl true
-  def icon, do: :circle
+  def icon, do: :diamond
 
   # Nothing here moves fast enough to be worth a full repaint ten times a second.
   @impl true

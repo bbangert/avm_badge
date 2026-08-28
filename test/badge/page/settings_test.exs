@@ -31,7 +31,7 @@ defmodule Badge.Page.SettingsTest do
   describe "identity" do
     test "announces itself for the home grid" do
       assert Settings.title() == "Settings"
-      assert Settings.icon() == :circle
+      assert Settings.icon() == :diamond
     end
 
     test "repaints slowly, since a frame is a whole panel" do

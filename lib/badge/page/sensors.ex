@@ -32,7 +32,7 @@ defmodule Badge.Page.Sensors do
   def title, do: "Sensors"
 
   @impl true
-  def icon, do: :triangle
+  def icon, do: :clover
 
   @doc "The sub-pages, in carousel order."
   def subpages, do: @subpages

@@ -23,7 +23,7 @@ defmodule Badge.Page.LedTest do
   describe "identity" do
     test "announces itself for the home grid" do
       assert Led.title() == "LED"
-      assert Led.icon() == :clover
+      assert Led.icon() == :circle
     end
   end
 

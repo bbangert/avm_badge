@@ -39,7 +39,7 @@ defmodule Badge.Page.Led do
   def title, do: "LED"
 
   @impl true
-  def icon, do: :clover
+  def icon, do: :circle
 
   @impl true
   def init, do: %{index: 0, hue: 0, pushed: nil, loaded: false}

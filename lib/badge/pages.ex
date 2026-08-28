@@ -8,12 +8,12 @@ defmodule Badge.Pages do
   """
 
   @pages [
-    {:square, Badge.Page.Text},
-    {:triangle, Badge.Page.Sensors},
-    {:cross, Badge.Page.Chat},
-    {:circle, Badge.Page.Settings},
-    {:clover, Badge.Page.Led},
-    {:diamond, Badge.Page.Name}
+    {:square, Badge.Page.Name},
+    {:triangle, Badge.Page.Chat},
+    {:cross, Badge.Page.Text},
+    {:circle, Badge.Page.Led},
+    {:clover, Badge.Page.Sensors},
+    {:diamond, Badge.Page.Settings}
   ]
 
   @doc "Every slot, in button order."

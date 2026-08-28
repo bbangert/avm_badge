@@ -49,7 +49,7 @@ defmodule Badge.Page.NameTest do
   describe "identity" do
     test "announces itself for the home grid" do
       assert Name.title() == "Name"
-      assert Name.icon() == :diamond
+      assert Name.icon() == :square
     end
 
     test "does not trap escape" do
