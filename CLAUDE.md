@@ -83,8 +83,22 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - The agent commits a pending update when it joins, so opening the Update tab
   is what takes new firmware off trial
 - `atomvm.check` flags `json:encode/1` and `json:decode/1` falsely - AtomVM
-  ships `libs/estdlib/src/json.erl`. `erlang:--/2` and `erlang:phash2/2` come
-  from the wrapper's Mix tasks, which are packed but never run
+  ships `libs/estdlib/src/json.erl`. `erlang:--/2`, `erlang:phash2/2`, `File`,
+  `Mix` and `String` come from Mix tasks that are packed but never run
+- **Internal RAM, not free heap, is the scarce resource.** `Power:` reports
+  ~2MB free, which is almost all PSRAM; FreeRTOS task stacks and DMA buffers
+  can only come from the ~300K of internal RAM. A websocket that cannot get it
+  fails with `websocket_client: Error create websocket task` and the device
+  panics. `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` in `sdkconfig.defaults.in` is
+  what decides this: at 4096 the 1K chunk binaries a partition read produces
+  were served from internal RAM and piled up as garbage AtomVM never collected,
+  because its heap is in PSRAM. 512 leaves ~90K internal instead of ~30K
+- Neither `esp32_free_heap_size` nor `esp32_largest_free_block` can see this -
+  both report `MALLOC_CAP_DEFAULT`, which includes PSRAM. Measuring it needs
+  `heap_caps_get_free_size(MALLOC_CAP_INTERNAL)` from C
+- `Badge.Update.Link` reads flash and opens the socket in spawned processes,
+  never in its own: `status/0` is called from the render loop, and a `call`
+  queued behind a 671K hash or a TLS handshake stalls the page
 
 ## AtomVM is not the BEAM
 
