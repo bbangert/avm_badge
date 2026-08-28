@@ -12,8 +12,8 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - Board resets after flashing, so chain flash and read to catch boot output:
   `( mix atomvm.esp32.flash >/dev/null 2>&1; stty -f <port> 115200 raw -echo; timeout 25 cat <port> )`
 - Never run unbounded `cat`/`screen` on the port — it blocks the next flash
-- Reflashing does not need `erase-flash`: `nvs` is unchanged by the
-  repartition, so wifi credentials, profile and peers survive
+- Reflashing does not need `erase-flash`: `nvs` is unchanged by the repartition,
+  so wifi credentials, profile and peers survive
 - No `flash-elixir` target in this AtomVM revision — `idf.py flash` writes
   `boot.avm` itself
 - Base image rebuild (rare): `. $IDF_PATH/export.sh; idf.py build` in
@@ -23,23 +23,23 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Flash layout
 
-- Two packbeam slots: `main.avm` at `0x2B8000` and `alt.avm` at `0x35C000`,
-  656K each. NervesHub writes whichever one is not running and flips
+- Two packbeam slots: `main.avm` at `0x2B8000` and `alt.avm` at `0x35C000`, 656K
+  each. NervesHub writes whichever one is not running and flips
   `atomvm`/`boot_path` in NVS
 - `assets.avm` at `0x278000` holds the rickroll frames and the `.uf` fonts,
   mounted by `Badge.start/0`. `firmware/tools/flashassets.sh` packs it and
-  writes it in one step, auto-detecting the port; it is **not** updated over
-  the air. Run `firmware/tools/gif.py` first if the frames changed
+  writes it in one step, auto-detecting the port; it is **not** updated over the
+  air. Run `firmware/tools/gif.py` first if the frames changed
 - `python3 firmware/tools/check_partitions.py <partitions.csv> [label=path ...]`
   fails if an artifact outgrows its partition. `flashassets.sh` checks the
   assets partition itself
-- If `assets.avm` is missing or unflashed, the badge boots normally and
-  prints `Badge: no assets partition:` — but opening Sudo Mode kills the
-  `Badge.UI` GenServer, which restarts and resets the page to Home. It does
-  **not** crash-loop. What Sudo Mode should draw when frames are absent is a
-  pending follow-up decision.
-- `dogica` and `pixel_operator` are compiled into `main.avm`, so text survives
-  a missing assets partition. `w95fa` is read from it on demand; a failed read
+- If `assets.avm` is missing or unflashed, the badge boots normally and prints
+  `Badge: no assets partition:` — but opening Sudo Mode kills the `Badge.UI`
+  GenServer, which restarts and resets the page to Home. It does **not**
+  crash-loop. What Sudo Mode should draw when frames are absent is a pending
+  follow-up decision.
+- `dogica` and `pixel_operator` are compiled into `main.avm`, so text survives a
+  missing assets partition. `w95fa` is read from it on demand; a failed read
   logs `UI: font ~p not in assets partition` once and is not retried.
 
 ## Chat transport
@@ -48,10 +48,10 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   component; `Badge.Chat.Socket` wraps it, `Badge.Chat.Link` owns the port
 - **wss:// works, with two hard-won constraints.** TLS terminates at Phoenix
   (`:4443`, chain in `avm_badge_server/priv/cert`, badges pin the CA from
-  `assets/certs/badge-ca.pem`). Never behind ngrok's https edge: it hangs up
-  ~1s after its server flight, and this hardware needs ~1.6s to verify a
-  public P-384 chain. For remote access use `ngrok tcp 4443` (raw bytes, no
-  edge TLS) - the cert's SAN already covers `*.tcp.eu.ngrok.io`
+  `assets/certs/badge-ca.pem`). Never behind ngrok's https edge: it hangs up ~1s
+  after its server flight, and this hardware needs ~1.6s to verify a public
+  P-384 chain. For remote access use `ngrok tcp 4443` (raw bytes, no edge TLS) -
+  the cert's SAN already covers `*.tcp.eu.ngrok.io`
 - Match `{:websocket, _port, ...}` messages WITHOUT pinning the port: the
   driver's port term is not the one `open_port` returned, and a pinned match
   drops every message silently
@@ -91,9 +91,8 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   oldest.
 - Z-order is tail-to-head: background rect **last**, cursor **first**.
 - `:default16px` (8x16) is the only built-in font.
-- Rotation 3 needs AtomGL branch `led-modes` (`11be5f9`) in the
-  base image. Without it the panel is **silently black** — no error anywhere in
-  Elixir.
+- Rotation 3 needs AtomGL branch `led-modes` (`11be5f9`) in the base image.
+  Without it the panel is **silently black** — no error anywhere in Elixir.
 
 ## Testing
 
@@ -117,3 +116,6 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   built that way.
 - Design rationale lives in `../docs/` (outside this repo), not in code.
 - Never discard uncommitted changes; report them instead.
+- Always use the superpowers skills for brainstorming, writing plans, etc. But
+  the superpower artifacts should not be committed to the repo
+- Always use /i-have-adhd skill to format output to the user
