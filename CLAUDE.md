@@ -5,7 +5,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 671 tests across 42 files, no board needed
+- `mix test` — 771 tests across 43 files, no board needed
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
 - `ls /dev/cu.usbmodem*` — board re-enumerates, path changes between sessions
@@ -57,6 +57,30 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   drops every message silently
 - The socket opens only after `Wifi.status()` shows `synced: true` - at the
   epoch every certificate is "not yet valid"
+- Both links are page-scoped: `Badge.Chat.Link` connects on entry to the chat
+  page and disconnects on the way out, and `Badge.Update.Link` does the same for
+  the Update tab. A badge on the home grid holds no socket. Entering chat
+  therefore costs a handshake it used not to
+
+## Firmware updates
+
+- `Badge.Update.Link` owns the NervesHub agent; `Badge.Page.Settings.Update`
+  only renders its `status/0` map. Updates and reboots are both `manual`, so
+  nothing installs or restarts without a keypress
+- Credentials are NVS keys `nh_key`, `nh_secret` and optional `nh_host` in the
+  `:badge` namespace, written by `tools/provision_nerves_hub.py`. That tool
+  replaces the whole partition, so it takes the wifi credentials too and the
+  display name and peer list are lost
+- **ExAtomVM writes no `priv/application.bin`**, and `firmware: boot` needs one.
+  Without it the agent refuses to start and NervesHub cannot parse an upload.
+  `mix atomvm.application_bin` writes it and is aliased onto `atomvm.packbeam`
+- There is **no automatic rollback**. `:nh_ota.revert/0` is reached from the
+  Update tab; firmware that will not boot needs a cable
+- The agent commits a pending update when it joins, so opening the Update tab
+  is what takes new firmware off trial
+- `atomvm.check` flags `json:encode/1` and `json:decode/1` falsely - AtomVM
+  ships `libs/estdlib/src/json.erl`. `erlang:--/2` and `erlang:phash2/2` come
+  from the wrapper's Mix tasks, which are packed but never run
 
 ## AtomVM is not the BEAM
 
