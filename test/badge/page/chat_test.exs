@@ -390,6 +390,17 @@ defmodule Badge.Page.ChatTest do
   end
 
   describe "the limit" do
+    test "starts at the nameless budget, before the profile is read" do
+      state = Chat.init()
+
+      assert state.loaded == false
+      assert Badge.Field.capacity(state.draft) == Chat.limit_for(nil)
+    end
+
+    test "a fresh visit reads the profile again, so a renamed badge is picked up" do
+      assert Chat.init().loaded == false
+    end
+
     test "three panel lines less the hyphens, before anyone is named" do
       assert Chat.limit_for(nil) == 108
     end

@@ -14,6 +14,7 @@ defmodule Badge.Page.Chat do
 
   alias Badge.Chat.Link
   alias Badge.Field
+  alias Badge.Profile
   alias Badge.Readout
   alias Badge.Text
   alias Badge.Theme
@@ -75,7 +76,16 @@ defmodule Badge.Page.Chat do
 
   @impl true
   def init do
-    %{messages: [], link: :offline, draft: Field.new(limit_for(nil)), selected: nil, offset: 0, heard: 0}
+    %{
+      messages: [],
+      link: :offline,
+      draft: Field.new(limit_for(nil)),
+      selected: nil,
+      offset: 0,
+      heard: 0,
+      limit: limit_for(nil),
+      loaded: false
+    }
   end
 
   # Hardware is only touched here, never from a key handler.
@@ -84,10 +94,19 @@ defmodule Badge.Page.Chat do
     Link.open()
     status = Link.status()
 
-    draft = Field.resize(state.draft, limit_for(status.name))
+    state = named(state)
+    draft = Field.resize(state.draft, state.limit)
 
     %{state | messages: status.messages, link: status.state, draft: draft, heard: status.heard}
     |> drift(status.heard - state.heard)
+  end
+
+  # The profile arrives on the first tick, so init/0 stays pure. A page is built
+  # afresh on every visit, so a name changed since the last one is picked up.
+  defp named(%{loaded: true} = state), do: state
+
+  defp named(state) do
+    %{state | loaded: true, limit: limit_for(Profile.display_name(Profile.load()))}
   end
 
   # A page is not a process, so the session has nowhere else to be given back.

@@ -57,7 +57,6 @@ defmodule Badge.Chat.Link do
           state: atom,
           messages: [map],
           host: binary,
-          name: binary | nil,
           heard: non_neg_integer
         }
   def status, do: GenServer.call(__MODULE__, :status)
@@ -88,7 +87,6 @@ defmodule Badge.Chat.Link do
       state: state.channel,
       messages: state.messages,
       host: Socket.host(),
-      name: state.name,
       heard: state.heard
     }
 
