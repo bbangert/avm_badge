@@ -1,0 +1,47 @@
+defmodule Badge.Update.LinkTest do
+  use ExUnit.Case, async: true
+
+  alias Badge.Update.Link
+
+  # Exactly what nh_metadata:describe/2 builds, keys and types both. Everything
+  # here is a binary: nh_packbeam converts the application name from an atom
+  # and its properties from charlists before this is reached.
+  defp metadata do
+    %{
+      app_name: "badge",
+      app_version: "0.1.0",
+      description: "badge",
+      avm_sha256: "a3f9c1e2d4b56789a3f9c1e2d4b56789a3f9c1e2d4b56789a3f9c1e2d4b56789",
+      atomvm_version: "0.8.0-dev"
+    }
+  end
+
+  describe "describing the running firmware" do
+    test "reads the keys nh_flash actually answers with" do
+      assert Link.firmware(metadata()) == %{
+               name: "badge",
+               version: "0.1.0",
+               sha: "a3f9c1e2"
+             }
+    end
+
+    test "shortens the digest, which is too long for the row" do
+      assert byte_size(Link.firmware(metadata()).sha) == 8
+    end
+
+    test "falls back rather than crashing when a key is missing" do
+      assert Link.firmware(%{}) == %{name: "unknown", version: "?", sha: ""}
+    end
+
+    test "falls back when a value is not a binary" do
+      odd = %{metadata() | app_name: :badge, app_version: ~c"0.1.0"}
+
+      assert Link.firmware(odd).name == "unknown"
+      assert Link.firmware(odd).version == "?"
+    end
+
+    test "a short digest is left alone rather than padded" do
+      assert Link.firmware(%{metadata() | avm_sha256: "abc"}).sha == "abc"
+    end
+  end
+end

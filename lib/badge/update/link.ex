@@ -307,7 +307,16 @@ defmodule Badge.Update.Link do
 
     case :nh_flash.read_metadata() do
       {:ok, metadata} ->
-        %{state | slot: slot, trial: pending?(), firmware: firmware(metadata)}
+        running = firmware(metadata)
+
+        :io.format(~c"Update: running ~s ~s ~s from ~s~n", [
+          running.name,
+          running.version,
+          running.sha,
+          slot
+        ])
+
+        %{state | slot: slot, trial: pending?(), firmware: running}
 
       {:error, reason} ->
         :io.format(~c"Update: no firmware metadata ~p~n", [reason])
@@ -316,11 +325,19 @@ defmodule Badge.Update.Link do
     end
   end
 
-  defp firmware(metadata) do
+  @doc """
+  The running firmware, from what `:nh_flash.read_metadata/0` answers.
+
+  Its keys are `app_name`, `app_version` and `avm_sha256`, which is why this
+  is public: nothing on the host can call `read_metadata/0`, so the names are
+  pinned by a test instead.
+  """
+  @spec firmware(map) :: %{name: binary, version: binary, sha: binary}
+  def firmware(metadata) do
     %{
-      name: field(metadata, :name, "unknown"),
-      version: field(metadata, :version, "?"),
-      sha: short(field(metadata, :sha256, ""))
+      name: field(metadata, :app_name, "unknown"),
+      version: field(metadata, :app_version, "?"),
+      sha: short(field(metadata, :avm_sha256, ""))
     }
   end
 
