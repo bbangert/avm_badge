@@ -9,6 +9,9 @@ defmodule Badge.Page.Settings do
   Sub-page state persists while you slide sideways, because moving between
   sub-pages is not leaving the page. Leaving Settings entirely still resets
   everything, since `Badge.UI` calls `init/0` on every entry.
+
+  A sub-page slid away from is told with `leave/1` even though its state is
+  kept, so one holding a socket or a pin can give it back.
   """
 
   use Badge.Page
@@ -64,6 +67,11 @@ defmodule Badge.Page.Settings do
     end
   end
 
+  # A sub-page is not a process, so sliding away from one is its only chance
+  # to give back anything it holds.
+  @impl true
+  def leave(state), do: active(state).leave(active_state(state))
+
   # Only the visible sub-page ticks; a hidden one would poll sensors nobody is looking at.
   @impl true
   def tick(state) do
@@ -80,6 +88,8 @@ defmodule Badge.Page.Settings do
   defp carousel(_event, _state), do: :ignore
 
   defp step(state, delta) do
+    active(state).leave(active_state(state))
+
     %{state | index: rem(state.index + delta + @count, @count)}
   end
 

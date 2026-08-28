@@ -212,4 +212,23 @@ defmodule Badge.Page.SettingsTest do
              end)
     end
   end
+
+  describe "letting a sub-page go" do
+    test "leaving settings releases whatever the active sub-page holds" do
+      assert Settings.leave(Settings.init()) == :ok
+    end
+
+    test "every sub-page can be left from, whichever tab is showing" do
+      for index <- 0..(length(Settings.subpages()) - 1) do
+        assert Settings.leave(%{Settings.init() | index: index}) == :ok
+      end
+    end
+
+    test "sliding sideways does not reset the sub-page being left" do
+      state = Settings.init()
+      touched = %{state | states: :lists.map(fn _ -> :touched end, state.states)}
+
+      assert right(touched).states == touched.states
+    end
+  end
 end
