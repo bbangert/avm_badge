@@ -136,6 +136,8 @@ defmodule Badge.Update.Link do
   def handle_cast(:install, %{state: :downloading} = state), do: {:noreply, state}
 
   def handle_cast(:install, state) do
+    :io.format(~c"Update: installing ~p~n", [state.payload])
+
     download = :nh_ota.start_update(state.payload, self(), %{})
 
     {:noreply, %{state | state: :downloading, percent: 0, download: download}}
@@ -251,8 +253,13 @@ defmodule Badge.Update.Link do
 
   defp offered(payload, state) when is_map(payload) do
     case Map.get(payload, "update_available", false) do
-      true -> %{state | state: :offered, payload: payload, offer: version(payload)}
-      _none -> state
+      true ->
+        :io.format(~c"Update: offered ~s~n", [version(payload)])
+
+        %{state | state: :offered, payload: payload, offer: version(payload)}
+
+      _none ->
+        state
     end
   end
 
@@ -300,7 +307,9 @@ defmodule Badge.Update.Link do
       host: host(),
       updates: :manual,
       reboot: :manual,
-      firmware: {:metadata, state.metadata}
+      firmware: {:metadata, state.metadata},
+      console: true,
+      extensions: :all
     ]
 
     spawn(fn -> send(link, {:agent, NervesHubLink.start(options)}) end)
