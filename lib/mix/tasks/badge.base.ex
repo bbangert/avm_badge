@@ -25,26 +25,43 @@ defmodule Mix.Tasks.Badge.Base do
     dir = Path.join(@cache, tag)
     parts = if "--full" in args, do: [@bootloader, @table, @vm], else: [@vm]
 
-    download(tag, dir)
+    fetch(tag, dir)
+    verify!(dir, parts)
     flash(dir, parts)
   end
 
-  defp download(tag, dir) do
+  defp fetch(tag, dir) do
     if File.dir?(dir) do
       Mix.shell().info("base image #{tag} already downloaded")
     else
-      File.mkdir_p!(dir)
+      tmp = dir <> ".partial"
+      File.rm_rf!(tmp)
+      File.mkdir_p!(tmp)
       Mix.shell().info("downloading base image #{tag}")
-      cmd!("gh", ["release", "download", tag, "--repo", @repo, "-D", dir])
-      verify!(dir)
+      cmd!("gh", ["release", "download", tag, "--repo", @repo, "-D", tmp])
+      # Only becomes the real cache dir once the download has fully landed.
+      File.rename!(tmp, dir)
     end
   end
 
-  defp verify!(dir) do
-    for line <- dir |> Path.join(@sums) |> File.read!() |> String.split("\n", trim: true) do
-      [expected, name] = String.split(line, "  ", parts: 2)
-      file = Path.basename(name)
-      actual = dir |> Path.join(file) |> File.read!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
+  defp verify!(dir, parts) do
+    sums_path = Path.join(dir, @sums)
+    unless File.exists?(sums_path), do: Mix.raise("#{sums_path} is missing")
+
+    sums =
+      sums_path
+      |> File.read!()
+      |> String.split("\n", trim: true)
+      |> Map.new(fn line ->
+        [hash, name] = String.split(line, "  ", parts: 2)
+        {Path.basename(name), hash}
+      end)
+
+    for {file, _offset} <- parts do
+      expected = sums[file] || Mix.raise("#{@sums} does not cover #{file}")
+      path = Path.join(dir, file)
+      unless File.exists?(path), do: Mix.raise("#{file} is missing from #{dir}")
+      actual = path |> File.read!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
       if actual != expected, do: Mix.raise("#{file}: checksum mismatch, download is corrupt")
     end
   end
