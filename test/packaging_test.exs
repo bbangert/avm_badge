@@ -23,4 +23,23 @@ defmodule PackagingTest do
     assert unpinned == [],
            "a floating ref makes builds irreproducible: #{inspect(unpinned)}"
   end
+
+  @root Path.expand("..", __DIR__)
+
+  test "every generated font is one the firmware actually loads" do
+    generated =
+      Path.wildcard(Path.join(@root, "assets/fonts/*.uf"))
+      |> Enum.map(&Path.basename(&1, ".uf"))
+      |> Enum.sort()
+
+    assert generated == ["dogica", "pixel_operator", "w95fa"]
+  end
+
+  test "asset sources live in the repo" do
+    for path <- ["assets/src/fonts", "assets/src/icons"] do
+      assert File.dir?(Path.join(@root, path)), "#{path} is missing"
+    end
+
+    assert File.exists?(Path.join(@root, "assets/src/icons/rickroll-roll.gif"))
+  end
 end

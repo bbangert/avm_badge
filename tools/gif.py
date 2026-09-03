@@ -10,8 +10,8 @@ Frames are stored small and drawn scaled up, the same trick the shape icons
 use: a 48x48 frame drawn at 3x fills 144x144 for a ninth of the bytes.
 
 Usage:
-  python3 firmware/tools/gif.py --size 48 --frames 10 --out firmware/assets/rickroll
-  python3 firmware/tools/gif.py --report        # size and storage table, writes nothing
+  python3 tools/gif.py --size 48 --frames 16 --out assets/rickroll
+  python3 tools/gif.py --report        # size and storage table, writes nothing
 """
 
 import argparse
@@ -19,8 +19,8 @@ import os
 import struct
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SOURCE = os.path.join(ROOT, "icons", "rickroll-roll.gif")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SOURCE = os.path.join(ROOT, "assets", "src", "icons", "rickroll-roll.gif")
 
 
 def blocks(data, pos):
@@ -252,8 +252,8 @@ def report(total):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--size", type=int, default=48, help="stored square edge in pixels")
-    parser.add_argument("--frames", type=int, default=10, help="how many frames to keep")
-    parser.add_argument("--out", default=os.path.join(ROOT, "firmware", "assets", "rickroll"))
+    parser.add_argument("--frames", type=int, default=16, help="how many frames to keep")
+    parser.add_argument("--out", default=os.path.join(ROOT, "assets", "rickroll"))
     parser.add_argument("--source", default=SOURCE)
     parser.add_argument("--report", action="store_true", help="print a size table and stop")
     parser.add_argument(

@@ -30,9 +30,9 @@ import struct
 import sys
 import zlib
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SRC = os.path.join(ROOT, "icons")
-OUT = os.path.join(ROOT, "firmware", "assets", "icons")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(ROOT, "assets", "src", "icons")
+OUT = os.path.join(ROOT, "assets", "icons")
 
 # Source art is named for how it looks; the firmware wants what it means.
 RENAME = {
