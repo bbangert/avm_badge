@@ -60,4 +60,28 @@ defmodule PackagingTest do
 
     assert before == rebuilt
   end
+
+  @tag :regenerates_assets
+  test "mix badge.assets is deterministic and packs exactly the runtime assets" do
+    run = fn ->
+      {_, 0} = System.cmd("mix", ["badge.assets"], cd: @root, stderr_to_stdout: true)
+      File.read!(Path.join(@root, "assets.avm"))
+    end
+
+    first = run.()
+    assert first == run.(), "two runs of mix badge.assets differ"
+
+    expected =
+      Enum.map(0..15, &"assets/priv/rickroll/frame#{String.pad_leading("#{&1}", 2, "0")}@48x48.rgba") ++
+        ["assets/priv/fonts/dogica.uf",
+         "assets/priv/fonts/pixel_operator.uf",
+         "assets/priv/fonts/w95fa.uf"]
+
+    for name <- expected do
+      assert String.contains?(first, name), "archive is missing #{name}"
+    end
+
+    refute String.contains?(first, "tengoku"),
+           "tengoku.uf was dropped in Task 4 and must not be packed"
+  end
 end

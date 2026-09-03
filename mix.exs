@@ -45,7 +45,9 @@ defmodule Badge.MixProject do
        github: "nerves-hub/nerves_hub_link_atomvm_esp32",
        ref: "b5d57f945114c0687d519cbd23a7b210d48c5fdc",
        manager: :rebar3,
-       override: true}
+       override: true},
+      # The packbeam escript, from Hex rather than an AtomVM checkout.
+      {:atomvm_packbeam, "~> 0.8.2", runtime: false}
     ]
   end
 end

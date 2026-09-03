@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Pack firmware/assets.avm and write it to the assets partition.
+# Pack assets.avm and write it to the assets partition.
 set -euo pipefail
-root="$(cd "$(dirname "$0")/../.." && pwd)"
-avm="$root/firmware/assets.avm"
+root="$(cd "$(dirname "$0")/.." && pwd)"
+avm="$root/assets.avm"
 
 offset=0x278000
 size=262144
@@ -22,7 +22,7 @@ if [ -z "$port" ]; then
   port="${ports[0]}"
 fi
 
-"$(dirname "$0")/mkassets.sh" >/dev/null
+( cd "$root" && mix badge.assets >/dev/null )
 
 actual="$(wc -c <"$avm" | tr -d ' ')"
 if [ "$actual" -gt "$size" ]; then
