@@ -20,8 +20,12 @@ defmodule Mix.Tasks.Badge.Assets do
     try do
       File.mkdir_p!(rickroll)
       File.mkdir_p!(fonts)
-      copy("assets/rickroll/*.rgba", rickroll)
-      copy("assets/fonts/*.uf", fonts)
+      frames = Path.wildcard("assets/rickroll/*.rgba")
+      uf_fonts = Path.wildcard("assets/fonts/*.uf")
+      if frames == [], do: Mix.raise("no frames found in assets/rickroll")
+      if uf_fonts == [], do: Mix.raise("no fonts found in assets/fonts")
+      copy(frames, rickroll)
+      copy(uf_fonts, fonts)
 
       out = Path.expand(@out)
       # Names inside the archive are relative to the staging directory.
@@ -40,7 +44,7 @@ defmodule Mix.Tasks.Badge.Assets do
     end
   end
 
-  defp copy(glob, dest) do
-    for path <- Path.wildcard(glob), do: File.cp!(path, Path.join(dest, Path.basename(path)))
+  defp copy(paths, dest) do
+    for path <- paths, do: File.cp!(path, Path.join(dest, Path.basename(path)))
   end
 end

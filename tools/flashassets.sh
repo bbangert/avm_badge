@@ -25,6 +25,11 @@ fi
 ( cd "$root" && mix badge.assets >/dev/null )
 
 actual="$(wc -c <"$avm" | tr -d ' ')"
+min=10240
+if [ "$actual" -lt "$min" ]; then
+  echo "flashassets: assets.avm is only ${actual}B, looks empty or truncated" >&2
+  exit 1
+fi
 if [ "$actual" -gt "$size" ]; then
   echo "flashassets: assets.avm is ${actual}B, partition holds ${size}B" >&2
   exit 1

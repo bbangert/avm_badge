@@ -83,5 +83,16 @@ defmodule PackagingTest do
 
     refute String.contains?(first, "tengoku"),
            "tengoku.uf was dropped in Task 4 and must not be packed"
+
+    members =
+      ~r/assets\/priv\/[a-z0-9_\/.@-]+\.(?:rgba|uf)/
+      |> Regex.scan(first)
+      |> List.flatten()
+
+    assert length(members) == length(expected),
+           "archive has #{length(members)} members, expected #{length(expected)}: #{inspect(members -- expected)}"
+
+    assert Enum.sort(members) == Enum.sort(expected),
+           "archive members do not match the expected set exactly"
   end
 end
