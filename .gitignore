@@ -10,3 +10,4 @@ priv/application.bin
 __pycache__/
 
 /.superpowers/
+tools/.mise.local.toml

@@ -168,6 +168,12 @@ def main():
         if value:
             supplied[key] = value.encode()
 
+    # NervesHub is optional; a badge without credentials simply never updates.
+    for key in ("nh_key", "nh_secret"):
+        if key not in supplied:
+            print(f"warning: {key} not supplied, keeping whatever the badge holds",
+                  file=sys.stderr)
+
     device = port()
     parser = load_parser()
 
