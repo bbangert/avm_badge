@@ -26,15 +26,26 @@ defmodule Badge.MixProject do
 
   defp deps do
     [
-      {:exatomvm, git: "https://github.com/atomvm/ExAtomVM/", runtime: false},
+      {:exatomvm,
+       github: "atomvm/ExAtomVM",
+       ref: "ff7daf7e83a4e86fbf078730b6c49045a99de9f8",
+       runtime: false},
       # The Erlang side of the port driver built into the VM. A rebar3
       # project, so mix is told which manager to use.
-      {:atomvm_websocket_client, path: "../atomvm_websocket_client", manager: :rebar3},
+      {:atomvm_websocket_client,
+       github: "nerves-hub/atomvm_websocket_client",
+       ref: "011b99c30bea5253eb29558e3c6ac420a5472c0f",
+       manager: :rebar3},
       # The NervesHub agent, and its Elixir face. The override stops the
-      # wrapper fetching its own copy of the agent from GitHub.
-      {:nerves_hub_link_atomvm_esp32_ex, path: "../nerves_hub_link_atomvm_esp32_ex"},
+      # wrapper fetching its own unpinned copy of the agent.
+      {:nerves_hub_link_atomvm_esp32_ex,
+       github: "nerves-hub/nerves_hub_link_atomvm_esp32_ex",
+       ref: "b9f8a01868d41fcf25bfafe8dd6dc62f61498e52"},
       {:nerves_hub_link_atomvm_esp32,
-       path: "../nerves_hub_link_atomvm_esp32", manager: :rebar3, override: true}
+       github: "nerves-hub/nerves_hub_link_atomvm_esp32",
+       ref: "b5d57f945114c0687d519cbd23a7b210d48c5fdc",
+       manager: :rebar3,
+       override: true}
     ]
   end
 end
