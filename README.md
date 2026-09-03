@@ -23,19 +23,11 @@ key events, and `Badge.Pixels` drives the LED chain and runs its idle
 animation. See the moduledocs in `lib/badge/` for how each part works;
 `lib/badge/hardware.ex` is the single source of truth for pin assignments.
 
-## Building and flashing
+## Testing
 
-This is a standard [ExAtomVM](https://github.com/atomvm/ExAtomVM) Mix project.
-With the board connected over USB:
-
-```
-mix atomvm.esp32.flash
-```
-
-No `--port` is needed — the port is configured as `"auto"` in `mix.exs` and is
-auto-detected. Run `mix test` to run the unit tests (`Badge.TextBuffer` and
-`Badge.Keymap` are pure and tested on the host; most of the rest talks
-directly to GPIO/SPI/AtomGL and is verified on hardware instead).
+`Badge.TextBuffer` and `Badge.Keymap` are pure and tested on the host; most of
+the rest talks directly to GPIO/SPI/AtomGL and is verified on hardware
+instead.
 
 ## NervesHub (optional)
 
