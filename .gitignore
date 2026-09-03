@@ -8,3 +8,5 @@ erl_crash.dump
 priv/application.bin
 
 __pycache__/
+
+/.superpowers/

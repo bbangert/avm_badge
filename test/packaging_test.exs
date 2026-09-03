@@ -17,8 +17,7 @@ defmodule PackagingTest do
       for {name, opts} <- Mix.Project.config()[:deps],
           is_list(opts),
           Keyword.has_key?(opts, :git) or Keyword.has_key?(opts, :github),
-          ref = Keyword.get(opts, :ref),
-          not (is_binary(ref) and byte_size(ref) == 40),
+          not (is_binary(Keyword.get(opts, :ref)) and byte_size(Keyword.get(opts, :ref)) == 40),
           do: name
 
     assert unpinned == [],
