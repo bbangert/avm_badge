@@ -95,4 +95,19 @@ defmodule PackagingTest do
     assert Enum.sort(members) == Enum.sort(expected),
            "archive members do not match the expected set exactly"
   end
+
+  test "font and root licences are bundled" do
+    bundled =
+      Path.wildcard(Path.join(@root, "LICENSES/*"))
+      |> Enum.map(&Path.basename/1)
+      |> Enum.sort()
+
+    expected = ["dogica-OFL-1.1.txt", "pixel_operator-CC0-1.0.txt", "w95fa-OFL-1.1.txt"]
+
+    assert bundled == expected,
+           "LICENSES directory missing or has unexpected files: #{inspect(bundled)}"
+
+    assert File.exists?(Path.join(@root, "LICENSE")),
+           "root LICENSE file is missing"
+  end
 end
