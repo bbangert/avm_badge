@@ -110,4 +110,9 @@ defmodule PackagingTest do
     assert File.exists?(Path.join(@root, "LICENSE")),
            "root LICENSE file is missing"
   end
+
+  test "the expected base image tag is recorded" do
+    tag = @root |> Path.join("BASE_IMAGE") |> File.read!() |> String.trim()
+    assert tag =~ ~r/^badge-v\d+$/, "BASE_IMAGE must name a release tag, got: #{tag}"
+  end
 end

@@ -11,3 +11,5 @@ __pycache__/
 
 /.superpowers/
 tools/.mise.local.toml
+
+/.base/
