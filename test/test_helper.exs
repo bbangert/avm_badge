@@ -5,4 +5,5 @@ defmodule :atomvm do
   def read_priv(:assets, path), do: File.read!(Path.join(@assets, List.to_string(path)))
 end
 
+ExUnit.configure(exclude: [:regenerates_assets])
 ExUnit.start()

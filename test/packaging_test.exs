@@ -42,4 +42,22 @@ defmodule PackagingTest do
 
     assert File.exists?(Path.join(@root, "assets/src/icons/rickroll-roll.gif"))
   end
+
+  @tag :regenerates_assets
+  test "mkfonts.sh reproduces the committed fonts byte for byte" do
+    before =
+      for f <- Path.wildcard(Path.join(@root, "assets/fonts/*.uf")),
+          into: %{},
+          do: {Path.basename(f), File.read!(f)}
+
+    {_, 0} =
+      System.cmd(Path.join(@root, "tools/mkfonts.sh"), [], cd: @root, stderr_to_stdout: true)
+
+    rebuilt =
+      for f <- Path.wildcard(Path.join(@root, "assets/fonts/*.uf")),
+          into: %{},
+          do: {Path.basename(f), File.read!(f)}
+
+    assert before == rebuilt
+  end
 end
