@@ -5,7 +5,8 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 771 tests across 43 files, no board needed
+- `mix test` — 783 tests across 45 files, no board needed. 2 are excluded as
+  `:regenerates_assets` because they rewrite tracked files
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
 - `ls /dev/cu.usbmodem*` — board re-enumerates, path changes between sessions
@@ -14,15 +15,27 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - Never run unbounded `cat`/`screen` on the port — it blocks the next flash
 - Reflashing does not need `erase-flash`: `nvs` is unchanged by the repartition,
   so wifi credentials, profile and peers survive
-- No `flash-elixir` target in this AtomVM revision — `idf.py flash` writes
-  `boot.avm` itself
+- No `flash-elixir` target in this AtomVM revision, and **`idf.py flash` does
+  not write `boot.avm`** — the esp32 build emits no `.avm` at all and its
+  `flash_args` covers only the bootloader, the VM and the partition table
+- `boot.avm` comes from a **top-level** AtomVM build, not the esp32 one:
+  `cmake -B build . && make -C build elixir_esp32boot` writes
+  `build/libs/esp32boot/elixir_esp32boot.avm`. The plain `esp32boot` target
+  omits `exavmlib` and cannot run this firmware
 - Base image rebuild (rare): `. $IDF_PATH/export.sh; idf.py build` in
   `AtomVM/src/platforms/esp32`, then flash `0x10000` only — the app lives at
-  `0x2B8000` and survives. Reproducing the build is documented in
+  `0x2B8000` and survives. Rebuild `elixir_esp32boot` alongside it and flash
+  that at `0x1F0000`; the VM and its standard libraries should come from the
+  same source. Reproducing the build is documented in
   `AtomVM/src/platforms/esp32/BADGE-BUILD.md`
 
 ## Flash layout
 
+- `boot.avm` at `0x1F0000`, 544K, holds the standard libraries the VM starts
+  from. It ships as a `badge-v1` release asset and `mix badge.base` writes it
+  with the VM on both paths, so no local AtomVM checkout is needed. Without a
+  valid one the VM aborts before any Elixir runs — `E AtomVM: Invalid startup
+  avmpack` then `abort()`, rebooting about once a second
 - Two packbeam slots: `main.avm` at `0x2B8000` and `alt.avm` at `0x35C000`, 656K
   each. NervesHub writes whichever one is not running and flips
   `atomvm`/`boot_path` in NVS
