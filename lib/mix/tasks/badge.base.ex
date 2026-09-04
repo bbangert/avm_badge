@@ -4,10 +4,11 @@ defmodule Mix.Tasks.Badge.Base do
   @moduledoc """
   Fetches the release named in `BASE_IMAGE` and writes it to the board.
 
-      mix badge.base          # the VM only, at 0x10000
-      mix badge.base --full   # bootloader, partition table and VM, for a new board
+      mix badge.base          # the VM at 0x10000 and its boot.avm at 0x1F0000
+      mix badge.base --full   # also the bootloader and partition table, for a new board
 
-  The application at 0x2B8000 survives a VM-only flash.
+  The application at 0x2B8000 survives a VM-only flash. `boot.avm` holds the
+  standard libraries the VM starts from, so it is always written with the VM.
   """
 
   use Mix.Task
@@ -15,6 +16,7 @@ defmodule Mix.Tasks.Badge.Base do
   @repo "protolux-electronics/AtomVM"
   @cache ".base"
   @vm {"atomvm-esp32s3-badge.bin", "0x10000"}
+  @boot {"boot.avm", "0x1f0000"}
   @bootloader {"bootloader.bin", "0x0"}
   @table {"partition-table.bin", "0x8000"}
   @sums "SHA256SUMS"
@@ -23,15 +25,15 @@ defmodule Mix.Tasks.Badge.Base do
   def run(args) do
     tag = "BASE_IMAGE" |> File.read!() |> String.trim()
     dir = Path.join(@cache, tag)
-    parts = if "--full" in args, do: [@bootloader, @table, @vm], else: [@vm]
+    parts = if "--full" in args, do: [@bootloader, @table, @vm, @boot], else: [@vm, @boot]
 
-    fetch(tag, dir)
+    fetch(tag, dir, parts)
     verify!(dir, parts)
     flash(dir, parts)
   end
 
-  defp fetch(tag, dir) do
-    if File.dir?(dir) do
+  defp fetch(tag, dir, parts) do
+    if cached?(dir, parts) do
       Mix.shell().info("base image #{tag} already downloaded")
     else
       tmp = dir <> ".partial"
@@ -40,8 +42,15 @@ defmodule Mix.Tasks.Badge.Base do
       Mix.shell().info("downloading base image #{tag}")
       cmd!("gh", ["release", "download", tag, "--repo", @repo, "-D", tmp])
       # Only becomes the real cache dir once the download has fully landed.
+      File.rm_rf!(dir)
       File.rename!(tmp, dir)
     end
+  end
+
+  # A cache predating a newly added part is refetched rather than reported missing.
+  defp cached?(dir, parts) do
+    File.dir?(dir) and File.exists?(Path.join(dir, @sums)) and
+      Enum.all?(parts, fn {file, _offset} -> File.exists?(Path.join(dir, file)) end)
   end
 
   defp verify!(dir, parts) do

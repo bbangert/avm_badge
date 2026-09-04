@@ -64,8 +64,13 @@ The VM this firmware runs on is a fork of AtomVM, built and published by CI at
 [protolux-electronics/AtomVM](https://github.com/protolux-electronics/AtomVM).
 `BASE_IMAGE` names the release this firmware expects.
 
-    mix badge.base --full   # new board: bootloader, partition table and VM
-    mix badge.base          # existing board: the VM only
+    mix badge.base --full   # new board: bootloader, partition table, VM, boot.avm
+    mix badge.base          # existing board: the VM and boot.avm
+
+`boot.avm` holds the standard libraries the VM starts from. It is written
+alongside the VM every time, because the two must come from the same build —
+a VM with no matching `boot.avm` aborts at startup with `Invalid startup
+avmpack` and reboots in a loop.
 
 Both verify the download's SHA256 before flashing and raise on a mismatch.
 `mix badge.base` shells out to the [`gh`](https://cli.github.com/) CLI to
