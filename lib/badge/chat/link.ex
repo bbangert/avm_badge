@@ -22,6 +22,7 @@ defmodule Badge.Chat.Link do
   alias Badge.Chat.Socket
   alias Badge.Chat.Wire
   alias Badge.Identity
+  alias Badge.Nvs
   alias Badge.Profile
   alias Badge.Wifi
 
@@ -73,7 +74,9 @@ defmodule Badge.Chat.Link do
       messages: [],
       chip: nil,
       name: nil,
-      heard: 0
+      heard: 0,
+      # Resolved once: status/0 answers the render loop and must not read flash.
+      base: Socket.base_url(Nvs.get(:chat_url))
     }
 
     start_ticker()
@@ -86,7 +89,7 @@ defmodule Badge.Chat.Link do
     status = %{
       state: state.channel,
       messages: state.messages,
-      host: Socket.host(),
+      host: state.base,
       heard: state.heard
     }
 
@@ -170,9 +173,9 @@ defmodule Badge.Chat.Link do
     chip = Identity.format(Identity.chip_id())
     name = Profile.display_name(Profile.load())
 
-    :io.format(~c"Chat: connecting as ~s ~s~n", [chip, name])
+    :io.format(~c"Chat: connecting to ~s as ~s ~s~n", [state.base, chip, name])
 
-    case Socket.open(chip, name) do
+    case Socket.open(state.base, chip, name) do
       {:ok, port} ->
         %{state | port: port, chip: chip, name: name}
 

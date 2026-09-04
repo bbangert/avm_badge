@@ -16,53 +16,72 @@ defmodule Badge.Chat.Socket do
   reconnection rather than once. Phoenix keeps channel state on the server and
   loses it with the socket, so the channel has to be re-joined every time.
 
-  TLS is the component's, not AtomVM's. `:ssl` pins TLS 1.2 and could not
-  reach an ngrok edge that speaks only 1.3, which is why the long poll this
-  replaced ran in the clear; esp-tls does 1.3 and verifies against the
-  certificate bundle already in the image.
+  TLS is the component's, not AtomVM's. `:ssl` pins TLS 1.2, which is why the
+  long poll this replaced ran in the clear; esp-tls does 1.3.
 
-  The host is compiled in. ngrok hands out a new subdomain every time it
-  restarts, so a restarted tunnel means reflashing.
+  The server is the `chat_url` NVS key, falling back to the compiled default.
+  Its scheme chooses the transport: `wss://` verifies against the public CA
+  bundle in the image, `ws://` runs in the clear for a server on the bench.
   """
 
   @compile {:no_warn_undefined, :websocket_client}
 
-  @host "6.tcp.eu.ngrok.io:16113"
+  @default_url "wss://badge-chat.protolux.io"
   @path "/badge/socket/websocket"
   @vsn "2.0.0"
 
   @network_timeout 30_000
 
-  # The dev CA from avm_badge_server/priv/cert, pinned. TLS terminates at
-  # Phoenix, not at a tunnel edge, and the chain is P-256 end to end - an
-  # all-software P-384 chain was slower than ngrok's edge would wait.
-  @cacert File.read!("assets/certs/badge-ca.pem")
+  @doc "The server a badge talks to when nothing is provisioned."
+  @spec default_url() :: binary
+  def default_url, do: @default_url
 
-  @doc "The server this build talks to."
-  @spec host() :: binary
-  def host, do: @host
+  @doc "The provisioned server, or the compiled default when there is none."
+  @spec base_url(binary | nil) :: binary
+  def base_url(nil), do: @default_url
+  def base_url(""), do: @default_url
+  def base_url(url), do: url
 
   @doc "Where to connect, carrying the serializer version and who is asking."
-  @spec url(binary, binary) :: binary
-  def url(chip, name) do
-    "wss://" <> @host <> @path <> "?" <> query([{"vsn", @vsn}, {"chip", chip}, {"name", name}])
+  @spec url(binary, binary, binary) :: binary
+  def url(base, chip, name) do
+    trim(base) <> @path <> "?" <> query([{"vsn", @vsn}, {"chip", chip}, {"name", name}])
+  end
+
+  @doc "Everything the driver is handed, so the transport choice can be read off."
+  @spec opts(binary, binary, binary) :: map
+  def opts(base, chip, name) do
+    %{
+      url: url(base, chip, name),
+      owner: self(),
+      # Without an explicit verify the driver disables verification and warns.
+      verify: verify(base),
+      # A TLS 1.3 handshake takes the badge past the ten second default, and a
+      # timeout there looks like a dead server.
+      network_timeout_ms: @network_timeout
+    }
   end
 
   @doc """
   Opens the connection, answering once the port exists rather than once it is
   up. Wait for `:connected` before sending.
   """
-  @spec open(binary, binary) :: {:ok, port} | {:error, term}
-  def open(chip, name) do
-    :websocket_client.open(%{
-      url: url(chip, name),
-      owner: self(),
-      # Without an explicit verify the driver disables verification and warns.
-      verify: {:cacert_pem, @cacert},
-      # A TLS 1.3 handshake against the tunnel takes the badge past the ten
-      # second default, and a timeout there looks like a dead server.
-      network_timeout_ms: @network_timeout
-    })
+  @spec open(binary, binary, binary) :: {:ok, port} | {:error, term}
+  def open(base, chip, name) do
+    :websocket_client.open(opts(base, chip, name))
+  end
+
+  defp verify("ws://" <> _), do: :none
+  defp verify(_), do: :crt_bundle
+
+  # binary_part rather than a sized pattern, which AtomVM is fussier about.
+  defp trim(base) do
+    last = byte_size(base) - 1
+
+    case last >= 0 and binary_part(base, last, 1) == "/" do
+      true -> binary_part(base, 0, last)
+      false -> base
+    end
   end
 
   @doc "Sends one frame, refusing rather than queueing while the link is down."

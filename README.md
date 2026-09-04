@@ -40,6 +40,21 @@ then run `tools/provision.py`, which merges them into the badge's NVS and
 leaves every other key alone. The tools warn and continue when these are
 unset; a badge without them simply never updates.
 
+## Chat server
+
+Badges talk to `wss://badge-chat.protolux.io` unless told otherwise. To point
+one at a server on your bench:
+
+    export AVM_BADGE_SERVER_URL=ws://192.168.1.50:4000
+    tools/provision.py
+
+Give a base only — scheme, host and optional port. The scheme picks the
+transport: `wss://` verifies against the public certificate authorities built
+into the image, so a Let's Encrypt certificate needs no work on the badge;
+`ws://` runs in the clear, which is what makes a local server reachable without
+certificates or a tunnel. `mix phx.server` in `avm_badge_server` already
+listens on `0.0.0.0:4000`.
+
 ## Flash layout
 
 Partition table read back off the board (`esptool.py read_flash` +

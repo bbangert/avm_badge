@@ -43,6 +43,7 @@ SETTINGS = [
     ("nh_host", "--nh-host", "BADGE_NH_HOST"),
     ("wifi_ssid", "--wifi-ssid", "BADGE_WIFI_SSID"),
     ("wifi_psk", "--wifi-psk", "BADGE_WIFI_PSK"),
+    ("chat_url", "--chat-url", "AVM_BADGE_SERVER_URL"),
 ]
 
 

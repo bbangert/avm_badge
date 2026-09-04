@@ -59,12 +59,17 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 - The chat rides a websocket from the `atomvm_websocket_client` ESP-IDF
   component; `Badge.Chat.Socket` wraps it, `Badge.Chat.Link` owns the port
-- **wss:// works, with two hard-won constraints.** TLS terminates at Phoenix
-  (`:4443`, chain in `avm_badge_server/priv/cert`, badges pin the CA from
-  `assets/certs/badge-ca.pem`). Never behind ngrok's https edge: it hangs up ~1s
-  after its server flight, and this hardware needs ~1.6s to verify a public
-  P-384 chain. For remote access use `ngrok tcp 4443` (raw bytes, no edge TLS) -
-  the cert's SAN already covers `*.tcp.eu.ngrok.io`
+- The server is the `chat_url` NVS key, falling back to
+  `wss://badge-chat.protolux.io` compiled into `Badge.Chat.Socket`. Write it
+  with `tools/provision.py --chat-url ...` or `AVM_BADGE_SERVER_URL`. Store a
+  base only (`scheme://host[:port]`) - the path and query are the module's
+- **The scheme picks the transport.** `wss://` verifies against the ESP-IDF
+  public CA bundle, which carries ISRG Root X1/X2, so Let's Encrypt needs
+  nothing on the badge. `ws://` runs in the clear, which is how a server on the
+  bench is reached: `mix phx.server` already binds `0.0.0.0:4000`, so point the
+  badge at `ws://<lan-ip>:4000`. No tunnel and no certificates
+- No CA is pinned any more. TLS 1.3 handshakes still take this hardware past
+  the driver's ten second default, hence `network_timeout_ms`
 - Match `{:websocket, _port, ...}` messages WITHOUT pinning the port: the
   driver's port term is not the one `open_port` returned, and a pinned match
   drops every message silently
@@ -95,9 +100,13 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   Update tab; firmware that will not boot needs a cable
 - The agent commits a pending update when it joins, so opening the Update tab
   is what takes new firmware off trial
-- `atomvm.check` flags `json:encode/1` and `json:decode/1` falsely - AtomVM
-  ships `libs/estdlib/src/json.erl`. `erlang:--/2`, `erlang:phash2/2`, `File`,
-  `Mix` and `String` come from Mix tasks that are packed but never run
+- `atomvm.check` flags `json:encode/1`, `json:decode/1` and
+  `erlang:binary_part/3` falsely - AtomVM ships `libs/estdlib/src/json.erl`,
+  and `binary_part/3` is both a BIF and a NIF in `libAtomVM`. `erlang:--/2`,
+  `erlang:phash2/2`, `File`, `Mix` and `String` come from Mix tasks that are
+  packed but never run. `GenServer`, `Supervisor`, `network` and `uart` are
+  flagged from `lib/badge/` for the same reason: the checker cannot see
+  AtomVM's own libraries
 - **Internal RAM, not free heap, is the scarce resource.** `Power:` reports
   ~2MB free, which is almost all PSRAM; FreeRTOS task stacks and DMA buffers
   can only come from the ~300K of internal RAM. A websocket that cannot get it
