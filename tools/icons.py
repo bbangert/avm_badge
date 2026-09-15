@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""Convert the source PNG icons into raw rgba8888 for AtomGL.
+"""Convert the source PNG icons into alpha artwork for AtomGL.
 
-AtomGL accepts exactly one image format, rgba8888, and its draw loop takes a
-no-blend fast path only when a pixel's alpha is 0xFF (dcs_lcd_draw.c:79). A
-pixel with alpha 0 ends the current span early and forces a fresh O(items)
-scan for the next one. The panel background is black, so every pixel is
-emitted fully opaque and composited onto black rather than left transparent.
+AtomGL draws an rgba8888 image against the background colour the item
+names: a pixel with alpha 0xFF is copied straight in, and any other pixel is
+blended onto that colour (dcs_lcd_draw.c:79). So the icons carry real alpha
+and the firmware picks the background per skin at draw time.
 
 The source art is black-or-colour on an opaque white background with
 anti-aliased edges. Keying out pure white alone would leave light halos, so
-the white component is removed per pixel instead:
+the white component is taken as transparency per pixel instead:
 
-  greyscale art  ->  255 - P          (black on white becomes white on black)
-  colour art     ->  P - min(R,G,B)   (removes white, keeps hue)
+  greyscale art  ->  alpha = 255 - P, written as a mask; the firmware tints it
+  colour art     ->  alpha = 255 - min(R,G,B), colour un-premultiplied
 
 Greyscale is detected per file: if every pixel has R == G == B the art is
-monochrome and gets inverted, otherwise it keeps its colour.
+monochrome and becomes a one-byte-per-pixel .mask, otherwise it keeps its
+colour as .rgba.
 
-Output goes to firmware/assets/icons/<name>@<w>x<h>.rgba, named by meaning
-rather than by colour so the firmware never has to know that the square is
-red. Badge.Icons globs that directory at compile time.
+Output goes to firmware/assets/icons/<name>@<w>x<h>.{rgba,mask}, named by
+meaning rather than by colour so the firmware never has to know that the
+square is red. Badge.Icons globs that directory at compile time.
 
 Usage: python3 firmware/tools/icons.py [--check]
   --check  report what would change without writing
@@ -114,20 +114,29 @@ def is_greyscale(pixels):
     )
 
 
-def to_rgba8888(pixels, greyscale):
-    """Composite onto black, opaque everywhere."""
+def to_mask(pixels):
+    """One alpha byte per pixel: black is opaque, white is clear."""
+    return bytes(255 - pixels[i] for i in range(0, len(pixels), 4))
+
+
+def to_rgba8888(pixels):
+    """Straight alpha: the most saturated pixel is the opaque body, pure white is clear."""
     out = bytearray(len(pixels))
+    whites = [min(pixels[i], pixels[i + 1], pixels[i + 2]) for i in range(0, len(pixels), 4)]
+    body = min(whites)
+    span = 255 - body
 
-    for i in range(0, len(pixels), 4):
-        r, g, b = pixels[i], pixels[i + 1], pixels[i + 2]
+    for i, white in enumerate(whites):
+        alpha = min((255 - white) * 255 // span, 255) if span else 255
+        rgb = pixels[4 * i : 4 * i + 3]
 
-        if greyscale:
-            r, g, b = 255 - r, 255 - g, 255 - b
+        # Undo the composite onto white so the driver can redo it onto any colour.
+        if alpha:
+            rgb = [max(0, min(255, 255 * (c - 255 + alpha) // alpha)) for c in rgb]
         else:
-            white = min(r, g, b)
-            r, g, b = r - white, g - white, b - white
+            rgb = [0, 0, 0]
 
-        out[i], out[i + 1], out[i + 2], out[i + 3] = r, g, b, 0xFF
+        out[4 * i : 4 * i + 4] = bytes(rgb) + bytes([alpha])
 
     return bytes(out)
 
@@ -153,12 +162,15 @@ def main():
 
         width, height, pixels = decode_png(os.path.join(SRC, filename))
         greyscale = is_greyscale(pixels)
-        data = to_rgba8888(pixels, greyscale)
 
-        assert len(data) == width * height * 4
+        if greyscale:
+            data, suffix, mode = to_mask(pixels), "mask", "mask"
+            assert len(data) == width * height
+        else:
+            data, suffix, mode = to_rgba8888(pixels), "rgba", "colour"
+            assert len(data) == width * height * 4
 
-        target = os.path.join(OUT, f"{name}@{width}x{height}.rgba")
-        mode = "invert" if greyscale else "colour"
+        target = os.path.join(OUT, f"{name}@{width}x{height}.{suffix}")
         total += len(data)
 
         if check:
@@ -183,7 +195,7 @@ def _same(path, data):
 def _prune(written):
     """Drop outputs whose source PNG is gone, so a rename cannot leave a stale icon."""
     for stale in sorted(set(os.listdir(OUT)) - set(written)):
-        if stale.endswith(".rgba"):
+        if stale.endswith((".rgba", ".mask")):
             os.remove(os.path.join(OUT, stale))
             print(f"removed stale {stale}")
 

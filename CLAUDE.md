@@ -179,8 +179,11 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   activates the one saved under the `skin` NVS key, and the Theme row on the
   Display tab switches it live and stores it once editing ends. Host tests
   see `Badge.Skin.Dark` unless they call `Badge.Skin.activate/1`
-- Icons are composited on black, so `Badge.Skin.Win95` shows them in black
-  tiles. That is a known limitation, not a bug; it uses no extra fonts either
+- Icons carry real alpha and AtomGL blends them onto the background colour the
+  item names, so they sit on any skin. Monochrome icons are `.mask` files
+  baked once per colour in `Badge.Icons.tints/0`; a skin's `glyph/0` picks one,
+  and a new glyph colour must be added to that list or the icon draws nothing.
+  No extra fonts are involved
 
 ## AtomGL display
 

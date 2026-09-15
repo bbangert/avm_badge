@@ -3,7 +3,7 @@ defmodule Badge.Skin.Win95 do
   Silver client area, navy caption with a close button, etched rules.
 
   Colours come from the classic sixteen. Everything is flat rectangles and
-  the fonts already in the image; the icons are left as they are.
+  the fonts already in the image.
   """
 
   @behaviour Badge.Skin
@@ -59,12 +59,15 @@ defmodule Badge.Skin.Win95 do
   def alert, do: 0x800000
   @impl true
   def select, do: @navy
+  @impl true
+  def glyph, do: @black
 
+  # Caption icons are white on navy, like the title beside them.
   @impl true
   def chrome(title, status) do
     [
-      Icons.item(status.battery, @battery_x, @text_y),
-      Icons.item(status.wifi, @wifi_x, @text_y),
+      Icons.item(status.battery, @battery_x, @text_y, @white, @navy),
+      Icons.item(status.wifi, @wifi_x, @text_y, @white, @navy),
       clock_item(status.clock),
       {:text, @text_x, @text_y, :pixel_operator, @white, @navy, title}
     ] ++
