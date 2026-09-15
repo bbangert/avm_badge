@@ -12,13 +12,6 @@ defmodule Badge.Page.Chat.Rooms do
   alias Badge.Text
   alias Badge.Theme
 
-  @fg Theme.fg()
-  @dim Theme.dim()
-  @muted Theme.muted()
-  @select Theme.select()
-  @accent Theme.accent()
-  @bg Theme.bg()
-
   @char_w 8
   @margin 8
 
@@ -100,35 +93,48 @@ defmodule Badge.Page.Chat.Rooms do
 
   def render(state) do
     heading() ++
-      rows(drop(state.rooms, state.offset), state.unread, state.selected, state.offset, 0, @top, []) ++
+      rows(
+        drop(state.rooms, state.offset),
+        state.unread,
+        state.selected,
+        state.offset,
+        0,
+        @top,
+        []
+      ) ++
       footer(state)
   end
 
   defp heading do
-    [
-      {:text, @margin, @heading_y, :default16px, @dim, @bg, @heading},
-      {:rect, @margin, @rule_y, Theme.width() - 2 * @margin, 1, @dim}
-    ]
+    [{:text, @margin, @heading_y, :default16px, Theme.dim(), Theme.bg(), @heading}] ++
+      Theme.rule(@margin, @rule_y, Theme.width() - 2 * @margin)
   end
 
-  defp empty(%{ready: true}), do: {:text, @name_x, @top, :default16px, @dim, @bg, @none}
-  defp empty(_state), do: {:text, @name_x, @top, :default16px, @muted, @bg, @waiting}
+  defp empty(%{ready: true}),
+    do: {:text, @name_x, @top, :default16px, Theme.dim(), Theme.bg(), @none}
+
+  defp empty(_state),
+    do: {:text, @name_x, @top, :default16px, Theme.muted(), Theme.bg(), @waiting}
 
   defp rows([], _unread, _selected, _index, _drawn, _y, acc), do: acc
 
   defp rows(_rooms, _unread, _selected, _index, drawn, _y, acc) when drawn >= @rows, do: acc
 
   defp rows([room | rest], unread, selected, index, drawn, y, acc) do
-    items = [name(room, index == selected, y) | marker(index == selected, y)] ++ count(unread, room, y)
+    items =
+      [name(room, index == selected, y) | marker(index == selected, y)] ++ count(unread, room, y)
 
     rows(rest, unread, selected, index + 1, drawn + 1, y + @pitch, items ++ acc)
   end
 
-  defp name(room, true, y), do: {:text, @name_x, y, :default16px, @fg, @bg, room.name}
-  defp name(room, false, y), do: {:text, @name_x, y, :default16px, @muted, @bg, room.name}
+  defp name(room, true, y),
+    do: {:text, @name_x, y, :default16px, Theme.fg(), Theme.bg(), room.name}
+
+  defp name(room, false, y),
+    do: {:text, @name_x, y, :default16px, Theme.muted(), Theme.bg(), room.name}
 
   defp marker(false, _y), do: []
-  defp marker(true, y), do: [{:text, @margin, y, :default16px, @select, @bg, ">"}]
+  defp marker(true, y), do: [{:text, @margin, y, :default16px, Theme.select(), Theme.bg(), ">"}]
 
   # Right-aligned, so a long room name runs under it rather than into it.
   defp count(unread, room, y) do
@@ -140,12 +146,12 @@ defmodule Badge.Page.Chat.Rooms do
         text = :erlang.integer_to_binary(n)
         x = Theme.width() - @margin - @char_w * byte_size(text)
 
-        [{:text, x, y, :default16px, @accent, @bg, text}]
+        [{:text, x, y, :default16px, Theme.accent(), Theme.bg(), text}]
     end
   end
 
   defp footer(state) do
-    [{:rect, @margin, @foot_rule_y, Theme.width() - 2 * @margin, 1, @dim} | description(state)]
+    Theme.rule(@margin, @foot_rule_y, Theme.width() - 2 * @margin) ++ description(state)
   end
 
   defp description(%{rooms: []}), do: []
@@ -167,7 +173,9 @@ defmodule Badge.Page.Chat.Rooms do
   defp text_items([], _y, acc), do: :lists.reverse(acc)
 
   defp text_items([line | rest], y, acc) do
-    text_items(rest, y + @pitch, [{:text, @margin, y, :default16px, @muted, @bg, line} | acc])
+    text_items(rest, y + @pitch, [
+      {:text, @margin, y, :default16px, Theme.muted(), Theme.bg(), line} | acc
+    ])
   end
 
   defp drop(list, 0), do: list

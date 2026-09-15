@@ -10,9 +10,6 @@ defmodule Badge.Page.Settings.Sudo do
   alias Badge.Rickroll
   alias Badge.Theme
 
-  @dim Theme.dim()
-  @bg Theme.bg()
-
   @caption "never gonna give you up"
 
   @x div(320 - Rickroll.size(), 2)
@@ -48,7 +45,8 @@ defmodule Badge.Page.Settings.Sudo do
   def render(frame) do
     [
       Rickroll.item(frame, @x, @y),
-      {:text, Readout.centre_x(@caption), @caption_y, :default16px, @dim, @bg, @caption}
+      {:text, Readout.centre_x(@caption), @caption_y, :default16px, Theme.dim(), Theme.bg(),
+       @caption}
     ]
   end
 end

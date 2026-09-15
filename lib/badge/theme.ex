@@ -1,36 +1,46 @@
 defmodule Badge.Theme do
   @moduledoc """
-  Colours and chrome geometry for every page.
+  Colours, chrome and geometry for every page.
+
+  Colours, the title bar and rules come from whichever `Badge.Skin` the
+  rendering process has activated, so they must be read when drawing, not
+  captured in a module attribute. Geometry is fixed, and may be read at
+  compile time: `Badge.Page.Text` derives its row count from `content_top/0`.
 
   `ok/0` and `alert/0` carry meaning rather than decoration: a page uses them
   when the reader should notice a state, not to brighten a layout.
 
-  Exposed as functions rather than attributes so they can be read from a
-  module attribute at compile time: `Badge.Icons` bakes colours into its
-  binaries during compilation, and `Badge.Page.Text` derives its row count
-  from `content_top/0`.
-
-  Depends only on `Badge.Hardware`, so nothing that reads it can cycle.
+  Depends only on `Badge.Hardware` and `Badge.Skin`, so nothing that reads
+  it can cycle.
   """
 
   alias Badge.Hardware
+  alias Badge.Skin
 
-  def bg, do: 0x000000
-  def fg, do: 0xFFFFFF
+  def bg, do: Skin.current().bg()
+  def fg, do: Skin.current().fg()
 
   # Secondary text: clearly below the primary line, still comfortably readable.
-  def muted, do: 0xA8A8A8
+  def muted, do: Skin.current().muted()
 
-  def dim, do: 0x606060
-  def accent, do: 0x00E5A0
+  def dim, do: Skin.current().dim()
+  def accent, do: Skin.current().accent()
 
   # Status colours, for state that reads as good or wrong at a glance.
-  def ok, do: 0x4CD964
-  def warn, do: 0xFFCC00
-  def alert, do: 0xFF3B30
+  def ok, do: Skin.current().ok()
+  def warn, do: Skin.current().warn()
+  def alert, do: Skin.current().alert()
 
   # Whatever the cursor is currently on.
-  def select, do: 0x5AC8FA
+  def select, do: Skin.current().select()
+
+  @doc "The title bar and background for a page, in the active skin."
+  @spec chrome(binary, map) :: [tuple]
+  def chrome(title, status), do: Skin.current().chrome(title, status)
+
+  @doc "A horizontal rule `w` wide from `x, y`, in the active skin."
+  @spec rule(integer, integer, integer) :: [tuple]
+  def rule(x, y, w), do: Skin.current().rule(x, y, w)
 
   def width, do: Hardware.display_width()
   def height, do: Hardware.display_height()

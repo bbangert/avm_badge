@@ -4,16 +4,14 @@ defmodule Badge.Icons do
 
   Files are named `<name>@<width>x<height>.rgba` and hold raw `rgba8888`
   already composited onto black, every pixel fully opaque. That keeps AtomGL
-  on its no-blend fast path and costs nothing visually because the panel
-  background is black.
+  on its no-blend fast path and costs nothing visually on `Badge.Skin.Dark`,
+  whose background is black; a lighter skin shows each icon in a black tile.
 
   Shapes are 32x32 and status icons are 16x16, so read `size/1` rather than
   assuming. Regenerate the files with `tools/icons.py`.
   """
 
   alias Badge.Theme
-
-  @bg Theme.bg()
 
   @dir Path.expand("../../assets/icons", __DIR__)
   @shapes [:square, :triangle, :cross, :circle, :clover, :diamond]
@@ -93,6 +91,6 @@ defmodule Badge.Icons do
   def item(name, x, y) do
     {width, height} = size(name)
 
-    {:image, x, y, @bg, {:rgba8888, width, height, binary(name)}}
+    {:image, x, y, Theme.bg(), {:rgba8888, width, height, binary(name)}}
   end
 end

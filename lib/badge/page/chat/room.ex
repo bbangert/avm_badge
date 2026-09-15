@@ -17,15 +17,6 @@ defmodule Badge.Page.Chat.Room do
   alias Badge.Text
   alias Badge.Theme
 
-  @fg Theme.fg()
-  @accent Theme.accent()
-  @dim Theme.dim()
-  @muted Theme.muted()
-  @select Theme.select()
-  @warn Theme.warn()
-  @alert Theme.alert()
-  @bg Theme.bg()
-
   @char_w 8
   @margin 8
 
@@ -102,7 +93,8 @@ defmodule Badge.Page.Chat.Room do
   end
 
   # A rejoin can replace the messages with a shorter history than was scrolled to.
-  defp clamp_offset(state), do: %{state | offset: min(state.offset, max(length(state.messages) - 1, 0))}
+  defp clamp_offset(state),
+    do: %{state | offset: min(state.offset, max(length(state.messages) - 1, 0))}
 
   # The profile arrives on the first status; a page built afresh picks up a renamed badge.
   defp named(%{loaded: true} = state), do: state
@@ -191,10 +183,8 @@ defmodule Badge.Page.Chat.Room do
   @impl true
   def render(state) do
     rows(drop(state.messages, state.offset), @rows, @top, marked(state)) ++
-      [
-        {:rect, @margin, @rule_y, Theme.width() - 2 * @margin, 1, @dim},
-        draft(state)
-      ] ++ counter(state.draft) ++ empty(state)
+      Theme.rule(@margin, @rule_y, Theme.width() - 2 * @margin) ++
+      [draft(state)] ++ counter(state.draft) ++ empty(state)
   end
 
   # Oldest at the top so the newest ends up against the draft line. A message
@@ -247,7 +237,7 @@ defmodule Badge.Page.Chat.Room do
   defp markers(true, _y, 0, acc), do: acc
 
   defp markers(true, y, count, acc) do
-    item = {:text, @margin, y, :default16px, @select, @bg, ">"}
+    item = {:text, @margin, y, :default16px, Theme.select(), Theme.bg(), ">"}
 
     markers(true, y + @pitch, count - 1, [item | acc])
   end
@@ -261,33 +251,34 @@ defmodule Badge.Page.Chat.Room do
         rest = :binary.part(first, byte_size(name), byte_size(first) - byte_size(name))
 
         [
-          {:text, @body_x + @char_w * byte_size(name), y, :default16px, @fg, @bg, rest},
-          {:text, @body_x, y, :default16px, name_colour(message), @bg, name}
+          {:text, @body_x + @char_w * byte_size(name), y, :default16px, Theme.fg(), Theme.bg(),
+           rest},
+          {:text, @body_x, y, :default16px, name_colour(message), Theme.bg(), name}
         ]
 
       false ->
-        [{:text, @body_x, y, :default16px, name_colour(message), @bg, first}]
+        [{:text, @body_x, y, :default16px, name_colour(message), Theme.bg(), first}]
     end
   end
 
   defp tail_items([], _y, acc), do: acc
 
   defp tail_items([body | rest], y, acc) do
-    item = {:text, @body_x, y, :default16px, @fg, @bg, body}
+    item = {:text, @body_x, y, :default16px, Theme.fg(), Theme.bg(), body}
 
     tail_items(rest, y + @pitch, [item | acc])
   end
 
   # Every message reads the same; only the name says who is speaking.
-  defp name_colour(%{mine: true}), do: @select
-  defp name_colour(_message), do: @accent
+  defp name_colour(%{mine: true}), do: Theme.select()
+  defp name_colour(_message), do: Theme.accent()
 
   # Scrolled away, the draft keeps its text but gives up the caret that says
   # a keystroke would land there.
   defp draft(%{selected: selected} = state) when selected != nil do
     line = "> " <> Field.value(state.draft)
 
-    prompt(clipped(line, byte_size(line) - 1), @muted)
+    prompt(clipped(line, byte_size(line) - 1), Theme.muted())
   end
 
   defp draft(%{draft: field} = state) do
@@ -307,12 +298,13 @@ defmodule Badge.Page.Chat.Room do
   end
 
   # An empty draft is the only time there is room to say why the last line failed.
-  defp idle(%{refused: :banned}), do: prompt("banned - cannot post", @alert)
-  defp idle(%{refused: :empty}), do: prompt("nothing to say", @warn)
-  defp idle(%{link: :joined}), do: prompt("> _", @select)
-  defp idle(_state), do: prompt("connecting to the room", @muted)
+  defp idle(%{refused: :banned}), do: prompt("banned - cannot post", Theme.alert())
+  defp idle(%{refused: :empty}), do: prompt("nothing to say", Theme.warn())
+  defp idle(%{link: :joined}), do: prompt("> _", Theme.select())
+  defp idle(_state), do: prompt("connecting to the room", Theme.muted())
 
-  defp prompt(text, colour), do: {:text, @margin, @draft_y, :default16px, colour, @bg, text}
+  defp prompt(text, colour),
+    do: {:text, @margin, @draft_y, :default16px, colour, Theme.bg(), text}
 
   @doc "Keeps the selection on its message as newer ones push it down the list."
   @spec drift(map, integer) :: map
@@ -336,8 +328,8 @@ defmodule Badge.Page.Chat.Room do
   @doc "The colour for a count of characters left, or `nil` while there is room."
   @spec counter_colour(non_neg_integer) :: integer | nil
   def counter_colour(left) when left > 20, do: nil
-  def counter_colour(left) when left > 5, do: @warn
-  def counter_colour(_left), do: @alert
+  def counter_colour(left) when left > 5, do: Theme.warn()
+  def counter_colour(_left), do: Theme.alert()
 
   defp counter(field) do
     left = Field.remaining(field)
@@ -352,15 +344,15 @@ defmodule Badge.Page.Chat.Room do
   defp count_item(text, colour) do
     x = Theme.width() - @margin - @char_w * byte_size(text)
 
-    {:text, x, @draft_y, :default16px, colour, @bg, text}
+    {:text, x, @draft_y, :default16px, colour, Theme.bg(), text}
   end
 
-  defp colour(:joined), do: @select
-  defp colour(_link), do: @muted
+  defp colour(:joined), do: Theme.select()
+  defp colour(_link), do: Theme.muted()
 
   # Only says the room is empty when there is nothing else to look at.
   defp empty(%{messages: [], link: :joined}) do
-    [{:text, Readout.centre_x(@none), 120, :default16px, @dim, @bg, @none}]
+    [{:text, Readout.centre_x(@none), 120, :default16px, Theme.dim(), Theme.bg(), @none}]
   end
 
   defp empty(_state), do: []

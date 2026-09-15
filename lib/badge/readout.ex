@@ -8,10 +8,6 @@ defmodule Badge.Readout do
 
   alias Badge.Theme
 
-  @fg Theme.fg()
-  @dim Theme.dim()
-  @bg Theme.bg()
-
   @label_x 8
   @value_x 120
   @pitch 18
@@ -28,8 +24,8 @@ defmodule Badge.Readout do
   @spec right_row(binary, binary, integer, integer) :: [tuple]
   def right_row(label, value, y, colour) do
     [
-      {:text, @label_x, y, :default16px, @dim, @bg, label},
-      {:text, right_x(value), y, :default16px, colour, @bg, value}
+      {:text, @label_x, y, :default16px, Theme.dim(), Theme.bg(), label},
+      {:text, right_x(value), y, :default16px, colour, Theme.bg(), value}
     ]
   end
 
@@ -45,14 +41,14 @@ defmodule Badge.Readout do
   @spec row(binary, binary, integer, integer) :: [tuple]
   def row(label, value, y, colour) do
     [
-      {:text, @label_x, y, :default16px, @dim, @bg, label},
-      {:text, @value_x, y, :default16px, colour, @bg, value}
+      {:text, @label_x, y, :default16px, Theme.dim(), Theme.bg(), label},
+      {:text, @value_x, y, :default16px, colour, Theme.bg(), value}
     ]
   end
 
   defp rows([], _y, acc), do: :lists.reverse(acc)
 
   defp rows([{label, value} | rest], y, acc) do
-    rows(rest, y + @pitch, :lists.reverse(row(label, value, y, @fg)) ++ acc)
+    rows(rest, y + @pitch, :lists.reverse(row(label, value, y, Theme.fg())) ++ acc)
   end
 end
