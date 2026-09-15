@@ -10,9 +10,6 @@ defmodule Badge.Page.Text do
   alias Badge.TextBuffer
   alias Badge.Theme
 
-  @fg Theme.fg()
-  @bg Theme.bg()
-
   @margin 4
   @char_w 8
   @char_h 16
@@ -50,7 +47,7 @@ defmodule Badge.Page.Text do
     # Clamped so the cursor rect never runs past the right edge.
     x = min(@text_x + col * @char_w, Theme.width() - @char_w)
 
-    {:rect, x, @text_y + row * @char_h + @char_h - 2, @char_w, 2, @fg}
+    {:rect, x, @text_y + row * @char_h + @char_h - 2, @char_w, 2, Theme.fg()}
   end
 
   # Row index threaded by hand; empty lines are skipped rather than emitted.
@@ -61,7 +58,7 @@ defmodule Badge.Page.Text do
   defp text_items([<<>> | rest], row, acc), do: text_items(rest, row + 1, acc)
 
   defp text_items([line | rest], row, acc) do
-    item = {:text, @text_x, @text_y + row * @char_h, :default16px, @fg, @bg, line}
+    item = {:text, @text_x, @text_y + row * @char_h, :default16px, Theme.fg(), Theme.bg(), line}
 
     text_items(rest, row + 1, [item | acc])
   end

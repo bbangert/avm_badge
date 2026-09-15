@@ -11,10 +11,6 @@ defmodule Badge.Page.Chat.Banned do
   alias Badge.Text
   alias Badge.Theme
 
-  @fg Theme.fg()
-  @alert Theme.alert()
-  @bg Theme.bg()
-
   @char_w 8
   @margin 8
 
@@ -45,7 +41,7 @@ defmodule Badge.Page.Chat.Banned do
 
   @impl true
   def render(state) do
-    [{:text, @margin, @top, :default16px, @alert, @bg, @heading}] ++
+    [{:text, @margin, @top, :default16px, Theme.alert(), Theme.bg(), @heading}] ++
       lines(Text.wrap(reason(state), @columns, @orphan), @top + @pitch + @gap, [])
   end
 
@@ -55,6 +51,8 @@ defmodule Badge.Page.Chat.Banned do
   defp lines([], _y, acc), do: acc
 
   defp lines([line | rest], y, acc) do
-    lines(rest, y + @pitch, [{:text, @margin, y, :default16px, @fg, @bg, line} | acc])
+    lines(rest, y + @pitch, [
+      {:text, @margin, y, :default16px, Theme.fg(), Theme.bg(), line} | acc
+    ])
   end
 end

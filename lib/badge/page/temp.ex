@@ -13,11 +13,6 @@ defmodule Badge.Page.Temp do
   alias Badge.Sensors
   alias Badge.Theme
 
-  @accent Theme.accent()
-  @fg Theme.fg()
-  @dim Theme.dim()
-  @bg Theme.bg()
-
   @max_samples 76
 
   @plot_x 8
@@ -66,7 +61,7 @@ defmodule Badge.Page.Temp do
 
   @impl true
   def render(%{samples: []}) do
-    [{:text, @plot_x, @readout_y, :dogica, @dim, @bg, "waiting"}, baseline()]
+    [{:text, @plot_x, @readout_y, :dogica, Theme.dim(), Theme.bg(), "waiting"}, baseline()]
   end
 
   def render(%{samples: samples}) do
@@ -99,13 +94,14 @@ defmodule Badge.Page.Temp do
 
   defp bars([temp | rest], floor, ceiling, x, acc) do
     top = @plot_bottom - div((temp - floor) * (@plot_bottom - @plot_top), ceiling - floor)
-    item = {:rect, x, top, @bar_w, @plot_bottom - top + 1, @accent}
+    item = {:rect, x, top, @bar_w, @plot_bottom - top + 1, Theme.accent()}
 
     bars(rest, floor, ceiling, x + @bar_pitch, [item | acc])
   end
 
   defp readout(temp) do
-    {:text, @plot_x, @readout_y, :dogica, @fg, @bg, :erlang.integer_to_binary(temp) <> " C"}
+    {:text, @plot_x, @readout_y, :dogica, Theme.fg(), Theme.bg(),
+     :erlang.integer_to_binary(temp) <> " C"}
   end
 
   defp footer(low, high, count) do
@@ -116,10 +112,10 @@ defmodule Badge.Page.Temp do
         :erlang.integer_to_binary(high) <>
         "   n " <> :erlang.integer_to_binary(count)
 
-    {:text, @plot_x, @footer_y, :default16px, @dim, @bg, body}
+    {:text, @plot_x, @footer_y, :default16px, Theme.dim(), Theme.bg(), body}
   end
 
   defp baseline do
-    {:rect, @plot_x, @plot_bottom, @max_samples * @bar_pitch, 1, @dim}
+    {:rect, @plot_x, @plot_bottom, @max_samples * @bar_pitch, 1, Theme.dim()}
   end
 end

@@ -95,7 +95,7 @@ defmodule Badge.Page.Settings.DisplayTest do
     end
 
     test "the value is shown as a percentage" do
-      {brightness, _sleep} = Display.values(press(editing_brightness(), {:move, :left}))
+      {brightness, _sleep, _skin} = Display.values(press(editing_brightness(), {:move, :left}))
 
       assert brightness == "95%"
     end
@@ -118,12 +118,45 @@ defmodule Badge.Page.Settings.DisplayTest do
     end
   end
 
+  describe "theme" do
+    setup do
+      down = press(press(Display.init(), {:move, :down}), {:move, :down})
+
+      %{editing: press(down, {:edit, :newline})}
+    end
+
+    test "is the third row, and down stops there" do
+      assert press(Display.init(), {:move, :down}, 5).cursor == 2
+    end
+
+    test "starts on the default skin" do
+      assert elem(Display.values(Display.init()), 2) == Badge.Skin.default().name()
+    end
+
+    test "right steps to the next skin and left comes back", %{editing: editing} do
+      assert elem(Display.values(press(editing, {:move, :right})), 2) == "Win95"
+
+      assert elem(Display.values(press(press(editing, {:move, :right}), {:move, :left})), 2) ==
+               "Dark"
+    end
+
+    test "stops at both ends rather than wrapping", %{editing: editing} do
+      assert elem(Display.values(press(editing, {:move, :right}, 9)), 2) == "Win95"
+      assert elem(Display.values(press(editing, {:move, :left}, 9)), 2) == "Dark"
+    end
+
+    test "the chosen skin's name is drawn on the row", %{editing: editing} do
+      assert "Win95" in texts(press(editing, {:move, :right}))
+    end
+  end
+
   describe "render/1" do
-    test "names both settings" do
+    test "names every setting" do
       bodies = texts(Display.init())
 
       assert "Brightness" in bodies
       assert "Sleep" in bodies
+      assert "Theme" in bodies
     end
 
     test "shows every sleep option, so left and right are discoverable" do

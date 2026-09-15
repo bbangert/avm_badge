@@ -30,7 +30,7 @@ defmodule Badge.IconsTest do
   defp pixels(name), do: for(<<px::binary-4 <- Icons.binary(name)>>, do: px)
 
   defp bg_pixel do
-    bg = Theme.bg()
+    bg = Badge.Skin.Dark.bg()
 
     <<div(bg, 0x10000), div(rem(bg, 0x10000), 0x100), rem(bg, 0x100), 0xFF>>
   end

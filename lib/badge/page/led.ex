@@ -14,11 +14,6 @@ defmodule Badge.Page.Led do
   alias Badge.Pixels
   alias Badge.Theme
 
-  @accent Theme.accent()
-  @fg Theme.fg()
-  @dim Theme.dim()
-  @bg Theme.bg()
-
   @modes LedMode.modes()
   @mode_count length(@modes)
 
@@ -105,11 +100,13 @@ defmodule Badge.Page.Led do
   @impl true
   def render(state) do
     [
-      {:text, @label_x, @mode_y, :default16px, @dim, @bg, "mode"},
-      {:text, @value_x, @mode_y, :default16px, @fg, @bg, name(state)},
-      {:text, @label_x, @hue_y, :default16px, @dim, @bg, "hue"},
-      {:text, @value_x, @hue_y, :default16px, @fg, @bg, :erlang.integer_to_binary(state.hue)},
-      {:text, @label_x, @help_y, :default16px, @dim, @bg, "up/down mode   left/right hue"},
+      {:text, @label_x, @mode_y, :default16px, Theme.dim(), Theme.bg(), "mode"},
+      {:text, @value_x, @mode_y, :default16px, Theme.fg(), Theme.bg(), name(state)},
+      {:text, @label_x, @hue_y, :default16px, Theme.dim(), Theme.bg(), "hue"},
+      {:text, @value_x, @hue_y, :default16px, Theme.fg(), Theme.bg(),
+       :erlang.integer_to_binary(state.hue)},
+      {:text, @label_x, @help_y, :default16px, Theme.dim(), Theme.bg(),
+       "up/down mode   left/right hue"},
       swatch(state)
     ]
   end
@@ -120,8 +117,8 @@ defmodule Badge.Page.Led do
     {:rect, @swatch_x, @swatch_y, @swatch_w, @swatch_h, swatch_colour(mode(state))}
   end
 
-  defp swatch_colour(:off), do: @bg
-  defp swatch_colour(:white), do: @fg
-  defp swatch_colour(:rainbow), do: @accent
+  defp swatch_colour(:off), do: Theme.bg()
+  defp swatch_colour(:white), do: Theme.fg()
+  defp swatch_colour(:rainbow), do: Theme.accent()
   defp swatch_colour({:solid, hue}), do: Color.rgb888(Color.hsv_to_rgb(hue, 255, 255))
 end

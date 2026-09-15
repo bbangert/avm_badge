@@ -33,6 +33,15 @@ defmodule Badge.ThemeTest do
     end
   end
 
+  describe "skin" do
+    test "chrome and rules come from the active skin" do
+      status = %{battery: :battery_100, wifi: :wifi, clock: "12:34"}
+
+      assert Theme.chrome("Badge", status) == Badge.Skin.Dark.chrome("Badge", status)
+      assert Theme.rule(0, 22, 320) == Badge.Skin.Dark.rule(0, 22, 320)
+    end
+  end
+
   describe "geometry" do
     test "matches the panel" do
       assert Theme.width() == 320

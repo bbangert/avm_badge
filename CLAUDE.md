@@ -169,6 +169,19 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - `mix atomvm.check` is the real compatibility gate and runs during flash. Host
   tests passing proves nothing.
 
+## Skins
+
+- Colours, the title bar and rules come from a `Badge.Skin` module, read at
+  render time through `Badge.Theme`. **Never capture a Theme colour in a
+  module attribute** — it freezes the Dark palette into that module. Geometry
+  (`width`, `height`, `bar_h`, `content_top`) is fixed and may be compile-time
+- The active skin sits in the rendering process's dictionary: `Badge.UI.init`
+  activates the one saved under the `skin` NVS key, and the Theme row on the
+  Display tab switches it live and stores it once editing ends. Host tests
+  see `Badge.Skin.Dark` unless they call `Badge.Skin.activate/1`
+- Icons are composited on black, so `Badge.Skin.Win95` shows them in black
+  tiles. That is a known limitation, not a bug; it uses no extra fonts either
+
 ## AtomGL display
 
 - `{:update, list}` **repaints the entire screen** — no damage rect. Cost is per

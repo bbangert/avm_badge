@@ -22,10 +22,6 @@ defmodule Badge.Page.Settings do
   alias Badge.Page.Settings.Wifi
   alias Badge.Theme
 
-  @dim Theme.dim()
-  @bg Theme.bg()
-  @select Theme.select()
-
   @margin 8
 
   @subpages [Display, Wifi, Update, Sudo]
@@ -111,7 +107,7 @@ defmodule Badge.Page.Settings do
     titles = for module <- @subpages, do: module.title()
 
     tab_items(titles, 0, state.index, length(titles), slack(titles), 0, []) ++
-      [{:rect, @margin, @rule_y, Theme.width() - 2 * @margin, 1, @dim}]
+      Theme.rule(@margin, @rule_y, Theme.width() - 2 * @margin)
   end
 
   defp slack(titles) do
@@ -137,9 +133,9 @@ defmodule Badge.Page.Settings do
   defp gap_before(position, count, slack), do: div(position * slack, count - 1)
 
   defp tab(title, position, index, x) do
-    {:text, x, @strip_y, :default16px, tab_colour(position, index), @bg, title}
+    {:text, x, @strip_y, :default16px, tab_colour(position, index), Theme.bg(), title}
   end
 
-  defp tab_colour(position, position), do: @select
-  defp tab_colour(_position, _index), do: @dim
+  defp tab_colour(position, position), do: Theme.select()
+  defp tab_colour(_position, _index), do: Theme.dim()
 end
