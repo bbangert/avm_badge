@@ -15,6 +15,9 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   use `stty -f <port>` on macOS or `stty -F <port>` on Linux:
   `( mix atomvm.esp32.flash >/dev/null 2>&1; stty -F <port> 115200 raw -echo; timeout 25 cat <port> )`
 - Never run unbounded `cat`/`screen` on the port — it blocks the next flash
+- `mix compile && iex tools/sim.exs` runs the pages on the host with fake
+  hardware processes and draws them on a canvas at http://localhost:4000;
+  `elixir tools/sim.exs --check` renders every page once without a browser
 - Reflashing does not need `erase-flash`: `nvs` is unchanged by the repartition,
   so wifi credentials, profile and peers survive
 - No `flash-elixir` target in this AtomVM revision, and **`idf.py flash` does
