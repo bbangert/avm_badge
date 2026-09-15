@@ -4,8 +4,8 @@ defmodule Badge.Power do
 
   Both channels sample through a 1/2 divider, so the true voltage is
   twice the calibrated millivolt reading. Voltage changes slowly, so a
-  linked ticker samples both channels every `@interval` and logs a status
-  line at the same cadence rather than sampling on demand.
+  linked ticker samples both channels every `@interval` rather than on
+  demand, and logs a status line every `@report` samples.
   """
 
   use GenServer
@@ -16,6 +16,9 @@ defmodule Badge.Power do
 
   @interval 2_000
   @samples 64
+
+  # Ticks between status lines.
+  @report 15
 
   # VBUS above this is treated as USB present.
   @usb_present_mv 4_000
@@ -54,17 +57,28 @@ defmodule Badge.Power do
     {:ok, battery_chan} = Esp.ADC.acquire(Hardware.adc_battery_pin(), unit, :bit_max, :db_12)
     {:ok, vbus_chan} = Esp.ADC.acquire(Hardware.adc_vbus_pin(), unit, :bit_max, :db_12)
 
-    :io.format(~c"Power: battery GPIO~p, vbus GPIO~p, sampling every ~ps~n", [
-      Hardware.adc_battery_pin(),
-      Hardware.adc_vbus_pin(),
-      div(@interval, 1000)
-    ])
+    :io.format(
+      ~c"Power: battery GPIO~p, vbus GPIO~p, sampling every ~ps, reporting every ~ps~n",
+      [
+        Hardware.adc_battery_pin(),
+        Hardware.adc_vbus_pin(),
+        div(@interval, 1000),
+        div(@interval * @report, 1000)
+      ]
+    )
 
     send(self(), :tick)
     start_ticker()
 
     {:ok,
-     %{unit: unit, battery_chan: battery_chan, vbus_chan: vbus_chan, battery_mv: 0, vbus_mv: 0}}
+     %{
+       unit: unit,
+       battery_chan: battery_chan,
+       vbus_chan: vbus_chan,
+       battery_mv: 0,
+       vbus_mv: 0,
+       ticks: 0
+     }}
   end
 
   @impl true
@@ -89,17 +103,23 @@ defmodule Badge.Power do
     battery_mv = sample_mv(state.unit, state.battery_chan)
     vbus_mv = sample_mv(state.unit, state.vbus_chan)
 
-    # Bring-up instrumentation: this is the only line that runs on every page,
-    # so it is where a leak is visible with nothing else switched on.
+    report(state.ticks, battery_mv, vbus_mv)
+
+    {:noreply, %{state | battery_mv: battery_mv, vbus_mv: vbus_mv, ticks: state.ticks + 1}}
+  end
+
+  # Bring-up instrumentation: this is the only line that runs on every page,
+  # so it is where a leak is visible with nothing else switched on.
+  defp report(ticks, battery_mv, vbus_mv) when rem(ticks, @report) == 0 do
     :io.format(~c"Power: battery=~pmv vbus=~pmv usb=~p heap=~p~n", [
       battery_mv,
       vbus_mv,
       vbus_mv >= @usb_present_mv,
       free_heap()
     ])
-
-    {:noreply, %{state | battery_mv: battery_mv, vbus_mv: vbus_mv}}
   end
+
+  defp report(_ticks, _battery_mv, _vbus_mv), do: :ok
 
   defp sample_mv(unit, chan) do
     case Esp.ADC.sample(chan, unit, [:raw, :voltage, {:samples, @samples}]) do
