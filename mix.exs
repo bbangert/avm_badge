@@ -8,6 +8,7 @@ defmodule Badge.MixProject do
       elixir: "~> 1.13",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      erlc_paths: erlc_paths(Mix.env()),
       # ExAtomVM writes no application.bin, and NervesHub cannot identify
       # firmware without one.
       aliases: ["atomvm.packbeam": ["atomvm.application_bin", "atomvm.packbeam"]],
@@ -23,6 +24,10 @@ defmodule Badge.MixProject do
   def application do
     [extra_applications: [:logger]]
   end
+
+  # AtomVM ships alisp in boot.avm; the host needs its own copy to test against.
+  defp erlc_paths(:test), do: ["test/support/alisp"]
+  defp erlc_paths(_env), do: []
 
   defp deps do
     [

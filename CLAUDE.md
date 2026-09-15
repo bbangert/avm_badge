@@ -5,7 +5,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 783 tests across 45 files, no board needed. 2 are excluded as
+- `mix test` — 887 tests across 50 files, no board needed. 2 are excluded as
   `:regenerates_assets` because they rewrite tracked files
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
@@ -56,6 +56,22 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - `dogica` and `pixel_operator` are compiled into `main.avm`, so text survives a
   missing assets partition. `w95fa` is read from it on demand; a failed read
   logs `UI: font ~p not in assets partition` once and is not retried.
+
+## Lisp page
+
+- `Badge.Page.Lisp` (the `:cross` slot) is a prompt over AtomVM's `alisp`,
+  which `boot.avm` already ships: `alisp`, `alisp_stdlib`, `sexp_lexer`,
+  `sexp_parser`, `sexp_serializer`. Nothing Lisp-related is packed into
+  `main.avm`. `arepl` cannot run here: there is no console input over the
+  USB serial JTAG, so `Badge.Alisp` drives the lexer, parser and evaluator
+  itself
+- Forms evaluate in a worker process `Badge.Alisp.start/1` spawns, never in
+  `Badge.UI`. `setq` and `defun` live in that process's dictionary, so
+  killing it (the page does after ~5 s of no answer) loses them
+- `test/support/alisp/` is a copy of AtomVM's `libs/alisp/src` compiled only
+  in the test env via `erlc_paths`, so the host tests run the real lexer,
+  parser and evaluator. Module calls are `(erlang:length (quote (1 2)))`;
+  there is no `'` reader macro, and only one form per line
 
 ## Chat transport
 
