@@ -17,9 +17,6 @@ defmodule Badge.Page.Sensors do
   alias Badge.Page.Tilt
   alias Badge.Theme
 
-  @fg Theme.fg()
-  @dim Theme.dim()
-
   @subpages [Tilt, Temp]
   @count length(@subpages)
 
@@ -88,7 +85,7 @@ defmodule Badge.Page.Sensors do
     left = div(Theme.width() - (@count * @dot + (@count - 1) * (@dot_gap - @dot)), 2)
 
     for index <- 0..(@count - 1) do
-      colour = if index == current, do: @fg, else: @dim
+      colour = if index == current, do: Theme.fg(), else: Theme.dim()
 
       {:rect, left + index * @dot_gap, @dot_y, @dot, @dot, colour}
     end

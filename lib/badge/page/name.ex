@@ -22,12 +22,6 @@ defmodule Badge.Page.Name do
   alias Badge.Text
   alias Badge.Theme
 
-  @accent Theme.accent()
-  @fg Theme.fg()
-  @dim Theme.dim()
-  @muted Theme.muted()
-  @bg Theme.bg()
-
   @margin 16
 
   # dogica is fixed width, so its text can be measured and wrapped exactly.
@@ -53,9 +47,6 @@ defmodule Badge.Page.Name do
   @detail_x @margin + @icon_w + 6
   @hint_y 216
 
-  @alert Theme.alert()
-  @select Theme.select()
-
   @row_y Theme.content_top() + 10
   @row_pitch 18
   @marker_x 0
@@ -65,8 +56,6 @@ defmodule Badge.Page.Name do
 
   @screens 4
 
-  @ok Theme.ok()
-  @warn Theme.warn()
   @muted_rows 6
 
   # What meeting a badge looks like, on the panel and on the LED chain.
@@ -329,15 +318,15 @@ defmodule Badge.Page.Name do
     value = Field.value(state.field) <> "_"
 
     [
-      centred(Profile.label(key), @entry_label_y, @dim),
-      centred(value, @entry_value_y, @select),
-      centred("Enter save   Esc cancel", @hint_y, @dim)
+      centred(Profile.label(key), @entry_label_y, Theme.dim()),
+      centred(value, @entry_value_y, Theme.select()),
+      centred("Enter save   Esc cancel", @hint_y, Theme.dim())
     ]
   end
 
   def render(%{mode: :fields} = state) do
     rows(Profile.keys(), 0, state, @row_y, []) ++
-      [centred("up/down pick   Enter edit   Esc done", @hint_y, @dim)]
+      [centred("up/down pick   Enter edit   Esc done", @hint_y, Theme.dim())]
   end
 
   def render(%{screen: 1, profile: profile}), do: big_screen(profile) ++ dots(1)
@@ -351,7 +340,7 @@ defmodule Badge.Page.Name do
     rule_y = @name_y + length(lines) * @name_pitch + 6
 
     name_items(lines, @name_y, []) ++
-      [{:rect, @margin, rule_y, @rule_w, @rule_h, @accent}] ++
+      [{:rect, @margin, rule_y, @rule_w, @rule_h, Theme.accent()}] ++
       detail_items(Profile.lines(profile), rule_y + 14, []) ++
       [hint()] ++ dots(state.screen)
   end
@@ -377,29 +366,29 @@ defmodule Badge.Page.Name do
 
   defp big_lines([line | rest], font, height, y, acc) do
     x = div(Theme.width() - Font.width(font, line), 2)
-    item = {:text, x, y, font, @fg, @bg, line}
+    item = {:text, x, y, font, Theme.fg(), Theme.bg(), line}
 
     big_lines(rest, font, height, y + height, [item | acc])
   end
 
   defp share_screen(state) do
     [
-      centred("Share", Theme.content_top() + 16, @fg),
-      centred(state.chip, Theme.content_top() + 44, @dim)
+      centred("Share", Theme.content_top() + 16, Theme.fg()),
+      centred(state.chip, Theme.content_top() + 44, Theme.dim())
     ] ++ met_lines(state.met, Peers.count(state.peers))
   end
 
   # Before anyone has been heard there is nothing to report but the count.
   defp met_lines(nil, count) do
     [
-      centred("hold another badge up to this one", @met_name_y, @dim),
+      centred("hold another badge up to this one", @met_name_y, Theme.dim()),
       collected_line(count)
     ]
   end
 
   defp met_lines({name, greeting}, count) do
     [
-      centred(name, @met_name_y, @fg),
+      centred(name, @met_name_y, Theme.fg()),
       centred(note(greeting), @met_note_y, colour(greeting)),
       collected_line(count)
     ]
@@ -409,22 +398,28 @@ defmodule Badge.Page.Name do
   defp note(:known), do: "already in your badges"
   defp note(:renamed), do: "name updated"
 
-  defp colour(:new), do: @ok
-  defp colour(:known), do: @select
-  defp colour(:renamed), do: @warn
+  defp colour(:new), do: Theme.ok()
+  defp colour(:known), do: Theme.select()
+  defp colour(:renamed), do: Theme.warn()
 
   defp collected_line(count) do
-    centred(:erlang.integer_to_binary(count) <> collected(count) <> " collected", @met_count_y, @dim)
+    centred(
+      :erlang.integer_to_binary(count) <> collected(count) <> " collected",
+      @met_count_y,
+      Theme.dim()
+    )
   end
-
-
 
   defp peers_screen(%{peers: peers, top: top}) do
     count = Peers.count(peers)
 
     [
-      centred("Collected", Theme.content_top() + 16, @fg),
-      centred(:erlang.integer_to_binary(count) <> collected(count), Theme.content_top() + 44, @ok)
+      centred("Collected", Theme.content_top() + 16, Theme.fg()),
+      centred(
+        :erlang.integer_to_binary(count) <> collected(count),
+        Theme.content_top() + 44,
+        Theme.ok()
+      )
     ] ++
       peer_rows(drop(peers, top), @muted_rows, Theme.content_top() + 80, []) ++
       scroll_hint(count, top)
@@ -442,7 +437,13 @@ defmodule Badge.Page.Name do
     shown = min(top + @muted_rows, count)
     range = :erlang.integer_to_binary(top + 1) <> "-" <> :erlang.integer_to_binary(shown)
 
-    [centred(range <> " of " <> :erlang.integer_to_binary(count) <> "   up/down", @hint_y, @dim)]
+    [
+      centred(
+        range <> " of " <> :erlang.integer_to_binary(count) <> "   up/down",
+        @hint_y,
+        Theme.dim()
+      )
+    ]
   end
 
   defp collected(1), do: " badge"
@@ -454,7 +455,7 @@ defmodule Badge.Page.Name do
   defp peer_rows([peer | rest], left, y, acc) do
     name = Profile.display_name(Map.get(peer, :profile, %{}))
 
-    peer_rows(rest, left - 1, y + @detail_pitch, [centred(name, y, @muted) | acc])
+    peer_rows(rest, left - 1, y + @detail_pitch, [centred(name, y, Theme.muted()) | acc])
   end
 
   # Which screen you are on, so paging is discoverable without a label.
@@ -462,7 +463,7 @@ defmodule Badge.Page.Name do
     left = div(Theme.width() - (@screens * @dot + (@screens - 1) * (@dot_gap - @dot)), 2)
 
     for index <- 0..(@screens - 1) do
-      colour = if index == current, do: @fg, else: @dim
+      colour = if index == current, do: Theme.fg(), else: Theme.dim()
 
       {:rect, left + index * @dot_gap, @dot_y, @dot, @dot, colour}
     end
@@ -471,7 +472,7 @@ defmodule Badge.Page.Name do
   defp name_items([], _y, acc), do: :lists.reverse(acc)
 
   defp name_items([line | rest], y, acc) do
-    item = {:text, @margin, y, @name_font, @fg, @bg, line}
+    item = {:text, @margin, y, @name_font, Theme.fg(), Theme.bg(), line}
 
     name_items(rest, y + @name_pitch, [item | acc])
   end
@@ -482,7 +483,7 @@ defmodule Badge.Page.Name do
   defp detail_items(_lines, y, acc) when y + @detail_pitch > @hint_y, do: :lists.reverse(acc)
 
   defp detail_items([{icon, text} | rest], y, acc) do
-    item = {:text, @detail_x, y, :default16px, @muted, @bg, text}
+    item = {:text, @detail_x, y, :default16px, Theme.muted(), Theme.bg(), text}
 
     detail_items(rest, y + @detail_pitch, [item | acc] ++ badge_icon(icon, y))
   end
@@ -498,9 +499,11 @@ defmodule Badge.Page.Name do
     marker = if position == state.cursor, do: ">", else: " "
 
     items = [
-      {:text, @value_x, y, :default16px, colour, @bg, shown(Map.get(state.profile, key, ""))},
-      {:text, @label_x, y, :default16px, label_colour(state, position), @bg, Profile.label(key)},
-      {:text, @marker_x, y, :default16px, @select, @bg, marker}
+      {:text, @value_x, y, :default16px, colour, Theme.bg(),
+       shown(Map.get(state.profile, key, ""))},
+      {:text, @label_x, y, :default16px, label_colour(state, position), Theme.bg(),
+       Profile.label(key)},
+      {:text, @marker_x, y, :default16px, Theme.select(), Theme.bg(), marker}
     ]
 
     rows(rest, position + 1, state, y + @row_pitch, items ++ acc)
@@ -509,14 +512,14 @@ defmodule Badge.Page.Name do
   # The one field that must be filled in says so, in the colour used for problems.
   defp row_colour(state, position, key) do
     cond do
-      key == Profile.required() and not Profile.complete?(state.profile) -> @alert
-      position == state.cursor -> @select
-      true -> @fg
+      key == Profile.required() and not Profile.complete?(state.profile) -> Theme.alert()
+      position == state.cursor -> Theme.select()
+      true -> Theme.fg()
     end
   end
 
-  defp label_colour(%{cursor: position}, position), do: @select
-  defp label_colour(_state, _position), do: @dim
+  defp label_colour(%{cursor: position}, position), do: Theme.select()
+  defp label_colour(_state, _position), do: Theme.dim()
 
   # Values are longer than the column, so the list shows as much as fits.
   defp shown(value) when byte_size(value) > @value_columns do
@@ -527,13 +530,14 @@ defmodule Badge.Page.Name do
   defp shown(value), do: value
 
   defp centred(text, y, colour) do
-    {:text, div(Theme.width() - @char_w * byte_size(text), 2), y, :default16px, colour, @bg, text}
+    {:text, div(Theme.width() - @char_w * byte_size(text), 2), y, :default16px, colour,
+     Theme.bg(), text}
   end
 
   defp hint do
     text = "E to edit"
 
-    {:text, div(Theme.width() - @char_w * byte_size(text), 2), @hint_y, :default16px, @dim, @bg,
-     text}
+    {:text, div(Theme.width() - @char_w * byte_size(text), 2), @hint_y, :default16px, Theme.dim(),
+     Theme.bg(), text}
   end
 end

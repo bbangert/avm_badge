@@ -17,9 +17,6 @@ defmodule Badge.Page.Tilt do
   alias Badge.Sensors
   alias Badge.Theme
 
-  @dim Theme.dim()
-  @bg Theme.bg()
-
   @marker :circle
   @marker_size Icons.size(@marker)
   @half_w div(elem(@marker_size, 0), 2)
@@ -92,7 +89,7 @@ defmodule Badge.Page.Tilt do
       "roll " <>
         :erlang.integer_to_binary(roll) <> "   pitch " <> :erlang.integer_to_binary(pitch)
 
-    {:text, 4, @readout_y, :default16px, @dim, @bg, body}
+    {:text, 4, @readout_y, :default16px, Theme.dim(), Theme.bg(), body}
   end
 
   defp scale(degrees, span), do: div(clamp(degrees) * span, @range)

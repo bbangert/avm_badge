@@ -21,16 +21,6 @@ defmodule Badge.Page.Settings.Wifi do
   alias Badge.Theme
   alias Badge.Wifi
 
-  @fg Theme.fg()
-
-  # The network currently joined, distinct from the cursor highlight.
-  @joined Theme.ok()
-  @alert Theme.alert()
-  @warn Theme.warn()
-  @select Theme.select()
-  @dim Theme.dim()
-  @bg Theme.bg()
-
   # WPA2's maximum passphrase length.
   @capacity 63
 
@@ -187,19 +177,19 @@ defmodule Badge.Page.Settings.Wifi do
   @impl true
   def render(%{mode: :joined} = state) do
     [
-      centred(state.chosen.ssid, @name_y, @joined),
-      centred("already connected to this network", @prompt_y, @warn),
-      centred("Esc to go back", @help_y, @dim)
+      centred(state.chosen.ssid, @name_y, joined()),
+      centred("already connected to this network", @prompt_y, Theme.warn()),
+      centred("Esc to go back", @help_y, Theme.dim())
     ]
   end
 
   def render(%{mode: :passphrase} = state) do
     [
-      centred(state.chosen.ssid, @name_y, @fg),
-      centred("enter passphrase below", @prompt_y, @dim),
-      centred("hold Fn to view", @hint_y, @dim),
-      centred(entry(state), @field_y, @select),
-      centred("Enter join   Esc back", @help_y, @dim)
+      centred(state.chosen.ssid, @name_y, Theme.fg()),
+      centred("enter passphrase below", @prompt_y, Theme.dim()),
+      centred("hold Fn to view", @hint_y, Theme.dim()),
+      centred(entry(state), @field_y, Theme.select()),
+      centred("Enter join   Esc back", @help_y, Theme.dim())
     ]
   end
 
@@ -211,9 +201,9 @@ defmodule Badge.Page.Settings.Wifi do
     Readout.right_row("wifi", radio(radio), Settings.content_top(), status_colour(radio))
   end
 
-  defp status_colour(:failed), do: @alert
-  defp status_colour(:connected), do: @joined
-  defp status_colour(_radio), do: @fg
+  defp status_colour(:failed), do: Theme.alert()
+  defp status_colour(:connected), do: joined()
+  defp status_colour(_radio), do: Theme.fg()
 
   defp radio(:connected), do: "connected"
   defp radio(:connecting), do: "connecting"
@@ -225,7 +215,7 @@ defmodule Badge.Page.Settings.Wifi do
   defp list_help(_state), do: "Enter join   s rescan   c forget"
 
   defp rows(%{status: %{scanning: true}}) do
-    [{:text, @row_x, first_row(), :default16px, @dim, @bg, "scanning..."}]
+    [{:text, @row_x, first_row(), :default16px, Theme.dim(), Theme.bg(), "scanning..."}]
   end
 
   defp rows(%{networks: []}), do: []
@@ -259,10 +249,10 @@ defmodule Badge.Page.Settings.Wifi do
     security = Network.security(network)
 
     items = [
-      {:text, @row_x, y, :default16px, colour, @bg, Network.name(network)},
+      {:text, @row_x, y, :default16px, colour, Theme.bg(), Network.name(network)},
       Icons.item(signal_icon(network), @signal_x, y),
-      {:text, Readout.right_x(security), y, :default16px, colour, @bg, security},
-      {:text, @cursor_x, y, :default16px, colour, @bg, marker}
+      {:text, Readout.right_x(security), y, :default16px, colour, Theme.bg(), security},
+      {:text, @cursor_x, y, :default16px, colour, Theme.bg(), marker}
     ]
 
     network_items(rest, index + 1, state, y + Readout.pitch(), items ++ acc)
@@ -271,16 +261,20 @@ defmodule Badge.Page.Settings.Wifi do
   # The network you are on reads green whether or not the cursor is on it.
   defp signal_icon(network), do: elem(@signal_icons, Network.level(network))
 
-  defp row_colour(%{ssid: ssid}, _index, %{status: %{radio: :connected, ssid: ssid}}), do: @joined
+  defp row_colour(%{ssid: ssid}, _index, %{status: %{radio: :connected, ssid: ssid}}),
+    do: joined()
 
-  defp row_colour(_network, index, %{cursor: index}), do: @select
+  defp row_colour(_network, index, %{cursor: index}), do: Theme.select()
 
-  defp row_colour(_network, _index, _state), do: @fg
+  defp row_colour(_network, _index, _state), do: Theme.fg()
 
-  defp help(text, colour), do: {:text, @row_x, @help_y, :default16px, colour, @bg, text}
+  # The network currently joined, distinct from the cursor highlight.
+  defp joined, do: Theme.ok()
+
+  defp help(text, colour), do: {:text, @row_x, @help_y, :default16px, colour, Theme.bg(), text}
 
   defp centred(text, y, colour) do
-    {:text, Readout.centre_x(text), y, :default16px, colour, @bg, text}
+    {:text, Readout.centre_x(text), y, :default16px, colour, Theme.bg(), text}
   end
 
   # Held Fn reveals what was typed; otherwise only its length shows.
@@ -288,6 +282,6 @@ defmodule Badge.Page.Settings.Wifi do
   defp entry(state), do: Field.masked(state.field) <> "_"
 
   # A notice is something the user needs to notice, so it is not dim.
-  defp list_help_item(%{notice: nil} = state), do: help(list_help(state), @dim)
-  defp list_help_item(state), do: help(list_help(state), @alert)
+  defp list_help_item(%{notice: nil} = state), do: help(list_help(state), Theme.dim())
+  defp list_help_item(state), do: help(list_help(state), Theme.alert())
 end

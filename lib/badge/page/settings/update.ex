@@ -18,15 +18,6 @@ defmodule Badge.Page.Settings.Update do
   alias Badge.Theme
   alias Badge.Update.Link
 
-  @fg Theme.fg()
-  @dim Theme.dim()
-  @bg Theme.bg()
-  @accent Theme.accent()
-  @select Theme.select()
-  @alert Theme.alert()
-  @ok Theme.ok()
-  @warn Theme.warn()
-
   @row_x 8
   @help_y 216
 
@@ -122,10 +113,10 @@ defmodule Badge.Page.Settings.Update do
   def render(%{status: nil} = state), do: render(%{state | status: unknown()})
 
   def render(%{confirm: confirm} = state) when confirm != nil do
-    rows(state) ++ [help(confirm_text(confirm), @accent)]
+    rows(state) ++ [help(confirm_text(confirm), Theme.accent())]
   end
 
-  def render(state), do: rows(state) ++ [help(help_text(state), @dim)]
+  def render(state), do: rows(state) ++ [help(help_text(state), Theme.dim())]
 
   defp rows(state) do
     hub_row(state) ++
@@ -159,22 +150,24 @@ defmodule Badge.Page.Settings.Update do
   defp hub_text(%{state: :failed, reason: reason}), do: clip(reason)
   defp hub_text(_status), do: "connected"
 
-  defp hub_colour(%{state: :failed}), do: @alert
-  defp hub_colour(%{state: :unprovisioned}), do: @warn
-  defp hub_colour(%{state: :waiting}), do: @fg
-  defp hub_colour(%{state: :connecting, reason: nil}), do: @fg
-  defp hub_colour(%{state: :connecting}), do: @warn
-  defp hub_colour(_status), do: @ok
+  defp hub_colour(%{state: :failed}), do: Theme.alert()
+  defp hub_colour(%{state: :unprovisioned}), do: Theme.warn()
+  defp hub_colour(%{state: :waiting}), do: Theme.fg()
+  defp hub_colour(%{state: :connecting, reason: nil}), do: Theme.fg()
+  defp hub_colour(%{state: :connecting}), do: Theme.warn()
+  defp hub_colour(_status), do: Theme.ok()
 
-  defp id_row(%{status: %{identifier: nil}}), do: Readout.right_row("id", "unknown", @id_y, @dim)
-  defp id_row(%{status: %{identifier: id}}), do: Readout.right_row("id", id, @id_y, @fg)
+  defp id_row(%{status: %{identifier: nil}}),
+    do: Readout.right_row("id", "unknown", @id_y, Theme.dim())
+
+  defp id_row(%{status: %{identifier: id}}), do: Readout.right_row("id", id, @id_y, Theme.fg())
 
   defp running_row(%{status: %{firmware: nil}}) do
-    Readout.right_row("running", "unknown", @running_y, @dim)
+    Readout.right_row("running", "unknown", @running_y, Theme.dim())
   end
 
   defp running_row(%{status: %{firmware: firmware}}) do
-    Readout.right_row("running", firmware.name <> " " <> firmware.version, @running_y, @fg)
+    Readout.right_row("running", firmware.name <> " " <> firmware.version, @running_y, Theme.fg())
   end
 
   defp slot_row(%{status: %{slot: nil}}), do: []
@@ -192,27 +185,27 @@ defmodule Badge.Page.Settings.Update do
   defp trial_suffix(true), do: " on trial"
   defp trial_suffix(false), do: ""
 
-  defp slot_colour(%{trial: true}), do: @warn
-  defp slot_colour(_status), do: @dim
+  defp slot_colour(%{trial: true}), do: Theme.warn()
+  defp slot_colour(_status), do: Theme.dim()
 
   defp update_row(%{status: %{state: :offered, offer: offer}}) do
-    Readout.right_row("update", offer <> " available", @update_y, @select)
+    Readout.right_row("update", offer <> " available", @update_y, Theme.select())
   end
 
   defp update_row(%{status: %{state: :downloading, percent: percent}}) do
-    Readout.right_row("update", percent_text(percent), @update_y, @accent)
+    Readout.right_row("update", percent_text(percent), @update_y, Theme.accent())
   end
 
   defp update_row(%{status: %{state: :ready, target: nil}}) do
-    Readout.right_row("update", "installed", @update_y, @ok)
+    Readout.right_row("update", "installed", @update_y, Theme.ok())
   end
 
   defp update_row(%{status: %{state: :ready, target: target}}) do
-    Readout.right_row("update", "installed to " <> target, @update_y, @ok)
+    Readout.right_row("update", "installed to " <> target, @update_y, Theme.ok())
   end
 
   defp update_row(%{status: %{state: :current}}) do
-    Readout.right_row("update", "up to date", @update_y, @dim)
+    Readout.right_row("update", "up to date", @update_y, Theme.dim())
   end
 
   defp update_row(_state), do: []
@@ -220,8 +213,8 @@ defmodule Badge.Page.Settings.Update do
   # Fill first, so the track shows through as the remainder.
   defp bar(%{status: %{state: :downloading, percent: percent}}) do
     [
-      {:rect, @bar_x, @bar_y, div(@bar_w * percent, 100), @bar_h, @accent},
-      {:rect, @bar_x, @bar_y, @bar_w, @bar_h, @dim}
+      {:rect, @bar_x, @bar_y, div(@bar_w * percent, 100), @bar_h, Theme.accent()},
+      {:rect, @bar_x, @bar_y, @bar_w, @bar_h, Theme.dim()}
     ]
   end
 
@@ -257,5 +250,5 @@ defmodule Badge.Page.Settings.Update do
   defp clip(text) when byte_size(text) <= @reason_columns, do: text
   defp clip(<<head::binary-@reason_columns, _rest::binary>>), do: head
 
-  defp help(text, colour), do: {:text, @row_x, @help_y, :default16px, colour, @bg, text}
+  defp help(text, colour), do: {:text, @row_x, @help_y, :default16px, colour, Theme.bg(), text}
 end

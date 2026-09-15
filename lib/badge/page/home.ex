@@ -12,10 +12,6 @@ defmodule Badge.Page.Home do
   alias Badge.Pages
   alias Badge.Theme
 
-  @fg Theme.fg()
-  @dim Theme.dim()
-  @bg Theme.bg()
-
   @top Theme.content_top()
   @bottom Theme.height() - 2
 
@@ -31,12 +27,6 @@ defmodule Badge.Page.Home do
   # Same order as Badge.Pages.all/0, so the two lists walk together.
   @cell_origins for y <- @rows_y, x <- @cols_x, do: {x, y}
 
-  @rule_items [
-    {:rect, 106, @top, 1, @bottom - @top, @dim},
-    {:rect, 213, @top, 1, @bottom - @top, @dim},
-    {:rect, 0, @top + @cell_h, Theme.width(), 1, @dim}
-  ]
-
   @impl true
   def title, do: "Badge"
 
@@ -45,7 +35,14 @@ defmodule Badge.Page.Home do
 
   @impl true
   def render(:ok) do
-    cell_items(Pages.all(), @cell_origins, []) ++ @rule_items
+    cell_items(Pages.all(), @cell_origins, []) ++ rule_items()
+  end
+
+  defp rule_items do
+    [
+      {:rect, 106, @top, 1, @bottom - @top, Theme.dim()},
+      {:rect, 213, @top, 1, @bottom - @top, Theme.dim()}
+    ] ++ Theme.rule(0, @top + @cell_h, Theme.width())
   end
 
   # Pages and origins threaded together so a label always sits under its own icon.
@@ -62,8 +59,8 @@ defmodule Badge.Page.Home do
     icon = Icons.item(module.icon(), x + div(@cell_w - icon_w, 2), y + @icon_dy)
 
     text =
-      {:text, x + div(@cell_w - @char_w * byte_size(label), 2), y + @label_dy, :default16px, @fg,
-       @bg, label}
+      {:text, x + div(@cell_w - @char_w * byte_size(label), 2), y + @label_dy, :default16px,
+       Theme.fg(), Theme.bg(), label}
 
     cell_items(pages, origins, [text, icon | acc])
   end

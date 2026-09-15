@@ -24,6 +24,9 @@ defmodule Badge.UI do
   The title bar carries the page name, a clock and the battery and wifi
   icons. Its contents are compared like page state, so the clock ticks even
   on a page that never changes by itself.
+
+  The saved `Badge.Skin` is activated here, because pages render inside this
+  process and read their colours from its dictionary.
   """
 
   use GenServer
@@ -32,35 +35,20 @@ defmodule Badge.UI do
   alias Badge.Battery
   alias Badge.Clock
   alias Badge.Hardware
-  alias Badge.Icons
   alias Badge.Page.Home
   alias Badge.Page.Splash
   alias Badge.Pages
   alias Badge.Pixels
   alias Badge.Power
+  alias Badge.Skin
   alias Badge.Theme
   alias Badge.Wifi
-
-  @accent Theme.accent()
-  @dim Theme.dim()
-  @bg Theme.bg()
-  @width Theme.width()
-  @height Theme.height()
-  @bar_h Theme.bar_h()
 
   # Ticker rate. A page renders at its own `refresh/0`, which must be a multiple of this.
   @base_interval 100
 
   # The clock in the title bar needs a second; battery and wifi change far more slowly.
   @status_ticks div(1_000, @base_interval)
-
-  @status_y 3
-  @status_margin 6
-  @status_gap 6
-  @status_w elem(Icons.size(:battery_100), 0)
-  @battery_x Theme.width() - @status_margin - @status_w
-  @wifi_x @battery_x - @status_gap - @status_w
-  @char_w 8
 
   @font_dogica File.read!("assets/fonts/dogica.uf")
   @font_pixel_operator File.read!("assets/fonts/pixel_operator.uf")
@@ -120,6 +108,8 @@ defmodule Badge.UI do
       idle: 0,
       asleep: false
     }
+
+    Skin.activate(Skin.load())
 
     # Renders once immediately so the home grid is up before the first tick.
     render(state)
@@ -368,28 +358,9 @@ defmodule Badge.UI do
   end
 
   defp render(%{port: port, page: page, page_state: page_state, status: status}) do
-    items = page.render(page_state) ++ chrome(page.title(), status)
+    items = page.render(page_state) ++ Theme.chrome(page.title(), status)
 
     :port.call(port, {:update, items})
-  end
-
-  # Z-order runs tail to head: background last.
-  defp chrome(title, status) do
-    [
-      Icons.item(status.battery, @battery_x, @status_y),
-      Icons.item(status.wifi, @wifi_x, @status_y),
-      clock_item(status.clock),
-      {:text, @status_margin, @status_y, :pixel_operator, @accent, @bg, title},
-      {:rect, 0, @bar_h, @width, 1, @dim},
-      {:rect, 0, 0, @width, @height, @bg}
-    ]
-  end
-
-  # default16px is 8px per character, so this is the one thing in the bar that can be centred.
-  defp clock_item(clock) do
-    x = div(@width - @char_w * byte_size(clock), 2)
-
-    {:text, x, @status_y, :default16px, @dim, @bg, clock}
   end
 
   # Waits in a linked process, so this GenServer never sleeps in a callback and a dead ticker crashes loudly.
