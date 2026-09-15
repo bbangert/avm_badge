@@ -5,7 +5,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 887 tests across 50 files, no board needed. 2 are excluded as
+- `mix test` — 917 tests across 51 files, no board needed. 2 are excluded as
   `:regenerates_assets` because they rewrite tracked files
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
@@ -57,17 +57,27 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   missing assets partition. `w95fa` is read from it on demand; a failed read
   logs `UI: font ~p not in assets partition` once and is not retried.
 
-## Lisp page
+## REPL page
 
-- `Badge.Page.Lisp` (the `:cross` slot) is a prompt over AtomVM's `alisp`,
-  which `boot.avm` already ships: `alisp`, `alisp_stdlib`, `sexp_lexer`,
-  `sexp_parser`, `sexp_serializer`. Nothing Lisp-related is packed into
-  `main.avm`. `arepl` cannot run here: there is no console input over the
-  USB serial JTAG, so `Badge.Alisp` drives the lexer, parser and evaluator
-  itself
-- Forms evaluate in a worker process `Badge.Alisp.start/1` spawns, never in
-  `Badge.UI`. `setq` and `defun` live in that process's dictionary, so
-  killing it (the page does after ~5 s of no answer) loses them
+- `Badge.Page.Repl` (the `:cross` slot) is a prompt for two languages; Tab
+  switches. Each has the same shape (`new/0`, `feed/2`, `pending?/1`,
+  `start/1`, `eval/2`, `stop/1`) and a worker process that answers
+  `Badge.UI` with `{:repl, worker, {:ok | :error, text}}`. Nothing
+  evaluates in `Badge.UI`; a worker that has not answered after ~5 s is
+  killed, and its bindings with it
+- `Badge.Elixir` is **not the compiler**: `Badge.Elixir.Lexer`, `Parser`
+  and `Eval` read a subset by hand, since `elixir_parser` and friends
+  cannot fit on the badge. It covers literals, lists with `|`, tuples,
+  maps and `%{m | k: v}`, keyword lists, `Mod.fun(args)`, `:mod.fun`,
+  `map.key`, local Kernel calls, `f.(x)`, `&Mod.fun/n` and `&(&1 + 1)`,
+  operators, `|>`, `=` with destructuring and `^x`, `fn` with clauses,
+  `case` and `if`. Not covered: guards, `cond`, `with`, ranges, string
+  interpolation, `raise` without parens, `def`. Output is `Kernel.inspect/1`,
+  which exavmlib ships
+- `Badge.Alisp` drives AtomVM's `alisp`, which `boot.avm` already ships:
+  `alisp`, `alisp_stdlib`, `sexp_lexer`, `sexp_parser`, `sexp_serializer`.
+  `arepl` cannot run here: there is no console input over the USB serial
+  JTAG. `setq` and `defun` live in the worker's process dictionary
 - `test/support/alisp/` is a copy of AtomVM's `libs/alisp/src` compiled only
   in the test env via `erlc_paths`, so the host tests run the real lexer,
   parser and evaluator. Module calls are `(erlang:length (quote (1 2)))`;

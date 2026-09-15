@@ -6,7 +6,7 @@ defmodule Badge.Alisp do
   yet, so a form can be typed over several lines. `feed/2` says whether
   a line completed one. Evaluation runs in a worker from `start/1`, which
   owns the Lisp variables and answers the process that started it with
-  `{:alisp, worker, {:ok, text} | {:error, text}}`, so a form that never
+  `{:repl, worker, {:ok, text} | {:error, text}}`, so a form that never
   returns can be killed without touching `Badge.UI`.
   """
 
@@ -87,7 +87,7 @@ defmodule Badge.Alisp do
   defp loop(owner) do
     receive do
       {:eval, form} ->
-        send(owner, {:alisp, self(), run(form)})
+        send(owner, {:repl, self(), run(form)})
         loop(owner)
     end
   end

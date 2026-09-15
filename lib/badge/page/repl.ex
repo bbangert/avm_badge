@@ -1,11 +1,13 @@
-defmodule Badge.Page.Lisp do
+defmodule Badge.Page.Repl do
   @moduledoc """
-  A Lisp prompt over `Badge.Alisp`.
+  A prompt for `Badge.Alisp` and `Badge.Elixir`.
 
   The last row is the input line; what came before scrolls up above it,
-  newest at the bottom. Enter sends the line, up and down walk the lines
-  sent before, left and right move within the line. A form that has not
-  finished after a few seconds is killed, and its variables with it.
+  newest at the bottom. Enter sends the line, Tab switches language, up and
+  down walk the lines sent before, left and right move within the line.
+  Each language keeps its own worker, so bindings survive a switch. A line
+  that has not answered after a few seconds is killed, and its bindings
+  with it.
   """
 
   use Badge.Page
@@ -33,8 +35,10 @@ defmodule Badge.Page.Lisp do
   @history 20
   @timeout_ticks 50
 
+  @langs [:elixir, :lisp]
+
   @impl true
-  def title, do: "Lisp"
+  def title, do: "REPL"
 
   @impl true
   def icon, do: :cross
@@ -42,18 +46,19 @@ defmodule Badge.Page.Lisp do
   @impl true
   def init do
     %{
+      lang: :elixir,
+      langs: %{elixir: fresh(:elixir), lisp: fresh(:lisp)},
       lines: [],
       field: Field.new(@capacity),
-      session: Alisp.new(),
-      worker: Alisp.start(self()),
-      busy: 0,
       history: [],
       recall: 0
     }
   end
 
   @impl true
-  def leave(state), do: Alisp.stop(state.worker)
+  def leave(state) do
+    :lists.foreach(fn lang -> mod(lang).stop(current(state, lang).worker) end, @langs)
+  end
 
   @impl true
   def handle_key({:char, char}, state), do: {:ok, edit(state, Field.insert(state.field, char))}
@@ -62,30 +67,35 @@ defmodule Badge.Page.Lisp do
   def handle_key({:move, :right}, state), do: {:ok, edit(state, Field.right(state.field))}
   def handle_key({:move, :up}, state), do: {:ok, recall(state, state.recall + 1)}
   def handle_key({:move, :down}, state), do: {:ok, recall(state, state.recall - 1)}
-  def handle_key({:edit, :newline}, %{busy: 0} = state), do: {:ok, submit(state)}
+  def handle_key({:edit, :tab}, state), do: {:ok, switch(state)}
+
+  def handle_key({:edit, :newline}, state) do
+    case current(state).busy do
+      0 -> {:ok, submit(state)}
+      _busy -> :ignore
+    end
+  end
+
   def handle_key(_event, _state), do: :ignore
 
   @impl true
-  def handle_info({:alisp, worker, {:ok, text}}, %{worker: worker} = state) do
-    {:ok, %{push(state, :out, text) | busy: 0}}
-  end
-
-  def handle_info({:alisp, worker, {:error, text}}, %{worker: worker} = state) do
-    {:ok, %{push(state, :err, text) | busy: 0}}
+  def handle_info({:repl, worker, result}, state) do
+    case owner(state, worker) do
+      nil -> :ignore
+      lang -> {:ok, answered(state, lang, result)}
+    end
   end
 
   def handle_info(_message, _state), do: :ignore
 
   @impl true
-  def tick(%{busy: 0} = state), do: state
-
-  def tick(%{busy: busy} = state) when busy > @timeout_ticks do
-    Alisp.stop(state.worker)
-
-    %{push(state, :err, "timeout, variables lost") | worker: Alisp.start(self()), busy: 0}
+  def tick(state) do
+    case current(state) do
+      %{busy: 0} -> state
+      %{busy: busy} when busy > @timeout_ticks -> timed_out(state)
+      %{busy: busy} = lang -> put_current(state, %{lang | busy: busy + 1})
+    end
   end
-
-  def tick(state), do: %{state | busy: state.busy + 1}
 
   @impl true
   def render(state) do
@@ -98,25 +108,70 @@ defmodule Badge.Page.Lisp do
   @doc "How many rows of output fit above the input line."
   def visible_rows, do: @scrollback
 
+  defp mod(:lisp), do: Alisp
+  defp mod(:elixir), do: Badge.Elixir
+
+  defp label(:lisp), do: "Lisp"
+  defp label(:elixir), do: "Elixir"
+
+  defp fresh(lang), do: %{session: mod(lang).new(), worker: mod(lang).start(self()), busy: 0}
+
+  defp current(state), do: current(state, state.lang)
+  defp current(state, lang), do: Map.get(state.langs, lang)
+
+  defp put_current(state, lang_state) do
+    %{state | langs: Map.put(state.langs, state.lang, lang_state)}
+  end
+
+  defp owner(state, worker) do
+    :lists.foldl(
+      fn lang, found -> if current(state, lang).worker == worker, do: lang, else: found end,
+      nil,
+      @langs
+    )
+  end
+
   defp edit(state, field), do: %{state | field: field}
+
+  defp switch(state) do
+    lang = other(state.lang)
+    %{push(state, :in, "-- " <> label(lang)) | lang: lang, field: Field.new(@capacity), recall: 0}
+  end
+
+  defp other(:lisp), do: :elixir
+  defp other(:elixir), do: :lisp
 
   defp submit(state) do
     line = Field.value(state.field)
     state = push(state, :in, prompt(state) <> line)
     history = remember(state.history, line)
     state = %{state | field: Field.new(@capacity), history: history, recall: 0}
+    %{session: session, worker: worker} = lang = current(state)
 
-    case Alisp.feed(state.session, line) do
+    case mod(state.lang).feed(session, line) do
       {:pending, session} ->
-        %{state | session: session}
+        put_current(state, %{lang | session: session})
 
       {:error, session, text} ->
-        %{push(state, :err, text) | session: session}
+        put_current(push(state, :err, text), %{lang | session: session})
 
       {:eval, session, form} ->
-        Alisp.eval(state.worker, form)
-        %{state | session: session, busy: 1}
+        mod(state.lang).eval(worker, form)
+        put_current(state, %{lang | session: session, busy: 1})
     end
+  end
+
+  defp answered(state, lang, {:ok, text}), do: settle(push(state, :out, text), lang)
+  defp answered(state, lang, {:error, text}), do: settle(push(state, :err, text), lang)
+
+  defp settle(state, lang) do
+    lang_state = current(state, lang)
+    %{state | langs: Map.put(state.langs, lang, %{lang_state | busy: 0})}
+  end
+
+  defp timed_out(state) do
+    mod(state.lang).stop(current(state).worker)
+    put_current(push(state, :err, "timeout, bindings lost"), fresh(state.lang))
   end
 
   defp remember(history, <<>>), do: history
@@ -137,14 +192,20 @@ defmodule Badge.Page.Lisp do
     %{state | lines: :lists.sublist([{kind, text} | state.lines], @keep)}
   end
 
-  defp prompt(%{busy: busy}) when busy > 0, do: "* "
-
   defp prompt(state) do
-    case Alisp.pending?(state.session) do
-      true -> ".. "
-      false -> "> "
+    %{session: session, busy: busy} = current(state)
+
+    cond do
+      busy > 0 -> "* "
+      mod(state.lang).pending?(session) -> more(state.lang)
+      true -> ready(state.lang)
     end
   end
+
+  defp ready(:lisp), do: "> "
+  defp ready(:elixir), do: "ex> "
+  defp more(:lisp), do: ".. "
+  defp more(:elixir), do: "..> "
 
   defp input(state) do
     {shown, _start} = visible(state)

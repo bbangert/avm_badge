@@ -7,7 +7,7 @@ defmodule Badge.Theme do
 
   Exposed as functions rather than attributes so they can be read from a
   module attribute at compile time: `Badge.Icons` bakes colours into its
-  binaries during compilation, and `Badge.Page.Lisp` derives its row count
+  binaries during compilation, and `Badge.Page.Repl` derives its row count
   from `content_top/0`.
 
   Depends only on `Badge.Hardware`, so nothing that reads it can cycle.

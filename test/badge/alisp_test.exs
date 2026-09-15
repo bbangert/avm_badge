@@ -72,10 +72,10 @@ defmodule Badge.AlispTest do
       worker = Alisp.start(self())
 
       Alisp.eval(worker, [:setq, :x, 5])
-      assert_receive {:alisp, ^worker, {:ok, "5"}}
+      assert_receive {:repl, ^worker, {:ok, "5"}}
 
       Alisp.eval(worker, [:*, :x, 2])
-      assert_receive {:alisp, ^worker, {:ok, "10"}}
+      assert_receive {:repl, ^worker, {:ok, "10"}}
 
       Alisp.stop(worker)
     end
@@ -84,10 +84,10 @@ defmodule Badge.AlispTest do
       worker = Alisp.start(self())
 
       Alisp.eval(worker, :nope)
-      assert_receive {:alisp, ^worker, {:error, _text}}
+      assert_receive {:repl, ^worker, {:error, _text}}
 
       Alisp.eval(worker, 1)
-      assert_receive {:alisp, ^worker, {:ok, "1"}}
+      assert_receive {:repl, ^worker, {:ok, "1"}}
 
       Alisp.stop(worker)
     end
