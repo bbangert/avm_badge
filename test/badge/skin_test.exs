@@ -102,6 +102,16 @@ defmodule Badge.SkinTest do
         assert length(icons) == 2
       end
 
+      test "chrome icons are drawn in a baked tint" do
+        for {:image, _x, _y, _bg, {:rgba8888, _w, _h, binary}} <- @skin.chrome("Badge", @status) do
+          assert is_binary(binary)
+        end
+      end
+
+      test "glyph colour is one the icons are baked in" do
+        assert @skin.glyph() in Badge.Icons.tints()
+      end
+
       test "chrome stays inside the title bar" do
         items = :lists.droplast(@skin.chrome("Badge", @status))
 

@@ -34,6 +34,9 @@ defmodule Badge.Theme do
   # Whatever the cursor is currently on.
   def select, do: Skin.current().select()
 
+  # What monochrome icons are drawn in.
+  def glyph, do: Skin.current().glyph()
+
   @doc "The title bar and background for a page, in the active skin."
   @spec chrome(binary, map) :: [tuple]
   def chrome(title, status), do: Skin.current().chrome(title, status)

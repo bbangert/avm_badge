@@ -37,12 +37,14 @@ defmodule Badge.Skin.Dark do
   def alert, do: 0xFF3B30
   @impl true
   def select, do: 0x5AC8FA
+  @impl true
+  def glyph, do: fg()
 
   @impl true
   def chrome(title, status) do
     [
-      Icons.item(status.battery, @battery_x, @status_y),
-      Icons.item(status.wifi, @wifi_x, @status_y),
+      Icons.item(status.battery, @battery_x, @status_y, glyph(), bg()),
+      Icons.item(status.wifi, @wifi_x, @status_y, glyph(), bg()),
       clock_item(status.clock),
       {:text, @status_margin, @status_y, :pixel_operator, accent(), bg(), title}
     ] ++

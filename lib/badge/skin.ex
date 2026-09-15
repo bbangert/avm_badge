@@ -36,6 +36,9 @@ defmodule Badge.Skin do
   @callback alert() :: integer
   @callback select() :: integer
 
+  @doc "The colour monochrome icons take on page content; one of `Badge.Icons.tints/0`."
+  @callback glyph() :: integer
+
   @doc """
   The title bar and the background, as display items.
 
