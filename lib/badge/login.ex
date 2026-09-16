@@ -23,7 +23,7 @@ defmodule Badge.Login do
   @compile {:no_warn_undefined, :ahttp_client}
   @compile {:no_warn_undefined, :ssl}
 
-  @default_url "https://goatmire.com"
+  @default_url "https://goatbiz.fly.dev"
   @path "/api/badge_login"
 
   # How long the server holds a poll open, and how long the badge keeps asking.

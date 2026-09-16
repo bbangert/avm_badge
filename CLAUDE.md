@@ -129,7 +129,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   until the emailed link is opened. `Badge.Login` holds the pure parts and
   `flow/3`, which blocks and runs in a worker the page spawns on a tick
 - The server is the `login_url` NVS key (`tools/provision.py --login-url` or
-  `AVM_BADGE_LOGIN_URL`), falling back to `https://goatmire.com`. This rides
+  `AVM_BADGE_LOGIN_URL`), falling back to `https://goatbiz.fly.dev`. This rides
   `ahttp_client` and AtomVM's `ssl`, not the websocket component: TLS 1.2
   only and `verify_none`, so `https://` is encrypted but unauthenticated.
   A bench server is `http://<lan-ip>:4000`

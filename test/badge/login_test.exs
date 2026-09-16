@@ -14,7 +14,7 @@ defmodule Badge.LoginTest do
     end
 
     test "the default is the conference site over TLS" do
-      assert Login.default_url() == "https://goatmire.com"
+      assert Login.default_url() == "https://goatbiz.fly.dev"
     end
   end
 
