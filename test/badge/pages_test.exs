@@ -59,12 +59,17 @@ defmodule Badge.PagesTest do
       end
     end
 
-    test "the agent sits on the red square of the second screen" do
-      assert Pages.for_key(:square, 1) == Badge.Page.Agent
+    test "login is the third app, on the cross" do
+      assert Pages.for_key(:cross) == Badge.Page.Login
+    end
+
+    test "settings and the agent are bumped onto the second screen" do
+      assert Pages.for_key(:square, 1) == Badge.Page.Settings
+      assert Pages.for_key(:triangle, 1) == Badge.Page.Agent
     end
 
     test "an empty slot is nil, not a crash" do
-      assert Pages.for_key(:diamond, 1) == nil
+      assert Pages.for_key(:cross, 1) == nil
       assert Pages.for_key(:square, 99) == nil
     end
   end

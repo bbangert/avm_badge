@@ -45,6 +45,7 @@ SETTINGS = [
     ("wifi_ssid", "--wifi-ssid", "BADGE_WIFI_SSID"),
     ("wifi_psk", "--wifi-psk", "BADGE_WIFI_PSK"),
     ("chat_url", "--chat-url", "AVM_BADGE_SERVER_URL"),
+    ("login_url", "--login-url", "AVM_BADGE_LOGIN_URL"),
 ]
 
 

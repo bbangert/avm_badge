@@ -165,7 +165,7 @@ defmodule Badge.Page.HomeTest do
     test "on a later screen choose that screen's page and the next tick opens it" do
       chosen = press(on(1), {:nav, :square})
 
-      assert Home.tick(chosen) == {:goto, Badge.Page.Agent}
+      assert Home.tick(chosen) == {:goto, Badge.Page.Settings}
     end
 
     test "over an empty slot are swallowed rather than opening the first screen's page" do

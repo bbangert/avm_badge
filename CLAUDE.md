@@ -5,7 +5,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 1032 tests across 57 files, no board needed. 2 are excluded as
+- `mix test` — 1081 tests across 59 files, no board needed. 2 are excluded as
   `:regenerates_assets` because they rewrite tracked files
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
@@ -121,6 +121,21 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   page and disconnects on the way out, and `Badge.Update.Link` does the same for
   the Update tab. A badge on the home grid holds no socket. Entering chat
   therefore costs a handshake it used not to
+
+## Login
+
+- `Badge.Page.Login` signs the badge in to Goatmire with a ticket holder's
+  email: POST `/api/badge_login`, then long-poll `/api/badge_login/:token`
+  until the emailed link is opened. `Badge.Login` holds the pure parts and
+  `flow/3`, which blocks and runs in a worker the page spawns on a tick
+- The server is the `login_url` NVS key (`tools/provision.py --login-url` or
+  `AVM_BADGE_LOGIN_URL`), falling back to `https://goatmire.com`. This rides
+  `ahttp_client` and AtomVM's `ssl`, not the websocket component: TLS 1.2
+  only and `verify_none`, so `https://` is encrypted but unauthenticated.
+  A bench server is `http://<lan-ip>:4000`
+- The account lands in NVS keys `login_email` and `login_role` and survives
+  reboots; X on the signed-in screen clears them. The site logs no user in
+  on the strength of this, it only confirms the badge
 
 ## Firmware updates
 

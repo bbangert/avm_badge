@@ -14,6 +14,7 @@ defmodule Badge.Pages do
   @pages [
     Badge.Page.Name,
     Badge.Page.Chat,
+    Badge.Page.Login,
     Badge.Page.Text,
     Badge.Page.Led,
     Badge.Page.Sensors,
