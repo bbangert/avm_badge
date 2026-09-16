@@ -17,7 +17,18 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - Never run unbounded `cat`/`screen` on the port — it blocks the next flash
 - `Badge.Log` is the group leader of everything the badge spawns: each
   `io:format` line is echoed, kept for the Settings Log tab, and forwarded to
-  the hub while the agent is up. ESP-IDF's own `I (…)` lines are not seen
+  the hub while the agent is up. ESP-IDF's own `I (…)` lines are not seen.
+  Without `:console`, as on the host, the echo goes to the console the log
+  was started under, and the simulator captures the same way
+- `iex -S mix` runs the firmware on the host: the pages run against fake
+  hardware processes and draw on a canvas at http://localhost:3240, and the
+  shell says so on start. `mix sim.check` renders every page once without a
+  browser, and `mix test` includes `sim/test`
+- Two mix targets: the default `:host` is the simulator, `Badge.Sim.*` in
+  `sim/lib` plus the `phoenix_playground` dep; `:badge` is the firmware, `lib`
+  only. `mix.exs` picks `:badge` for any `atomvm.*` or `badge.*` task when
+  `MIX_TARGET` is unset, so flashing needs no env var. Anything else built for
+  the badge, such as `mix test` without the sim, wants `MIX_TARGET=badge`
 - Reflashing does not need `erase-flash`: `nvs` is unchanged by the repartition,
   so wifi credentials, profile and peers survive
 - No `flash-elixir` target in this AtomVM revision, and **`idf.py flash` does
@@ -214,8 +225,9 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 - Pure modules (`Keymap`, `TextBuffer`, `KeyRepeat`) are host-tested; hardware
   modules are not.
-- Warnings that `:spi`, `:port`, `:gpio`, `GPIO` are undefined are expected on
-  host — not defects.
+- AtomVM-only modules (`:spi`, `:port`, `GPIO`, `I2C`, …) are listed in a
+  `@compile {:no_warn_undefined, ...}` in each file that calls them, so a host
+  compile is warning-free; a new caller adds the module there
 - `@impl true` goes on the **first clause only** of a multi-clause callback; a
   lint hook false-positives here.
 - Visual and interactive behaviour (panel content, typing feel, LED colour)
