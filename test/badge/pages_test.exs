@@ -59,6 +59,11 @@ defmodule Badge.PagesTest do
       end
     end
 
+    test "the console takes the cross and text moves to the second screen" do
+      assert Pages.for_key(:cross) == Badge.Page.Console
+      assert Pages.for_key(:triangle, 1) == Badge.Page.Text
+    end
+
     test "the agent sits on the red square of the second screen" do
       assert Pages.for_key(:square, 1) == Badge.Page.Agent
     end

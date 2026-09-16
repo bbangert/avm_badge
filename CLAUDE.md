@@ -5,7 +5,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 1032 tests across 57 files, no board needed. 2 are excluded as
+- `mix test` — 1080 tests across 59 files, no board needed. 2 are excluded as
   `:regenerates_assets` because they rewrite tracked files
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
@@ -65,6 +65,25 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - `dogica` and `pixel_operator` are compiled into `main.avm`, so text survives a
   missing assets partition. `w95fa` is read from it on demand; a failed read
   logs `UI: font ~p not in assets partition` once and is not retried.
+
+## Console page
+
+- `Badge.Page.Console` (the `:cross` slot) is a prompt for `Badge.Elixir`
+  (`new/0`, `feed/2`, `pending?/1`, `start/1`, `eval/2`, `stop/1`) and a
+  worker process that answers `Badge.UI` with
+  `{:console, worker, {:ok | :error, text}}`. Nothing evaluates in
+  `Badge.UI`; a worker that has not answered after ~5 s is killed, and its
+  bindings with it
+- `Badge.Elixir` is **not the compiler**: `Badge.Elixir.Lexer`, `Parser`
+  and `Eval` read a subset by hand, since `elixir_parser` and friends
+  cannot fit on the badge. It covers literals, lists with `|`, tuples,
+  maps and `%{m | k: v}`, keyword lists, `Mod.fun(args)`, `:mod.fun`,
+  `map.key`, local Kernel calls, `f.(x)`, `&Mod.fun/n` and `&(&1 + 1)`,
+  operators, `|>`, `=` with destructuring and `^x`, `fn` with clauses,
+  `case` and `if`. Not covered: guards, `cond`, `with`, ranges, string
+  interpolation, `raise` without parens, `def`. Output is `Kernel.inspect/1`,
+  which exavmlib ships
+- The Text page moved to the second home screen to make room for it
 
 ## Chat transport
 

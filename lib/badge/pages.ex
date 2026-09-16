@@ -14,11 +14,12 @@ defmodule Badge.Pages do
   @pages [
     Badge.Page.Name,
     Badge.Page.Chat,
-    Badge.Page.Text,
+    Badge.Page.Console,
     Badge.Page.Led,
     Badge.Page.Sensors,
     Badge.Page.Settings,
-    Badge.Page.Agent
+    Badge.Page.Agent,
+    Badge.Page.Text
   ]
 
   @per_screen length(@keys)

@@ -22,7 +22,7 @@ defmodule Badge.Page.TextTest do
   describe "identity" do
     test "announces itself for the home grid" do
       assert Text.title() == "Text"
-      assert Text.icon() == :cross
+      assert Text.icon() == :triangle
     end
   end
 
