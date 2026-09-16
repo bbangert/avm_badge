@@ -156,6 +156,52 @@ defmodule Badge.LoginTest do
     end
   end
 
+  describe "reading an answer" do
+    @ref :ref
+
+    test "a lower-case content-length ends the answer, since the driver misses it" do
+      reply =
+        Login.absorb(
+          [{:status, @ref, 200}, {:header, @ref, {"content-length", "5"}}, {:data, @ref, "he"}],
+          Login.reply()
+        )
+
+      refute Login.complete?(reply)
+
+      reply = Login.absorb([{:data, @ref, "llo"}], reply)
+
+      assert Login.complete?(reply)
+      assert Login.settle(reply, :nope) == {:ok, 200, "hello"}
+    end
+
+    test "the driver's own done ends it too" do
+      reply =
+        Login.absorb([{:status, @ref, 404}, {:data, @ref, "x"}, {:done, @ref}], Login.reply())
+
+      assert Login.complete?(reply)
+      assert Login.settle(reply, :nope) == {:ok, 404, "x"}
+    end
+
+    test "a socket closed after a whole body still counts, and before one does not" do
+      whole = Login.absorb([{:status, @ref, 200}, {:data, @ref, "{}"}], Login.reply())
+      partial = Login.absorb([{:header, @ref, {"content-length", "9"}}], whole)
+
+      assert Login.settle(whole, {:error, :closed}) == {:ok, 200, "{}"}
+      assert Login.settle(partial, {:error, :closed}) == {:error, :bad_response}
+    end
+
+    test "nothing read at all is whatever went wrong" do
+      assert Login.settle(Login.reply(), {:error, {:recv, :closed}}) == {:error, {:recv, :closed}}
+    end
+
+    test "a garbled length and unknown responses are ignored" do
+      reply =
+        Login.absorb([{:header, @ref, {"content-length", "lots"}}, :whatever], Login.reply())
+
+      assert reply == Login.reply()
+    end
+  end
+
   describe "flow/3" do
     test "a base that is not a URL fails before touching the network" do
       test = self()

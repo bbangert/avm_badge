@@ -90,7 +90,7 @@ defmodule Badge.Page.LoginTest do
 
     test "enter with an email starts sending" do
       assert Login.mode(sending()) == :sending
-      assert "Sending..." in texts(Login.render(sending()))
+      assert "Asking the site for a link..." in texts(Login.render(sending()))
     end
 
     test "shape keys and escape are never trapped, on any screen" do

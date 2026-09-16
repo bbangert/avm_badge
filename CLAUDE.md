@@ -136,6 +136,11 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - The account lands in NVS keys `login_email` and `login_role` and survives
   reboots; X on the signed-in screen clears them. The site logs no user in
   on the strength of this, it only confirms the badge
+- **`ssl:recv/2` with a byte count blocks until exactly that many bytes have
+  arrived**, so a short answer never returns; `recv(conn, 0)` hands back one
+  TLS record. And `ahttp_client` matches `Content-Length` case-sensitively
+  while Fly sends `content-length`, so `Badge.Login` asks for the lower-case
+  header and counts the body itself, with `connection: close` as a backstop
 
 ## Firmware updates
 

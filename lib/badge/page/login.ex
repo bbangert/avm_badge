@@ -175,6 +175,8 @@ defmodule Badge.Page.Login do
 
   @impl true
   def handle_info({:login, {:sent, _token}}, %{mode: :sending} = state) do
+    :io.format(~c"Login: sent, waiting for the link~n")
+
     {:ok, %{state | mode: :waiting, ticks: 0}}
   end
 
@@ -231,7 +233,7 @@ defmodule Badge.Page.Login do
     [
       text(@margin, @label_y, "Email", Theme.dim()),
       text(@margin, @value_y, Field.value(state.field), Theme.fg()),
-      text(@margin, @note_y, "Sending...", Theme.muted()),
+      text(@margin, @note_y, "Asking the site for a link...", Theme.muted()),
       centred(@hint_y, "Esc cancel", Theme.dim())
     ]
   end

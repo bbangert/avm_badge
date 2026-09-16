@@ -30,11 +30,15 @@ defmodule Badge.Login do
   @long_seconds 25
   @total_seconds 480
 
-  # Answers run to a few hundred bytes; a slow link needs several reads.
-  @chunk 512
+  # Zero takes whatever one record carries; a count blocks until that many arrive.
+  @chunk 0
   @reads 32
 
   @roles [staff: "staff", presenter: "presenter", attendee: "attendee"]
+
+  # The site closes the socket after each answer, which is the surest end of one.
+  @headers [{"accept", "application/json"}, {"connection", "close"}]
+  @connect_opts [active: false, parse_headers: ["content-length"]]
 
   @type account :: %{email: binary, role: atom}
 
@@ -259,16 +263,20 @@ defmodule Badge.Login do
   defp now, do: :erlang.monotonic_time(:second)
 
   defp start(endpoint, email) do
-    headers = [{"content-type", "application/json"}, {"accept", "application/json"}]
-
-    case request(endpoint, "POST", @path, headers, start_body(email)) do
+    case request(
+           endpoint,
+           "POST",
+           @path,
+           [{"content-type", "application/json"}],
+           start_body(email)
+         ) do
       {:ok, status, body} -> parse_start(status, body)
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp poll(endpoint, token, long) do
-    case request(endpoint, "GET", poll_path(token, long), [{"accept", "application/json"}], nil) do
+    case request(endpoint, "GET", poll_path(token, long), [], nil) do
       {:ok, status, body} -> parse_poll(status, body)
       {:error, reason} -> {:error, reason}
     end
@@ -276,7 +284,7 @@ defmodule Badge.Login do
 
   defp request({scheme, host, port}, method, path, headers, body) do
     case connect(scheme, host, port) do
-      {:ok, conn} -> send_request(conn, method, path, headers, body)
+      {:ok, conn} -> send_request(conn, method, path, headers ++ @headers, body)
       {:error, reason} -> {:error, {:connect, reason}}
     end
   end
@@ -284,49 +292,89 @@ defmodule Badge.Login do
   # ssl has no clause for active mode, so both transports read on demand.
   defp connect(:https, host, port) do
     :ssl.start()
-    :ahttp_client.connect(:https, host, port, active: false, verify: :verify_none)
+    :ahttp_client.connect(:https, host, port, @connect_opts ++ [verify: :verify_none])
   end
 
   defp connect(:http, host, port) do
-    :ahttp_client.connect(:http, host, port, active: false)
+    :ahttp_client.connect(:http, host, port, @connect_opts)
   end
 
   defp send_request(conn, method, path, headers, body) do
     case :ahttp_client.request(conn, method, path, headers, body) do
-      {:ok, conn, _ref} -> collect(conn, nil, <<>>, @reads)
+      {:ok, conn, _ref} -> collect(conn, reply(), @reads)
       {:error, reason} -> close(conn, {:error, {:request, reason}})
     end
   end
 
-  defp collect(conn, _status, _body, 0), do: close(conn, {:error, :too_many_reads})
+  defp collect(conn, _reply, 0), do: close(conn, {:error, :too_many_reads})
 
-  defp collect(conn, status, body, left) do
+  defp collect(conn, reply, left) do
     case :ahttp_client.recv(conn, @chunk) do
-      {:ok, conn, responses} ->
-        {status, body, done} = harvest(responses, status, body, false)
-
-        continue(conn, status, body, done, left)
-
-      {:error, reason} ->
-        close(conn, {:error, {:recv, reason}})
+      {:ok, conn, responses} -> continue(conn, absorb(responses, reply), left)
+      {:error, reason} -> close(conn, settle(reply, {:error, {:recv, reason}}))
     end
   end
 
-  defp continue(conn, nil, _body, true, _left), do: close(conn, {:error, :bad_response})
-  defp continue(conn, status, body, true, _left), do: close(conn, {:ok, status, body})
-  defp continue(conn, status, body, false, left), do: collect(conn, status, body, left - 1)
+  defp continue(conn, reply, left) do
+    case complete?(reply) do
+      true -> close(conn, settle(reply, {:error, :bad_response}))
+      false -> collect(conn, reply, left - 1)
+    end
+  end
 
-  defp harvest([], status, body, done), do: {status, body, done}
+  @doc "An answer with nothing read yet."
+  @spec reply() :: map
+  def reply, do: %{status: nil, body: <<>>, length: nil, done: false}
 
-  defp harvest([{:status, _ref, code} | rest], _status, body, done),
-    do: harvest(rest, code, body, done)
+  @doc """
+  Folds what one read produced into the answer so far.
 
-  defp harvest([{:data, _ref, chunk} | rest], status, body, done),
-    do: harvest(rest, status, body <> chunk, done)
+  The driver only recognises `Content-Length` spelled that way, and the site
+  spells it in lower case, so the length is tracked here as well.
+  """
+  @spec absorb([tuple | atom], map) :: map
+  def absorb([], reply), do: reply
 
-  defp harvest([{:done, _ref} | rest], status, body, _done), do: harvest(rest, status, body, true)
-  defp harvest([:done | rest], status, body, _done), do: harvest(rest, status, body, true)
-  defp harvest([_other | rest], status, body, done), do: harvest(rest, status, body, done)
+  def absorb([{:status, _ref, code} | rest], reply), do: absorb(rest, %{reply | status: code})
+
+  def absorb([{:header, _ref, {"content-length", value}} | rest], reply) do
+    absorb(rest, %{reply | length: declared(value)})
+  end
+
+  def absorb([{:data, _ref, chunk} | rest], reply) do
+    absorb(rest, %{reply | body: reply.body <> chunk})
+  end
+
+  def absorb([{:done, _ref} | rest], reply), do: absorb(rest, %{reply | done: true})
+  def absorb([:done | rest], reply), do: absorb(rest, %{reply | done: true})
+  def absorb([_other | rest], reply), do: absorb(rest, reply)
+
+  defp declared(value) do
+    :erlang.binary_to_integer(value)
+  catch
+    _kind, _error -> nil
+  end
+
+  @doc "Whether the whole answer has arrived."
+  @spec complete?(map) :: boolean
+  def complete?(%{done: true}), do: true
+  def complete?(%{length: nil}), do: false
+  def complete?(%{length: length, body: body}), do: byte_size(body) >= length
+
+  @doc """
+  The answer as `{:ok, status, body}`, or `otherwise` when it never became one.
+
+  A socket the server closed after a whole answer is still a whole answer.
+  """
+  @spec settle(map, term) :: {:ok, integer, binary} | term
+  def settle(%{status: status} = reply, _otherwise) when is_integer(status) do
+    case complete?(reply) or (reply.length == nil and reply.body != <<>>) do
+      true -> {:ok, status, reply.body}
+      false -> {:error, :bad_response}
+    end
+  end
+
+  def settle(_reply, otherwise), do: otherwise
 
   defp close(conn, result) do
     :ahttp_client.close(conn)
