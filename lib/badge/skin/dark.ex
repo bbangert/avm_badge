@@ -41,6 +41,11 @@ defmodule Badge.Skin.Dark do
   def glyph, do: fg()
 
   @impl true
+  def role(:staff), do: 0xFF2D95
+  def role(:presenter), do: 0xFFA030
+  def role(_attendee), do: 0x8A7CFF
+
+  @impl true
   def chrome(title, status) do
     [
       Icons.item(status.battery, @battery_x, @status_y, glyph(), bg()),

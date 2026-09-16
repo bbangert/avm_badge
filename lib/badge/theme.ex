@@ -37,6 +37,10 @@ defmodule Badge.Theme do
   # What monochrome icons are drawn in.
   def glyph, do: Skin.current().glyph()
 
+  @doc "The colour a signed-in role is shown in."
+  @spec role(atom) :: integer
+  def role(role), do: Skin.current().role(role)
+
   @doc "The title bar and background for a page, in the active skin."
   @spec chrome(binary, map) :: [tuple]
   def chrome(title, status), do: Skin.current().chrome(title, status)

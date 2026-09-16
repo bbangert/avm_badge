@@ -2,6 +2,7 @@ defmodule Badge.Page.LoginTest do
   use ExUnit.Case, async: true
 
   alias Badge.Page.Login
+  alias Badge.Theme
 
   @account %{email: "me@example.com", role: :attendee}
 
@@ -115,6 +116,13 @@ defmodule Badge.Page.LoginTest do
       assert "me@example.com" in texts(Login.render(state))
     end
 
+    test "the role is worn in its own colour" do
+      [colour] =
+        for {:text, _x, _y, _f, colour, _b, "ATTENDEE"} <- Login.render(signed_in()), do: colour
+
+      assert colour == Theme.role(:attendee)
+    end
+
     test "verified signs in, shows the account and asks for it to be saved" do
       state = signed_in()
 
@@ -127,7 +135,7 @@ defmodule Badge.Page.LoginTest do
 
       assert "Signed in" in shown
       assert "me@example.com" in shown
-      assert "attendee" in shown
+      assert "ATTENDEE" in shown
     end
 
     test "failed shows the reason and offers a retry" do

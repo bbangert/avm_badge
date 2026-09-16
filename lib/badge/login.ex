@@ -103,6 +103,13 @@ defmodule Badge.Login do
     end
   end
 
+  @doc "A role as the name badge wears it."
+  @spec role_label(atom) :: binary
+  def role_label(:staff), do: "STAFF"
+  def role_label(:presenter), do: "SPEAKER"
+  def role_label(:attendee), do: "ATTENDEE"
+  def role_label(_role), do: ""
+
   @doc "How a role is spelled, on the wire and on the panel."
   @spec role_name(atom) :: binary
   def role_name(role) do

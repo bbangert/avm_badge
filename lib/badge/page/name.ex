@@ -3,7 +3,9 @@ defmodule Badge.Page.Name do
   A name tag to leave on screen.
 
   The name is set in the editor and kept in NVS. Long names wrap onto a
-  second line, and the rule sits under however many lines that takes.
+  second line, and the rule sits under however many lines that takes. A
+  badge signed in through `Badge.Page.Login` wears its role beside the
+  rule, and the rule takes the role's colour.
 
   The share screen beams the name over IR while it is showing, and records
   the badges it hears. Turning away from it stops both.
@@ -15,6 +17,7 @@ defmodule Badge.Page.Name do
   alias Badge.Font
   alias Badge.Identity
   alias Badge.Icons
+  alias Badge.Login
   alias Badge.Ir
   alias Badge.Peers
   alias Badge.Pixels
@@ -39,6 +42,10 @@ defmodule Badge.Page.Name do
   @name_y Theme.content_top() + 10
   @rule_h 2
   @rule_w 200
+  @role_x @margin + @rule_w + 8
+
+  # Where the role sits on the big screen, clear of the dots.
+  @big_role_y 200
 
   @detail_pitch 20
   @icon_w 16
@@ -105,6 +112,7 @@ defmodule Badge.Page.Name do
       mode: :show,
       screen: 0,
       profile: Profile.blank(),
+      account: nil,
       peers: [],
       stored: [],
       chip: "",
@@ -133,6 +141,7 @@ defmodule Badge.Page.Name do
     %{
       state
       | profile: profile,
+        account: Login.load(),
         saved: profile,
         peers: peers,
         stored: peers,
@@ -329,7 +338,7 @@ defmodule Badge.Page.Name do
       [centred("up/down pick   Enter edit   Esc done", @hint_y, Theme.dim())]
   end
 
-  def render(%{screen: 1, profile: profile}), do: big_screen(profile) ++ dots(1)
+  def render(%{screen: 1} = state), do: big_screen(state.profile) ++ big_role(state) ++ dots(1)
 
   def render(%{screen: 2} = state), do: share_screen(state) ++ dots(2)
 
@@ -340,10 +349,29 @@ defmodule Badge.Page.Name do
     rule_y = @name_y + length(lines) * @name_pitch + 6
 
     name_items(lines, @name_y, []) ++
-      [{:rect, @margin, rule_y, @rule_w, @rule_h, Theme.accent()}] ++
+      role_items(state.account, rule_y) ++
+      [{:rect, @margin, rule_y, @rule_w, @rule_h, rule_colour(state.account)}] ++
       detail_items(Profile.lines(profile), rule_y + 14, []) ++
       [hint()] ++ dots(state.screen)
   end
+
+  defp rule_colour(nil), do: Theme.accent()
+  defp rule_colour(%{role: role}), do: Theme.role(role)
+
+  # The role sits on the rule's row, in the space the rule leaves free.
+  defp role_items(nil, _rule_y), do: []
+
+  defp role_items(%{role: role}, rule_y) do
+    [
+      {:text, @role_x, rule_y - 7, :default16px, Theme.role(role), Theme.bg(),
+       Login.role_label(role)}
+    ]
+  end
+
+  defp big_role(%{account: nil}), do: []
+
+  defp big_role(%{account: %{role: role}}),
+    do: [centred(Login.role_label(role), @big_role_y, Theme.role(role))]
 
   # The whole name, as large as it will go. w95fa is proportional, so it is
   # measured rather than guessed, and a name too wide for it drops to dogica.

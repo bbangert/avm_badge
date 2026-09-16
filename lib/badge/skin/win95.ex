@@ -62,6 +62,11 @@ defmodule Badge.Skin.Win95 do
   @impl true
   def glyph, do: @black
 
+  @impl true
+  def role(:staff), do: 0x800080
+  def role(:presenter), do: 0xC05000
+  def role(_attendee), do: 0x404080
+
   # Caption icons are white on navy, like the title beside them.
   @impl true
   def chrome(title, status) do

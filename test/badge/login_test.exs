@@ -117,6 +117,13 @@ defmodule Badge.LoginTest do
       end
     end
 
+    test "wear a label on the badge" do
+      assert Login.role_label(:staff) == "STAFF"
+      assert Login.role_label(:presenter) == "SPEAKER"
+      assert Login.role_label(:attendee) == "ATTENDEE"
+      assert Login.role_label(:nobody) == ""
+    end
+
     test "an unknown name is nil and an unknown atom is spelled out" do
       assert Login.role("nobody") == nil
       assert Login.role_name(:nobody) == "unknown"

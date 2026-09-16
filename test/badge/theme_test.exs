@@ -34,6 +34,19 @@ defmodule Badge.ThemeTest do
   end
 
   describe "skin" do
+    test "role colours come from the active skin and differ by role" do
+      roles = [:staff, :presenter, :attendee]
+
+      for skin <- Badge.Skin.all() do
+        Badge.Skin.activate(skin)
+
+        colours = for role <- roles, do: Theme.role(role)
+
+        assert colours == for(role <- roles, do: skin.role(role))
+        assert length(:lists.usort(colours)) == 3
+      end
+    end
+
     test "chrome and rules come from the active skin" do
       status = %{battery: :battery_100, wifi: :wifi, clock: "12:34"}
 

@@ -18,7 +18,10 @@ defmodule Badge.SkinTest do
       skin.ok(),
       skin.warn(),
       skin.alert(),
-      skin.select()
+      skin.select(),
+      skin.role(:staff),
+      skin.role(:presenter),
+      skin.role(:attendee)
     ]
   end
 

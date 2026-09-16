@@ -5,7 +5,7 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 
 ## Commands
 
-- `mix test` — 1081 tests across 59 files, no board needed. 2 are excluded as
+- `mix test` — 1093 tests across 59 files, no board needed. 2 are excluded as
   `:regenerates_assets` because they rewrite tracked files
 - `mix atomvm.esp32.flash` — builds, checks, flashes; port auto-detects, don't
   pass `--port`
@@ -136,6 +136,9 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - The account lands in NVS keys `login_email` and `login_role` and survives
   reboots; X on the signed-in screen clears them. The site logs no user in
   on the strength of this, it only confirms the badge
+- `Badge.Page.Name` reads the account on its first tick and wears the role
+  beside the rule, which takes the role's colour from `Theme.role/1`. Each
+  skin defines `role/1` for `:staff`, `:presenter` and `:attendee`
 - **`ssl:recv/2` with a byte count blocks until exactly that many bytes have
   arrived**, so a short answer never returns; `recv(conn, 0)` hands back one
   TLS record. And `ahttp_client` matches `Content-Length` case-sensitively

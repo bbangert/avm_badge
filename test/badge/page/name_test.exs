@@ -117,6 +117,48 @@ defmodule Badge.Page.NameTest do
     end
   end
 
+  describe "the role" do
+    defp signed_in(role),
+      do: %{showing(%{name: "Gus"}) | account: %{email: "gus@example.com", role: role}}
+
+    defp rule(state) do
+      [rule] = for {:rect, _x, y, 200, 2, colour} <- Name.render(state), do: {y, colour}
+      rule
+    end
+
+    test "is absent when the badge is signed out, and the rule keeps the accent" do
+      refute "ATTENDEE" in texts(showing(%{name: "Gus"}))
+      {_y, colour} = rule(showing(%{name: "Gus"}))
+
+      assert colour == Theme.accent()
+    end
+
+    test "sits on the rule's row in the role's colour, and the rule takes it too" do
+      for role <- [:staff, :presenter, :attendee] do
+        state = signed_in(role)
+        label = Badge.Login.role_label(role)
+
+        [{x, y, colour}] =
+          for {:text, x, y, _f, colour, _b, ^label} <- Name.render(state), do: {x, y, colour}
+
+        {rule_y, rule_colour} = rule(state)
+
+        assert colour == Theme.role(role)
+        assert rule_colour == Theme.role(role)
+        assert x > 200
+        assert x + 8 * byte_size(label) <= Theme.width()
+        assert y == rule_y - 7
+      end
+    end
+
+    test "the big screen wears it under the name" do
+      state = %{signed_in(:staff) | screen: 1}
+
+      assert "STAFF" in texts(state)
+      refute "STAFF" in texts(%{showing(%{name: "Gus"}) | screen: 1})
+    end
+  end
+
   describe "the details" do
     test "shows what has been filled in" do
       bodies = texts(showing(%{name: "Gus", company: "Protolux", email: "gus@example.com"}))

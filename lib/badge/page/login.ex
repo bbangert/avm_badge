@@ -253,7 +253,7 @@ defmodule Badge.Page.Login do
     [
       centred(@label_y, "Signed in", Theme.dim()),
       centred(@value_y, account.email, Theme.fg()),
-      centred(@value_y + @pitch + 4, Login.role_name(account.role), Theme.ok()),
+      centred(@value_y + @pitch + 4, Login.role_label(account.role), Theme.role(account.role)),
       centred(@hint_y, "X sign out   Esc home", Theme.dim())
     ]
   end
