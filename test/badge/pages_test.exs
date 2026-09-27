@@ -98,8 +98,11 @@ defmodule Badge.PagesTest do
       end
     end
 
+    # Connect Four is the one deliberate exception: a shape key doubles as a
+    # column drop mid-game, and mid-pairing it would otherwise bounce the
+    # player to whatever app that key opens instead of just doing nothing.
     test "no page traps a shape key, since the router only sees what a page ignores" do
-      for module <- assigned(), key <- @keys do
+      for module <- assigned() -- [Badge.Page.ConnectFour], key <- @keys do
         assert module.handle_key({:nav, key}, module.init()) == :ignore
       end
     end
