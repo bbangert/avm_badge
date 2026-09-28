@@ -20,6 +20,7 @@ defmodule Badge.Profile do
     {:mastodon, "Mastodon", 30, :mastodon},
     {:bluesky, "Bluesky", 30, :bluesky},
     {:links, "Link", 32, :link},
+    {:hobbies, "Hobbies", 40, nil},
     {:qr, "QR Code", 12, nil}
   ]
 
@@ -32,7 +33,8 @@ defmodule Badge.Profile do
     {:linkedin, "goat-mcmire"},
     {:mastodon, "@goat-mcmire@mastodon.social"},
     {:bluesky, "goat-mcmire.bsky.social"},
-    {:links, "goatmire.com"}
+    {:links, "goatmire.com"},
+    {:hobbies, "synths, climbing, coffee"}
   ]
 
   # The part of the URL a handle completes, shown ahead of it in the editor.
@@ -44,10 +46,14 @@ defmodule Badge.Profile do
 
   # A reminder shown under the value while a field is being edited.
   @notes [
-    {:bluesky, "Reminder: tag your bsky posts with #goatmire!"}
+    {:bluesky, "Reminder: tag your bsky posts with #goatmire!"},
+    {:hobbies, "Separate them with commas"}
   ]
 
   @required :name
+
+  # Left out of the badge's list; hobbies play on the Name page's live screen.
+  @unlisted [:name, :qr, :hobbies]
   @placeholder "Nameless"
 
   # The one field that points at another rather than holding a value, and the
@@ -127,11 +133,12 @@ defmodule Badge.Profile do
 
   Links are split on spaces, so one field can hold several and each gets a
   line of its own, all carrying the same icon.
+  Hobbies are left out; they play on the Name page's live screen.
   """
   @spec lines(map) :: [{atom | nil, binary}]
   def lines(profile) do
     :lists.append(
-      for key <- keys(), key != @required and key != @qr, do: field_lines(profile, key)
+      for key <- keys(), not :lists.member(key, @unlisted), do: field_lines(profile, key)
     )
   end
 

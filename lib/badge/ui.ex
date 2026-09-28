@@ -230,7 +230,10 @@ defmodule Badge.UI do
 
   defp ticked(state, page_state) do
     {status, status_countdown} = refresh_status(state)
-    dirty = state.dirty or page_state != state.page_state or status != state.status
+
+    dirty =
+      state.dirty or page_state != state.page_state or
+        (status != state.status and state.page.chrome?(page_state))
 
     next = %{
       state
@@ -420,9 +423,17 @@ defmodule Badge.UI do
   end
 
   defp render(%{display: display, page: page, page_state: page_state, status: status}) do
-    items = page.render(page_state) ++ Theme.chrome(page.title(), status)
+    items = page.render(page_state) ++ frame(page, page_state, status)
 
     :ok = Display.update(display, items)
+  end
+
+  # A page without the title bar still needs the background, which goes last.
+  defp frame(page, page_state, status) do
+    case page.chrome?(page_state) do
+      true -> Theme.chrome(page.title(), status)
+      false -> [{:rect, 0, 0, Theme.width(), Theme.height(), Theme.bg()}]
+    end
   end
 
   # Waits in a linked process, so this GenServer never sleeps in a callback and a dead ticker crashes loudly.

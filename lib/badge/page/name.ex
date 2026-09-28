@@ -4,6 +4,9 @@ defmodule Badge.Page.Name do
 
   The name is set in the editor and kept in NVS. Long names wrap onto a
   second line, and the rule sits under however many lines that takes.
+
+  The last screen animates the profile in text mode through `Badge.Marquee`:
+  name, company, hobbies and GitHub top down, long lines scrolling by.
   """
 
   use Badge.Page
@@ -11,6 +14,7 @@ defmodule Badge.Page.Name do
   alias Badge.Field
   alias Badge.Font
   alias Badge.Icons
+  alias Badge.Marquee
   alias Badge.Nav
   alias Badge.Profile
   alias Badge.QR
@@ -47,7 +51,16 @@ defmodule Badge.Page.Name do
   @value_x 88
   @value_columns div(Theme.width() - @value_x - 8, @char_w)
 
-  @screens 3
+  @screens 4
+
+  # The animated screen: a frame every 200 ms, scrolling every 100, one slot per line, no title bar.
+  @live_screen 3
+  @live_ms 200
+  @live_scroll_ms 100
+  @live_effect_ms 400
+  @live_row_h 16
+  @live_large_h 45
+  @live_dogica_h 19
 
   # The big-name screen, and what it falls back to when a name will not fit.
   @big_font :w95fa
@@ -70,13 +83,33 @@ defmodule Badge.Page.Name do
   @qr_caption_chars div(Theme.width() - 2 * @margin - @icon_w - 6, @char_w)
 
   @impl true
+  # Effects cost the most, so transitions draw slowest and plain scrolling fastest.
+  def refresh(%{
+        mode: :show,
+        screen: @live_screen,
+        live: {_started, _tick, {_effect, phase, _k, scroll}, _lines}
+      }) do
+    cond do
+      phase == :in or phase == :out -> @live_effect_ms
+      phase == :hold and scroll != 0 -> @live_scroll_ms
+      true -> @live_ms
+    end
+  end
+
+  def refresh(%{mode: :show, screen: @live_screen}), do: @live_ms
   def refresh(_state), do: 100
 
   # w95fa is 18 kB in the display driver's heap, so it is only asked for on
   # the one screen that draws with it.
   @impl true
   def fonts(%{screen: 1}), do: [@big_font]
+  def fonts(%{mode: :show, screen: @live_screen}), do: [@big_font]
   def fonts(_state), do: []
+
+  # The live screen has the panel to itself.
+  @impl true
+  def chrome?(%{mode: :show, screen: @live_screen}), do: false
+  def chrome?(_state), do: true
 
   @impl true
   def title, do: "Name"
@@ -98,13 +131,14 @@ defmodule Badge.Page.Name do
       qr_payload: nil,
       qr_result: :none,
       qr_pid: nil,
-      qr_ref: nil
+      qr_ref: nil,
+      live: nil
     }
   end
 
   # Hardware is only touched here, never from a key handler.
   @impl true
-  def tick(state), do: state |> load() |> persist() |> qr()
+  def tick(state), do: state |> load() |> persist() |> qr() |> live()
 
   # The saved profile arrives on the first tick, so init/0 stays pure.
   defp load(%{loaded: true} = state), do: state
@@ -141,6 +175,30 @@ defmodule Badge.Page.Name do
 
     %{state | saved: state.profile}
   end
+
+  # Elapsed time picks the frame, and a held frame leaves the state alone, so nothing redraws.
+  defp live(%{mode: :show, screen: @live_screen, loaded: true} = state) do
+    now = :erlang.monotonic_time(:millisecond)
+
+    case state.live do
+      # The state only changes with the view, so a still screen is never redrawn.
+      {started, _tick, view, lines} ->
+        tick = div(now - started, @live_scroll_ms)
+
+        case Marquee.view(lines, div(tick, 2), tick) do
+          ^view -> state
+          next -> %{state | live: {started, tick, next, lines}}
+        end
+
+      nil ->
+        lines = Marquee.prepare(state.profile)
+
+        %{state | live: {now, 0, Marquee.view(lines, 0), lines}}
+    end
+  end
+
+  defp live(%{live: nil} = state), do: state
+  defp live(state), do: %{state | live: nil}
 
   # Only its own screen builds a code: the encode is heavy enough to slow the
   # panel down, and a finished result is kept for when the screen comes back.
@@ -337,6 +395,9 @@ defmodule Badge.Page.Name do
 
   def render(%{screen: 1, profile: profile}), do: big_screen(profile) ++ Nav.dots(@screens, 1)
 
+  def render(%{screen: @live_screen} = state),
+    do: live_screen(state) ++ Nav.dots(@screens, @live_screen)
+
   def render(%{screen: @qr_screen} = state),
     do: qr_screen(state) ++ Nav.dots(@screens, @qr_screen)
 
@@ -376,6 +437,91 @@ defmodule Badge.Page.Name do
     item = {:text, x, y, font, Theme.fg(), Theme.bg(), line}
 
     big_lines(rest, font, height, y + height, [item | acc])
+  end
+
+  defp live_screen(%{live: nil} = state) do
+    lines = Marquee.prepare(state.profile)
+
+    live_items(lines, Marquee.view(lines, 0))
+  end
+
+  defp live_screen(%{live: {_started, _step, view, lines}}), do: live_items(lines, view)
+
+  defp live_items(lines, view) do
+    :lists.flatmap(fn line -> line_items(line, view) end, lines)
+  end
+
+  defp line_items(%{key: key, font: font} = line, view) do
+    rows = Marquee.rows(line, view)
+    y = slot(key)
+
+    case font do
+      :big ->
+        big_rows(rows, y, 0, [])
+
+      :default16px when key == :name ->
+        text_rows(rows, y + @live_row_h, :default16px, Theme.fg())
+
+      @big_font ->
+        text_rows(rows, y, 0, font, line_colour(key), large_x(line))
+
+      :dogica when key == :company ->
+        text_rows(rows, y + div(@live_large_h - @live_dogica_h, 2), font, line_colour(key))
+
+      font ->
+        text_rows(rows, y, font, line_colour(key))
+    end
+  end
+
+  # Function clauses rather than a map attribute, which is costly to read on the badge.
+  defp slot(:name), do: 20
+  defp slot(:company), do: 76
+  defp slot(:hobbies), do: 140
+  defp slot(:github), do: 186
+
+  defp line_colour(:company), do: Theme.fg()
+  defp line_colour(:hobbies), do: Theme.muted()
+  defp line_colour(_key), do: Theme.dim()
+
+  defp text_rows(rows, y, font, colour), do: text_rows(rows, y, 0, font, colour, 0)
+
+  defp text_rows([row], y, _r, font, colour, x) do
+    case blank?(row) do
+      true -> []
+      false -> [{:text, x, y, font, colour, Theme.bg(), row}]
+    end
+  end
+
+  # Anchored where the finished text is centred, so scrambled frames do not shift it.
+  defp large_x(%{pixels: pixels}), do: div(Theme.width() - pixels, 2)
+
+  # The block name shades from the accent at the top to the cursor colour at the bottom.
+  defp big_rows([], _y, _r, acc), do: acc
+
+  defp big_rows([row | rest], y, r, acc) do
+    case blank?(row) do
+      true ->
+        big_rows(rest, y, r + 1, acc)
+
+      false ->
+        colour = mix(Theme.accent(), Theme.select(), r, 2)
+        item = {:text, 0, y + r * @live_row_h, :default16px, colour, Theme.bg(), row}
+
+        big_rows(rest, y, r + 1, [item | acc])
+    end
+  end
+
+  defp blank?(<<>>), do: true
+  defp blank?(<<?\s, rest::binary>>), do: blank?(rest)
+  defp blank?(_row), do: false
+
+  defp mix(a, b, num, den) do
+    channel = fn shift ->
+      from = rem(div(a, shift), 0x100)
+      from + div((rem(div(b, shift), 0x100) - from) * num, den)
+    end
+
+    channel.(0x10000) * 0x10000 + channel.(0x100) * 0x100 + channel.(1)
   end
 
   defp qr_screen(state) do

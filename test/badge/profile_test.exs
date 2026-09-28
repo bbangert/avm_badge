@@ -109,10 +109,16 @@ defmodule Badge.ProfileTest do
       assert Profile.icon(:name) == nil
     end
 
-    test "every field but the name and the choice has one, so the badge reads as a list" do
-      for key <- Profile.keys(), key not in [Profile.required(), :qr] do
+    test "every field but the name, the choice and hobbies has one, so the badge reads as a list" do
+      for key <- Profile.keys(), key not in [Profile.required(), :qr, :hobbies] do
         assert Profile.icon(key) != nil
       end
+    end
+
+    test "hobbies play on the live screen, not in the list" do
+      profile = with_values(%{name: "G", hobbies: "synths, coffee"})
+
+      assert Profile.lines(profile) == []
     end
 
     test "the QR choice is a setting, so it never draws on the badge" do
