@@ -253,6 +253,13 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
 - `tools/provision.py` is the only provisioning tool: wifi, NervesHub, the
   chat URL and the UTC offset, read-merge-written so nothing else is lost.
   `--forget-wifi` drops the saved network alone
+- ESP-IDF's NVS image generator is a module inside IDF's own virtualenv
+  (`~/.espressif/python_env/*/bin/python`), and the script in the checkout is
+  only a wrapper around it, so `provision.py` looks for that interpreter
+  rather than assuming `python3` has it
+- Every tool takes esptool under either name: `esptool` first, then the
+  deprecated `esptool.py`, then `python3 -m esptool`. A Homebrew esptool has
+  its own private Python, so the module form is the last resort, not the first
 - `provision.py` does not preserve ESP-IDF's own `nvs.net80211`, `phy` and
   `misc` namespaces; they rebuild on the next boot, costing one slower wifi
   connect while the PHY recalibrates

@@ -27,6 +27,7 @@ the next boot at the cost of a slower first connection.
 """
 import argparse
 import getpass
+import glob
 import importlib.util
 import os
 import shutil
@@ -61,16 +62,13 @@ MIN_OFFSET = -720
 MAX_OFFSET = 840
 
 
-def tool(executables, module, script=None):
+def tool(executables, module):
     """The first installed way to run a tool, as an argv prefix.
 
     esptool ships as `esptool` and, until it is dropped, `esptool.py`; either
     may be a standalone binary with its own Python, so the importable module
     is the last resort rather than the first.
     """
-    if script and os.path.exists(script):
-        return [sys.executable, script]
-
     for name in executables:
         found = shutil.which(name)
         if found:
@@ -85,18 +83,38 @@ def tool(executables, module, script=None):
     sys.exit(f"cannot run {executables[0]}: install it, or the {module} module")
 
 
-def generator():
-    """ESP-IDF's NVS image generator, from the checkout or from pip."""
-    idf = os.environ.get("IDF_PATH", "")
-    script = os.path.join(
-        idf, "components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
-    )
+def idf_pythons():
+    """Interpreters that may carry ESP-IDF's tooling, most specific first."""
+    env = os.environ.get("IDF_PYTHON_ENV_PATH")
+    if env:
+        yield os.path.join(env, "bin", "python")
 
-    return tool(
-        ("nvs_partition_gen.py",),
-        "esp_idf_nvs_partition_gen.nvs_partition_gen",
-        script if idf else None,
-    )
+    yield from sorted(glob.glob(os.path.expanduser("~/.espressif/python_env/*/bin/python")))
+
+
+def importable(python, module):
+    if not os.path.exists(python):
+        return False
+
+    return subprocess.run([python, "-c", f"import {module}"], capture_output=True).returncode == 0
+
+
+def generator():
+    """ESP-IDF's NVS image generator, run by whichever Python holds it.
+
+    The script in the IDF checkout only wraps a module that lives in IDF's own
+    virtualenv, so the interpreter matters as much as the tool.
+    """
+    module = "esp_idf_nvs_partition_gen.nvs_partition_gen"
+    for python in [sys.executable, *idf_pythons()]:
+        if importable(python, module):
+            return [python, "-m", module]
+
+    found = shutil.which("nvs_partition_gen.py") or shutil.which("nvs_partition_gen")
+    if found:
+        return [found]
+
+    sys.exit(f"cannot run the NVS generator: source $IDF_PATH/export.sh, or pip install {module.split('.')[0].replace('_', '-')}")
 
 
 def load_parser():
