@@ -4,51 +4,132 @@
 #
 #     tools/flashstation.exs
 #
-# Needs Elixir and Erlang (see README.md: mise or asdf). Every other tool is
+# Needs Elixir, Erlang and a C compiler (see README.md: mise or asdf). Every other tool is
 # installed on first run: through mise when it is on PATH, otherwise the way
 # the README describes. Set BADGE_NH_KEY/BADGE_NH_SECRET or
 # AVM_BADGE_SERVER_URL with ESP-IDF sourced to provision NVS as well.
 
+# Consolidation is off so the script can implement Collectable for its own struct.
 Mix.install(
-  [{:breeze, "~> 0.5.3"}],
-  config: [back_breeze: [render_cache_max_memory_bytes: 64 * 1024 * 1024]]
+  [{:breeze, "~> 0.5.3"}, {:muontrap, "~> 2.0"}],
+  config: [back_breeze: [render_cache_max_memory_bytes: 64 * 1024 * 1024]],
+  consolidate_protocols: false
 )
+
+defmodule Flashstation.Lines do
+  @moduledoc false
+
+  # A Collectable that turns command output into lines sent to `sink`.
+  defstruct [:sink]
+
+  defimpl Collectable do
+    def into(%{sink: sink}) do
+      collector = fn
+        buffer, {:cont, data} -> emit(sink, buffer <> data)
+        "", :done -> :ok
+        buffer, :done -> send(sink, {:out, buffer})
+        _buffer, :halt -> :ok
+      end
+
+      {"", collector}
+    end
+
+    # A carriage return ends a line too, so esptool's progress arrives one line at a time.
+    defp emit(sink, data) do
+      {complete, [rest]} = data |> String.split(["\r\n", "\n", "\r"]) |> Enum.split(-1)
+      Enum.each(complete, &send(sink, {:out, &1}))
+      rest
+    end
+  end
+end
 
 defmodule Flashstation.Shell do
   @moduledoc false
 
   @root Path.expand("..", __DIR__)
+  @keep 40
 
   def root, do: @root
 
-  @doc "Runs a command, streaming each output line to `on_line`; returns `{status, tail}`."
-  def run(exe, args, on_line) do
-    path = System.find_executable(exe) || raise "#{exe} is not on PATH"
+  @doc """
+  Runs a command under muontrap, streaming each output line to `on_line`.
 
-    port =
-      Port.open({:spawn_executable, path}, [
-        :binary,
-        :exit_status,
-        :stderr_to_stdout,
-        {:args, args},
-        {:cd, @root},
-        {:line, 4096}
-      ])
+  Returns `{exit_status, tail}`, or `{:stopped, tail}` once `:until` matched a
+  line, `{:timeout, tail}` after `:timeout` ms. Either way the child is dead.
+  """
+  def run(exe, args, on_line, opts \\ []) do
+    caller = self()
+    deadline = deadline(Keyword.get(opts, :timeout, :infinity))
+    until = Keyword.get(opts, :until, fn _line -> false end)
 
-    collect(port, on_line, [])
+    {pid, ref} =
+      spawn_monitor(fn ->
+        {_, status} =
+          MuonTrap.cmd(exe, args,
+            cd: @root,
+            stderr_to_stdout: true,
+            into: %Flashstation.Lines{sink: caller}
+          )
+
+        exit({:shutdown, {:status, status}})
+      end)
+
+    collect({pid, ref, exe}, on_line, until, deadline, [])
   end
 
-  defp collect(port, on_line, tail) do
-    receive do
-      {^port, {:data, {_eol, chunk}}} ->
-        line = chunk |> String.split("\r") |> List.last()
-        on_line.({kind(line), line})
-        collect(port, on_line, Enum.take([line | tail], 40))
+  defp deadline(:infinity), do: :infinity
+  defp deadline(ms), do: System.monotonic_time(:millisecond) + ms
 
-      {^port, {:exit_status, status}} ->
+  defp collect({pid, ref, exe} = child, on_line, until, deadline, tail) do
+    receive do
+      {:out, line} ->
+        on_line.({kind(line), line})
+        tail = Enum.take([line | tail], @keep)
+
+        if until.(line) do
+          stop(child)
+          {:stopped, Enum.reverse(tail)}
+        else
+          collect(child, on_line, until, deadline, tail)
+        end
+
+      {:DOWN, ^ref, :process, ^pid, {:shutdown, {:status, status}}} ->
         {status, Enum.reverse(tail)}
+
+      {:DOWN, ^ref, :process, ^pid, reason} ->
+        line = "could not run #{exe}: #{describe(reason)}"
+        on_line.({:line, line})
+        {:crashed, Enum.reverse([line | tail])}
+    after
+      remaining(deadline) ->
+        stop(child)
+        {:timeout, Enum.reverse(tail)}
     end
   end
+
+  defp remaining(:infinity), do: :infinity
+  defp remaining(deadline), do: max(deadline - System.monotonic_time(:millisecond), 0)
+
+  # Killing the runner closes its port, and muontrap then kills the child.
+  defp stop({pid, ref, _exe}) do
+    Process.exit(pid, :kill)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> drain()
+    end
+  end
+
+  defp drain do
+    receive do
+      {:out, _line} -> drain()
+    after
+      0 -> :ok
+    end
+  end
+
+  defp describe({:enoent, _stack}), do: "not on PATH"
+  defp describe({%{__exception__: true} = exception, _stack}), do: Exception.message(exception)
+  defp describe(reason), do: inspect(reason)
 
   # esptool prints one progress line per block when it is not on a tty.
   defp kind(line) do
@@ -59,9 +140,10 @@ defmodule Flashstation.Shell do
 
   @doc "Runs a command in the plain terminal, exiting with a message when it fails."
   def run!(exe, args) do
-    {status, _tail} = run(exe, args, &echo/1)
-    if status != 0, do: fail("#{exe} #{Enum.join(args, " ")} exited #{status}")
-    :ok
+    case run(exe, args, &echo/1) do
+      {0, _tail} -> :ok
+      {status, _tail} -> fail("#{exe} #{Enum.join(args, " ")} exited #{inspect(status)}")
+    end
   end
 
   defp echo({:line, line}), do: IO.puts(line)
@@ -139,7 +221,7 @@ defmodule Flashstation.Setup do
 
   # Two stations would race each other's esptool for every port.
   defp ensure_alone do
-    {out, _} = System.cmd("pgrep", ["-f", "flashstation.exs"], stderr_to_stdout: true)
+    {out, _} = MuonTrap.cmd("pgrep", ["-f", "flashstation.exs"], stderr_to_stdout: true)
     others = out |> String.split() |> List.delete(System.pid())
 
     if others != [],
@@ -184,7 +266,7 @@ defmodule Flashstation.Setup do
   end
 
   defp importable? do
-    match?({_, 0}, System.cmd("python3", ["-c", "import esptool"], stderr_to_stdout: true))
+    match?({_, 0}, MuonTrap.cmd("python3", ["-c", "import esptool"], stderr_to_stdout: true))
   end
 
   defp ensure_python do
@@ -216,7 +298,7 @@ defmodule Flashstation.Setup do
       end
     end
 
-    case System.cmd("gh", ["auth", "status"], stderr_to_stdout: true) do
+    case MuonTrap.cmd("gh", ["auth", "status"], stderr_to_stdout: true) do
       {_, 0} -> Shell.say("gh is authenticated")
       _ -> Shell.fail("gh is not logged in; run `gh auth login` and start again")
     end
@@ -255,7 +337,7 @@ defmodule Flashstation.Setup do
   end
 
   defp mise_has?(name) do
-    match?({_, 0}, System.cmd("mise", ["which", name], stderr_to_stdout: true))
+    match?({_, 0}, MuonTrap.cmd("mise", ["which", name], stderr_to_stdout: true))
   end
 
   # This process has to put the new binary on its own PATH; the shell hook cannot.
@@ -264,7 +346,7 @@ defmodule Flashstation.Setup do
     Shell.run!("mise", ["use", "-g", tool])
     name = tool |> String.split(":") |> List.last()
 
-    case System.cmd("mise", ["which", name], stderr_to_stdout: true) do
+    case MuonTrap.cmd("mise", ["which", name], stderr_to_stdout: true) do
       {path, 0} ->
         dir = path |> String.trim() |> Path.dirname()
         System.put_env("PATH", dir <> ":" <> System.get_env("PATH", ""))
@@ -317,7 +399,7 @@ defmodule Flashstation.Flash do
   defp cmd(exe, args, on_line) do
     case Shell.run(exe, args, on_line) do
       {0, _tail} -> :ok
-      {status, _tail} -> {:error, "#{exe} exited #{status}"}
+      {status, _tail} -> {:error, "#{exe} exited #{inspect(status)}"}
     end
   end
 
@@ -339,52 +421,29 @@ defmodule Flashstation.Flash do
   end
 
   defp configure(port) do
-    case System.cmd("stty", Serial.stty_args(port), stderr_to_stdout: true) do
+    case MuonTrap.cmd("stty", Serial.stty_args(port), stderr_to_stdout: true) do
       {_, 0} -> :ok
       {out, _} -> {:error, "stty: #{String.trim(out)}"}
     end
   end
 
   defp read_boot(port, on_line) do
-    cat =
-      Port.open({:spawn_executable, System.find_executable("cat")}, [
-        :binary,
-        :exit_status,
-        {:args, [port]},
-        {:line, 4096}
-      ])
+    case Shell.run("cat", [port], on_line, timeout: @boot_timeout, until: &decisive?/1) do
+      {:stopped, tail} ->
+        if Enum.any?(tail, &String.contains?(&1, "Badge: starting")),
+          do: :ok,
+          else: {:error, "the VM rejected boot.avm"}
 
-    {:os_pid, os_pid} = Port.info(cat, :os_pid)
-    result = watch(cat, on_line, System.monotonic_time(:millisecond) + @boot_timeout)
-    System.cmd("kill", [Integer.to_string(os_pid)], stderr_to_stdout: true)
-    catch_close(cat)
-    result
-  end
+      {:timeout, _tail} ->
+        {:error, "no `Badge: starting` within #{div(@boot_timeout, 1000)}s"}
 
-  defp watch(cat, on_line, deadline) do
-    left = deadline - System.monotonic_time(:millisecond)
-
-    receive do
-      {^cat, {:data, {_eol, line}}} ->
-        on_line.({:line, line})
-
-        cond do
-          line =~ "Badge: starting" -> :ok
-          line =~ "Invalid startup avmpack" -> {:error, "the VM rejected boot.avm"}
-          true -> watch(cat, on_line, deadline)
-        end
-
-      {^cat, {:exit_status, _}} ->
-        {:error, "the serial port closed while waiting for the boot log"}
-    after
-      max(left, 0) -> {:error, "no `Badge: starting` within #{div(@boot_timeout, 1000)}s"}
+      {status, _tail} ->
+        {:error, "the serial port closed while waiting for the boot log (#{inspect(status)})"}
     end
   end
 
-  defp catch_close(port) do
-    Port.close(port)
-  rescue
-    ArgumentError -> :ok
+  defp decisive?(line) do
+    String.contains?(line, "Badge: starting") or String.contains?(line, "Invalid startup avmpack")
   end
 end
 

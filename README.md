@@ -77,7 +77,8 @@ at a time. Each board gets a column: it is written in one go (base image,
 assets, firmware), watched until the boot log says `Badge: starting`, then
 the column turns green with a big OK or red with the error. Unplug it and
 the column goes away. Missing tools are installed on the first run, through
-`mise` when it is on `PATH` and otherwise as above. With
+`mise` when it is on `PATH` and otherwise as above; a C compiler is needed
+once, for the `muontrap` wrapper that keeps every child process contained. With
 `BADGE_NH_KEY`/`BADGE_NH_SECRET` or `AVM_BADGE_SERVER_URL` set and ESP-IDF
 sourced, it provisions NVS as well.
 
