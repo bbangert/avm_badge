@@ -411,6 +411,7 @@ defmodule Badge.UI do
 
   defp goto(state, page) do
     state.page.leave(state.page_state)
+    :io.format(~c"UI: page ~p~n", [page])
 
     %{state | page: page, page_state: page.init(), dirty: true, countdown: 0}
   end
