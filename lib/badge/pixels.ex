@@ -87,7 +87,15 @@ defmodule Badge.Pixels do
       Hardware.pixel_clock_hz()
     ])
 
-    state = %{spi: spi, phase: 0, mode: :rainbow, last: nil, flash: nil, asleep: false}
+    state = %{
+      spi: spi,
+      phase: 0,
+      mode: :rainbow,
+      last: nil,
+      flash: nil,
+      asleep: false,
+      failing: false
+    }
 
     {:ok, state, {:continue, :restore}}
   end
@@ -150,18 +158,18 @@ defmodule Badge.Pixels do
     %{lit | flash: {hue, left - 1}}
   end
 
-  defp paint(%{mode: :rainbow, spi: spi, phase: phase} = state) do
-    frame(spi, phase)
+  defp paint(%{mode: :rainbow, phase: phase} = state) do
+    count = Hardware.pixel_count()
+    pixels = for i <- 0..(count - 1), do: rainbow(phase + i * div(360, count))
 
-    %{state | phase: rem(phase + @hue_step, 360), last: nil}
+    %{show(state, pixels) | phase: rem(phase + @hue_step, 360), last: nil}
   end
 
-  defp paint(%{mode: :dusk, spi: spi, phase: phase} = state) do
+  defp paint(%{mode: :dusk, phase: phase} = state) do
     count = Hardware.pixel_count()
+    pixels = for i <- 0..(count - 1), do: LedMode.dusk(phase + i * @dusk_spread, @brightness)
 
-    show(spi, for(i <- 0..(count - 1), do: LedMode.dusk(phase + i * @dusk_spread, @brightness)))
-
-    %{state | phase: rem(phase + @dusk_step, 360), last: nil}
+    %{show(state, pixels) | phase: rem(phase + @dusk_step, 360), last: nil}
   end
 
   defp paint(%{mode: {:solid, hue}} = state) do
@@ -175,34 +183,44 @@ defmodule Badge.Pixels do
   # A static mode would otherwise rewrite the chain fifty times a second.
   defp hold(%{last: colour} = state, colour), do: state
 
-  defp hold(%{spi: spi} = state, colour) do
-    fill(spi, colour)
-
-    %{state | last: colour}
+  # `last` only moves on a write that landed, so a failed one is retried next tick.
+  defp hold(state, colour) do
+    case show(state, List.duplicate(colour, Hardware.pixel_count())) do
+      %{failing: false} = shown -> %{shown | last: colour}
+      failed -> failed
+    end
   end
 
-  defp frame(spi, phase) do
-    count = Hardware.pixel_count()
+  defp rainbow(hue), do: Color.hsv_to_rgb(rem(hue, 360), 255, @brightness)
 
-    for(
-      i <- 0..(count - 1),
-      do: Color.hsv_to_rgb(rem(phase + i * div(360, count), 360), 255, @brightness)
-    )
-    |> then(&show(spi, &1))
-  end
-
-  defp show(spi, pixels) do
+  # A write fails when internal RAM has no DMA buffer to spare; the frame is dropped.
+  defp show(state, pixels) do
     frame =
       pixels
       |> Enum.map(&encode_pixel/1)
       |> Enum.reduce(<<>>, fn bytes, acc -> acc <> bytes end)
 
-    :ok = :spi.write(spi, @device, %{write_data: frame <> @latch})
+    case :spi.write(state.spi, @device, %{write_data: frame <> @latch}) do
+      :ok -> recovered(state)
+      error -> failed(state, error)
+    end
   end
 
-  defp fill(spi, colour) do
-    show(spi, List.duplicate(colour, Hardware.pixel_count()))
+  defp failed(%{failing: true} = state, _error), do: state
+
+  defp failed(state, error) do
+    :io.format(~c"Pixels: write failed ~p~n", [error])
+
+    %{state | failing: true}
   end
+
+  defp recovered(%{failing: true} = state) do
+    :io.format(~c"Pixels: writing again~n")
+
+    %{state | failing: false}
+  end
+
+  defp recovered(state), do: state
 
   # SK6812 and WS2812 both take green first.
   defp encode_pixel({r, g, b}) do
