@@ -34,12 +34,9 @@ defmodule Badge do
       {:error, reason} -> :io.format(~c"Badge: no assets partition: ~p~n", [reason])
     end
 
-    display_spi = open_display_spi()
+    # SPIKE: the lvgl port owns the display SPI bus and panel.
     pixel_spi = open_pixel_spi()
-
-    # Opened here, not in the child, so a Badge.UI restart reuses the display
-    # instead of orphaning its framebuffer.
-    display = Badge.UI.open_display(display_spi)
+    display = {Badge.Display.Null, nil}
 
     children = [
       {Badge.UI, display},
@@ -57,6 +54,8 @@ defmodule Badge do
     ]
 
     {:ok, _supervisor} = Supervisor.start_link(children, strategy: :one_for_one)
+
+    Badge.LvglSpike.start()
 
     :io.format(~c"Badge: running~n")
 
