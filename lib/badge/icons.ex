@@ -30,7 +30,17 @@ defmodule Badge.Icons do
   # Per-file @external_resource cannot track a file that does not exist yet.
   @external_resource @dir
 
-  @files Enum.sort(Path.wildcard(Path.join(@dir, "*.{rgba,mask}")))
+  # The Share page draws its art as text unless `share_art: :image` is configured.
+  @skipped (case Application.compile_env(:avm_badge, :share_art, :text) do
+              :text -> ["badge_share"]
+              :image -> []
+              other -> raise "share_art must be :text or :image, got #{inspect(other)}"
+            end)
+
+  @files Path.join(@dir, "*.{rgba,mask}")
+         |> Path.wildcard()
+         |> Enum.reject(&(hd(String.split(Path.basename(&1), "@")) in @skipped))
+         |> Enum.sort()
 
   @files != [] || raise "no icon files in #{@dir} — run tools/icons.py"
 

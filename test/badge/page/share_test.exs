@@ -36,6 +36,13 @@ defmodule Badge.Page.ShareTest do
   defp press(state, _event, 0), do: state
   defp press(state, event, n), do: press(press(state, event), event, n - 1)
 
+  # A row of the text art: a frame, screen or key-grid row, or the beam between them.
+  defp art?({:text, _x, y, :default16px, _c, _b, body}) when y >= 90 and y < 154 do
+    match?(<<first, _::binary>> when first >= 0xB0, body) or body in [" ))(( ", "      "]
+  end
+
+  defp art?(_item), do: false
+
   defp texts(state), do: for({:text, _x, _y, _f, _c, _b, body} <- Page.render(state), do: body)
 
   defp colour_of(state, text) do
@@ -79,18 +86,56 @@ defmodule Badge.Page.ShareTest do
   end
 
   describe "the share screen" do
-    test "shows two badges meeting, whatever else it has to say" do
-      for state <- [Page.init(), loaded(), loaded(%{})] do
-        assert Enum.any?(
-                 Page.render(state),
-                 &match?({:image, 88, 90, _bg, {:rgba8888, 144, 64, _pixels}}, &1)
-               )
-      end
+    case Application.compile_env(:avm_badge, :share_art, :text) do
+      :image ->
+        test "shows two badges meeting, whatever else it has to say" do
+          for state <- [Page.init(), loaded(), loaded(%{})] do
+            assert Enum.any?(
+                     Page.render(state),
+                     &match?({:image, 88, 90, _bg, {:rgba8888, 144, 64, _pixels}}, &1)
+                   )
+          end
+        end
+
+      :text ->
+        test "shows two badges meeting in text, whatever else it has to say" do
+          for state <- [Page.init(), loaded(), loaded(%{})] do
+            art = for item <- Page.render(state), art?(item), do: item
+
+            assert length(art) == 12
+
+            assert Enum.any?(
+                     art,
+                     &match?({:text, 72, 90, :default16px, _fg, _bg, <<0xC9, _::binary>>}, &1)
+                   )
+
+            assert Enum.any?(art, &match?({:text, _x, 106, _f, _fg, _bg, " ))(( "}, &1))
+          end
+        end
+
+        test "draws the badges in the skin's colours, the beam in its accent" do
+          art = for item <- Page.render(loaded()), art?(item), do: item
+
+          assert {:text, _x, _y, _f, beam, _bg, _b} =
+                   Enum.find(art, &match?({:text, _, _, _, _, _, " ))(( "}, &1))
+
+          assert beam == Theme.accent()
+
+          for {:text, _x, _y, _f, fg, bg, <<first, _::binary>>} <- art, first >= 0xB0 do
+            assert {fg, bg} == {Theme.fg(), Theme.bg()}
+          end
+        end
+
+        test "leaves the image out of the firmware" do
+          refute :badge_share in Badge.Icons.names()
+        end
     end
 
     test "what it says sits below the badges, above the dots" do
       for state <- [loaded(), loaded(%{}), %{loaded() | met: {"Pat", :new}}] do
-        for {:text, _x, y, _f, _c, _b, _body} <- Page.render(state), y > 90 do
+        for {:text, _x, y, _f, _c, _b, _body} = item <- Page.render(state),
+            y > 90,
+            not art?(item) do
           assert y >= 154 and y + 16 <= 228
         end
       end

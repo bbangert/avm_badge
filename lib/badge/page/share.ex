@@ -80,8 +80,8 @@ defmodule Badge.Page.Share do
   @detail_x @margin + @icon_w + 6
 
   # Two badges meeting, centred between the chip id and the badge heard.
-  @art :badge_share
   @art_y 90
+  @share_art Application.compile_env(:avm_badge, :share_art, :text)
 
   @dot_y 228
   @dot 6
@@ -333,7 +333,7 @@ defmodule Badge.Page.Share do
   def render(%{mode: :detail, opened: %{profile: profile}}), do: detail_screen(profile)
 
   def render(%{screen: @share_screen} = state) do
-    [art()] ++ share_screen(state) ++ dots(@share_screen)
+    art() ++ share_screen(state) ++ dots(@share_screen)
   end
 
   def render(%{screen: @sharing_screen} = state),
@@ -511,10 +511,44 @@ defmodule Badge.Page.Share do
   defp badge_icon(nil, _y), do: []
   defp badge_icon(icon, y), do: [Icons.item(icon, @margin, y)]
 
-  defp art do
-    {width, _height} = Icons.size(@art)
+  case @share_art do
+    :image ->
+      defp art do
+        {width, _height} = Icons.size(:badge_share)
 
-    Icons.item(@art, div(Theme.width() - width, 2), @art_y)
+        [Icons.item(:badge_share, div(Theme.width() - width, 2), @art_y)]
+      end
+
+    :text ->
+      # Code page 437 frames, screens and key grids, with the beam between them.
+      @art_rows [
+        {<<0xC9, 0xCD, 0xCD, 0xCD, 0xCD, 0xCD, 0xCD, 0xBB>>, "      "},
+        {<<0xBA, 0xB0, 0xB0, 0xB0, 0xB0, 0xB0, 0xB0, 0xBA>>, " ))(( "},
+        {<<0xBA, 0xC5, 0xC5, 0xC5, 0xC5, 0xC5, 0xC5, 0xBA>>, "      "},
+        {<<0xC8, 0xCD, 0xCD, 0xCD, 0xCD, 0xCD, 0xCD, 0xBC>>, "      "}
+      ]
+      @art_char_w 8
+      @art_row_h 16
+      @art_x div(Theme.width() - @art_char_w * 22, 2)
+      @beam_x @art_x + @art_char_w * 8
+      @right_x @beam_x + @art_char_w * 6
+
+      defp art, do: art_rows(@art_rows, @art_y, [])
+
+      defp art_rows([], _y, acc), do: acc
+
+      defp art_rows([{badge, beam} | rest], y, acc) do
+        fg = Theme.fg()
+        bg = Theme.bg()
+
+        row = [
+          {:text, @art_x, y, :default16px, fg, bg, badge},
+          {:text, @beam_x, y, :default16px, Theme.accent(), bg, beam},
+          {:text, @right_x, y, :default16px, fg, bg, badge}
+        ]
+
+        art_rows(rest, y + @art_row_h, row ++ acc)
+      end
   end
 
   # Before anyone has been heard there is nothing to report but the count.
