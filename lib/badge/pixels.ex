@@ -34,9 +34,9 @@ defmodule Badge.Pixels do
 
   @brightness 40
 
-  @tick 20
-  @hue_step 3
-  @dusk_step 1
+  @tick 400
+  @hue_step 6
+  @dusk_step 3
   @dusk_spread 30
 
   # Long enough to catch the eye across a table, short enough not to linger.

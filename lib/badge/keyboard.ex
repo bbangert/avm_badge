@@ -107,8 +107,11 @@ defmodule Badge.Keyboard do
               into: %{},
               do: {{r, c}, key}
 
-  # Milliseconds between scan passes.
+  # Milliseconds between scan passes while a key is down or a reading is settling.
   @scan_interval 5
+
+  # Milliseconds between scan passes while nothing is pressed.
+  @idle_interval 20
 
   # Scans a reading must hold steady before it counts; raising this can cause a fast re-press to be dropped as a repeat.
   @debounce 2
@@ -180,11 +183,17 @@ defmodule Badge.Keyboard do
       |> maybe_repeat()
 
     # Sleeps rather than using Process.send_after/3.
-    Process.sleep(@scan_interval)
+    Process.sleep(interval(state))
     send(self(), :scan)
 
     {:noreply, state}
   end
+
+  # A reading that has settled on nothing held can wait; anything else is scanned at full rate.
+  defp interval(%{candidate: [], held: [], count: count}) when count >= @debounce,
+    do: @idle_interval
+
+  defp interval(_state), do: @scan_interval
 
   defp maybe_repeat(state) do
     case KeyRepeat.due(state.repeat, now(), @repeat_interval) do
