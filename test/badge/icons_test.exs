@@ -29,7 +29,10 @@ defmodule Badge.IconsTest do
     :signal_3
   ]
 
-  @art [:badge_share]
+  @art (case Application.compile_env(:avm_badge, :share_art, :text) do
+          :image -> [:badge_share]
+          :text -> []
+        end)
 
   @white 0xFFFFFF
   @black 0x000000
