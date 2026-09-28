@@ -29,6 +29,7 @@ import argparse
 import getpass
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,44 @@ WIFI = ("wifi_ssid", "wifi_psk")
 # UTC-12 to UTC+14, matching Badge.Clock.
 MIN_OFFSET = -720
 MAX_OFFSET = 840
+
+
+def tool(executables, module, script=None):
+    """The first installed way to run a tool, as an argv prefix.
+
+    esptool ships as `esptool` and, until it is dropped, `esptool.py`; either
+    may be a standalone binary with its own Python, so the importable module
+    is the last resort rather than the first.
+    """
+    if script and os.path.exists(script):
+        return [sys.executable, script]
+
+    for name in executables:
+        found = shutil.which(name)
+        if found:
+            return [found]
+
+    try:
+        if importlib.util.find_spec(module):
+            return [sys.executable, "-m", module]
+    except ModuleNotFoundError:
+        pass
+
+    sys.exit(f"cannot run {executables[0]}: install it, or the {module} module")
+
+
+def generator():
+    """ESP-IDF's NVS image generator, from the checkout or from pip."""
+    idf = os.environ.get("IDF_PATH", "")
+    script = os.path.join(
+        idf, "components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
+    )
+
+    return tool(
+        ("nvs_partition_gen.py",),
+        "esp_idf_nvs_partition_gen.nvs_partition_gen",
+        script if idf else None,
+    )
 
 
 def load_parser():
@@ -205,6 +244,7 @@ def main():
                   file=sys.stderr)
 
     device = args.port or find_port()
+    esptool = tool(("esptool", "esptool.py"), "esptool")
     parser = load_parser()
 
     with tempfile.TemporaryDirectory() as work:
@@ -216,8 +256,8 @@ def main():
         # no merge to show.
         print(f"Reading NVS from {device}")
         run(
-            ["python3", "-m", "esptool", "--chip", CHIP, "--port", device,
-             "read_flash", hex(NVS_OFFSET), hex(NVS_SIZE), image],
+            esptool + ["--chip", CHIP, "--port", device,
+                       "read_flash", hex(NVS_OFFSET), hex(NVS_SIZE), image],
             dry_run=False,
             quiet=True,
         )
@@ -247,13 +287,12 @@ def main():
         write_csv(source, values)
 
         run(
-            ["python3", "-m", "esp_idf_nvs_partition_gen.nvs_partition_gen",
-             "generate", source, merged, hex(NVS_SIZE)],
+            generator() + ["generate", source, merged, hex(NVS_SIZE)],
             args.dry_run,
         )
         run(
-            ["python3", "-m", "esptool", "--chip", CHIP, "--port", device,
-             "write_flash", hex(NVS_OFFSET), merged],
+            esptool + ["--chip", CHIP, "--port", device,
+                       "write_flash", hex(NVS_OFFSET), merged],
             args.dry_run,
         )
 

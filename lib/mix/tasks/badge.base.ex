@@ -70,14 +70,29 @@ defmodule Mix.Tasks.Badge.Base do
       expected = sums[file] || Mix.raise("#{@sums} does not cover #{file}")
       path = Path.join(dir, file)
       unless File.exists?(path), do: Mix.raise("#{file} is missing from #{dir}")
-      actual = path |> File.read!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
+
+      actual =
+        path |> File.read!() |> then(&:crypto.hash(:sha256, &1)) |> Base.encode16(case: :lower)
+
       if actual != expected, do: Mix.raise("#{file}: checksum mismatch, download is corrupt")
     end
   end
 
   defp flash(dir, parts) do
     args = Enum.flat_map(parts, fn {file, offset} -> [offset, Path.join(dir, file)] end)
-    cmd!("esptool.py", ["--chip", "esp32s3", "--baud", "921600", "write_flash"] ++ args)
+    {bin, prefix} = esptool()
+
+    cmd!(bin, prefix ++ ["--chip", "esp32s3", "--baud", "921600", "write_flash"] ++ args)
+  end
+
+  # esptool ships under both names while the .py suffix is being retired.
+  defp esptool do
+    cond do
+      path = System.find_executable("esptool") -> {path, []}
+      path = System.find_executable("esptool.py") -> {path, []}
+      path = System.find_executable("python3") -> {path, ["-m", "esptool"]}
+      true -> Mix.raise("no esptool on PATH")
+    end
   end
 
   defp cmd!(bin, args) do
