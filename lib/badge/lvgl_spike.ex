@@ -13,7 +13,7 @@ defmodule Badge.LvglSpike do
   @compile {:no_warn_undefined, [:port]}
 
   # :chat_only opens the port for memory stats alone, with LVGL never started.
-  @mode :display_only
+  @mode :trace
 
   @white 0xF0EAFF
   @cyan 0x5CC8F5
@@ -31,6 +31,30 @@ defmodule Badge.LvglSpike do
     port = :erlang.open_port({:spawn, ~c"lvgl"}, no_display: true)
     :io.format(~c"LvglSpike: chat only, no LVGL, stats ~p~n", [call(port, :stats)])
     chat(port, 0)
+  end
+
+  # Marquees plus chat; once the connection has settled, traces internal RAM
+  # that is allocated and never freed for four minutes, then dumps it.
+  defp run(:trace) do
+    port = display_port()
+    draw(port)
+    await_sync()
+    :io.format(~c"LvglSpike: opening chat~n")
+    Badge.Chat.Link.open()
+    Process.sleep(60_000)
+    :io.format(~c"LvglSpike: tracing, stats ~p~n", [call(port, :stats)])
+    call(port, :trace_start)
+    Process.sleep(240_000)
+    :io.format(~c"LvglSpike: dumping, chat ready=~p stats ~p~n", [Badge.Chat.Link.status().ready, call(port, :stats)])
+    call(port, :trace_dump)
+    watch(port)
+  end
+
+  defp await_sync do
+    case Badge.Wifi.status() do
+      %{synced: true} -> :ok
+      _other -> Process.sleep(2_000) && await_sync()
+    end
   end
 
   # Marquees alone, logging memory every 15 s, to see whether LVGL drifts by itself.
