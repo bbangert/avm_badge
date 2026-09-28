@@ -42,6 +42,7 @@ Plug the badge in over USB, then:
     cd avm_badge/firmware
     mix deps.get
     mix badge.base             # once per board: bootloader, VM, boot.avm
+    tools/flashassets.sh       # once per board: fonts, icons, splash logo
     mix atomvm.esp32.flash     # the firmware itself, every time
 
 The serial port is auto-detected, so do not pass `--port`. It appears as
@@ -57,6 +58,12 @@ watch it boot (`stty -F` on Linux):
 
 You should see the AtomVM banner, then `Badge: starting`, then the home grid
 on the panel. The six shape keys open the pages; the arrows page the grid.
+
+`tools/flashassets.sh` writes the assets partition, which holds the extra
+fonts, the splash logo and the rickroll frames. It is **not** updated over the
+air, so run it again whenever anything under `assets/` changes — see
+[Assets](#assets). A badge without it still boots and prints
+`Badge: no assets partition:`, it just skips the splash.
 
 Reflashing leaves NVS alone, so the profile, the badges you have collected and
 the wifi credentials all survive.

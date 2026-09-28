@@ -17,3 +17,7 @@ tools/.mise.local.toml
 # Ignore direnv setup with nix
 .envrc
 .direnv/
+
+# mise: local tool versions and env, which may hold secrets
+mise.toml
+mise.local.toml
