@@ -217,8 +217,11 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - `Badge.Update.Link` owns the NervesHub agent and runs only while the Update
   tab shows; elsewhere the badge is offline to NervesHub. Updates and reboots
   are both `manual`, so nothing installs without a keypress
-- Credentials are NVS keys `nh_key`, `nh_secret` and optional `nh_host`,
-  written by `tools/provision.py`
+- The product's shared secret is **compiled into `Badge.Update.Link`**, so a
+  badge flashed from a clone updates itself with no provisioning. NVS keys
+  `nh_key`, `nh_secret` and optional `nh_host` override it per badge, written
+  by `tools/provision.py`. The repo is public, so rotating the credential in
+  NervesHub is the only way to withdraw it
 - **ExAtomVM writes no `priv/application.bin`**, and `firmware: boot` needs
   one. `mix atomvm.application_bin` writes it and is aliased onto
   `atomvm.packbeam` and `atomvm.esp32.flash`

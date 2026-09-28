@@ -90,16 +90,18 @@ Pure modules (`Badge.TextBuffer`, `Badge.Keymap`, `Badge.Sharing`, the wire
 formats) are tested on the host; anything that talks to GPIO, SPI or AtomGL is
 verified on hardware instead. `mix test` needs no board.
 
-## NervesHub (optional)
+## NervesHub
 
-Over-the-air updates need a NervesHub device key. Export both:
+Over-the-air updates work out of the box: the badge product's shared secret is
+compiled into `Badge.Update.Link`, so firmware you built yourself updates from
+the same hub as everyone else's. Open Settings → Update to see it.
+
+To point a badge at your own product instead, export your credentials and
+provision them into NVS, where they override the built-in pair:
 
     export BADGE_NH_KEY=...
     export BADGE_NH_SECRET=...
-
-then run `tools/provision.py`, which merges them into the badge's NVS and
-leaves every other key alone. The tools warn and continue when these are
-unset; a badge without them simply never updates.
+    python3 tools/provision.py
 
 ## Chat server
 
