@@ -42,13 +42,13 @@ defmodule Badge.PagesTest do
   describe "for_key/1" do
     test "resolves the first screen, which is what the router opens from anywhere" do
       for {key, module} <- Pages.screen(0) do
-        assert Pages.for_key(key) == module
+        assert Pages.for_key(key, 0) == module
       end
     end
 
     test "an unknown key is nil" do
-      assert Pages.for_key(:nonesuch) == nil
-      assert Pages.for_key(:home) == nil
+      assert Pages.for_key(:nonesuch, 0) == nil
+      assert Pages.for_key(:home, 0) == nil
     end
   end
 
@@ -60,8 +60,8 @@ defmodule Badge.PagesTest do
     end
 
     test "share sits next to the name on the first screen, and text leads the second" do
-      assert Pages.for_key(:square) == Badge.Page.Name
-      assert Pages.for_key(:triangle) == Badge.Page.Share
+      assert Pages.for_key(:square, 0) == Badge.Page.Name
+      assert Pages.for_key(:triangle, 0) == Badge.Page.Share
       assert Pages.for_key(:square, 1) == Badge.Page.Text
       assert Pages.for_key(:triangle, 1) == Badge.Page.Agent
     end

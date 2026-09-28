@@ -3,9 +3,11 @@ defmodule Badge.UI do
   Owns the display backend and decides what is on it.
 
   Pages are modules, not processes: this process holds the current page's
-  state and calls `render/1`, `tick/1` and `handle_key/2` on it. Shape keys
-  and Esc are intercepted here and never reach a page, so no page has to
-  know that navigation exists.
+  state and calls `render/1`, `tick/1` and `handle_key/2` on it. Every key
+  reaches the page on screen first. A shape key it ignores goes nowhere: only
+  the home grid opens pages, by returning `{:goto, page}` from its `tick/1`.
+  Escape is the one key this process answers itself, and only when the page
+  ignores it too, so a page can spend it backing out a level of its own.
 
   Rendering stays decoupled from input: key events only mutate page state
   and mark it dirty, and a linked ticker asks for a redraw at a bounded
@@ -161,8 +163,8 @@ defmodule Badge.UI do
     {:noreply, %{state | napping: false, idle: 0}}
   end
 
-  # Offered to the page first, so a container can back out a level and the
-  # home grid can lend the shape keys to its second screen; ignored, it navigates.
+  # The page on screen owns the shape keys; only escape falls through here, and
+  # only when the page had no use for it.
   def handle_cast({:key, {:nav, key}}, state) do
     state = %{state | idle: 0}
 
@@ -173,7 +175,7 @@ defmodule Badge.UI do
         {:noreply, %{state | page_state: page_state, dirty: dirty}}
 
       :ignore ->
-        {:noreply, navigate(key, state)}
+        {:noreply, escape(key, state)}
     end
   end
 
@@ -401,14 +403,8 @@ defmodule Badge.UI do
     %{battery: :battery_0, wifi: Wifi.icon(:disabled), clock: Clock.format(0)}
   end
 
-  defp navigate(:home, state), do: goto(state, Home)
-
-  defp navigate(key, state) do
-    case Pages.for_key(key) do
-      nil -> state
-      module -> goto(state, module)
-    end
-  end
+  defp escape(:home, state), do: goto(state, Home)
+  defp escape(_key, state), do: state
 
   # Re-entering the current page would reset it, and key repeat fires a held key 8 times a second.
   defp goto(%{page: page} = state, page), do: state

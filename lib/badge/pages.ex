@@ -40,9 +40,6 @@ defmodule Badge.Pages do
   @doc "One screen as `{key, module}` pairs, one per key, `nil` where the slot is empty."
   def screen(n), do: pair(@keys, drop(@pages, n * @per_screen), [])
 
-  @doc "The page a shape key opens from anywhere, or nil when the slot is unassigned."
-  def for_key(key), do: for_key(key, 0)
-
   @doc "The page a shape key opens while the home grid shows screen `n`."
   def for_key(key, n) do
     case :lists.keyfind(key, 1, screen(n)) do
