@@ -5,16 +5,70 @@ keyboard matrix, a 320x240 ST7789 SPI display, and a 4-LED SK6812 chain. It
 runs on [AtomVM](https://github.com/atomvm/AtomVM), an Erlang/Elixir VM for
 microcontrollers, and is written in Elixir.
 
-## Quickstart
+## Requirements
+
+- **Elixir and Erlang/OTP** — Elixir 1.13 or newer. There are many ways to
+  install them; a version manager is the least painful, since it pins the
+  pair per project:
+  [mise](https://mise.jdx.dev/lang/elixir.html) (`mise use erlang elixir`) or
+  [asdf](https://asdf-vm.com/) (`asdf plugin add erlang && asdf plugin add
+  elixir`) are both good choices
+- **[`esptool`](https://docs.espressif.com/projects/esptool/)** — writes the
+  base image, the assets partition and NVS
+- **[`gh`](https://cli.github.com/)**, authenticated — `mix badge.base`
+  downloads the VM release with it
+
+On macOS:
+
+    brew install esptool gh
+    gh auth login
+
+On Debian or Ubuntu:
+
+    pipx install esptool      # or: pip install --user esptool
+    # gh: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+    gh auth login
+
+`esptool` also ships under its older name `esptool.py`; every tool here takes
+either, falling back to `python3 -m esptool`. ESP-IDF is **not** needed to
+build or flash the firmware — see [Advanced](#advanced) for the two things
+that do want it.
+
+## Getting started
+
+Plug the badge in over USB, then:
 
     git clone https://github.com/protolux-electronics/avm_badge.git
-    cd avm_badge
+    cd avm_badge/firmware
     mix deps.get
-    mix badge.base             # once per board
-    mix atomvm.esp32.flash
+    mix badge.base             # once per board: bootloader, VM, boot.avm
+    mix atomvm.esp32.flash     # the firmware itself, every time
 
-`mix test` runs 783 tests on the host, no board needed. The port is
-auto-detected — do not pass `--port`.
+The serial port is auto-detected, so do not pass `--port`. It appears as
+`/dev/cu.usbmodem*` on macOS and `/dev/ttyACM*` on Linux, and the path changes
+between sessions because the board re-enumerates.
+
+The board resets itself after each write, so chain the read onto the flash to
+watch it boot (`stty -F` on Linux):
+
+    ( mix atomvm.esp32.flash >/dev/null 2>&1; \
+      stty -f /dev/cu.usbmodem* 115200 raw -echo; \
+      timeout 25 cat /dev/cu.usbmodem* )
+
+You should see the AtomVM banner, then `Badge: starting`, then the home grid
+on the panel. The six shape keys open the pages; the arrows page the grid.
+
+Reflashing leaves NVS alone, so the profile, the badges you have collected and
+the wifi credentials all survive.
+
+### Without a board
+
+    iex -S mix     # the firmware against fake hardware, panel at
+                   # http://localhost:3240
+    mix test       # 1313 tests on the host
+    mix sim.check  # renders every page once, no browser
+
+## How it fits together
 
 `Badge.start/0` opens the two SPI buses the board needs (panel and LED chain)
 and starts a `Supervisor` with three children: `Badge.Screen` owns the AtomGL
@@ -25,9 +79,9 @@ animation. See the moduledocs in `lib/badge/` for how each part works;
 
 ## Testing
 
-`Badge.TextBuffer` and `Badge.Keymap` are pure and tested on the host; most of
-the rest talks directly to GPIO/SPI/AtomGL and is verified on hardware
-instead.
+Pure modules (`Badge.TextBuffer`, `Badge.Keymap`, `Badge.Sharing`, the wire
+formats) are tested on the host; anything that talks to GPIO, SPI or AtomGL is
+verified on hardware instead. `mix test` needs no board.
 
 ## NervesHub (optional)
 
@@ -57,7 +111,7 @@ listens on `0.0.0.0:4000`.
 
 ## Flash layout
 
-Partition table read back off the board (`esptool.py read_flash` +
+Partition table read back off the board (`esptool read_flash` +
 `gen_esp32part.py`):
 
 ```
@@ -88,13 +142,6 @@ a VM with no matching `boot.avm` aborts at startup with `Invalid startup
 avmpack` and reboots in a loop.
 
 Both verify the download's SHA256 before flashing and raise on a mismatch.
-`mix badge.base` shells out to the [`gh`](https://cli.github.com/) CLI to
-download the release, so `gh` must be installed and authenticated
-(`gh auth login`) before running it.
-
-You do not need ESP-IDF to build or flash the firmware. It is needed only to
-change the VM's C code, or to run `tools/provision.py`, which borrows ESP-IDF's
-NVS parser.
 
 ## Assets
 
@@ -107,3 +154,46 @@ Sources live in `assets/src/`. To regenerate:
     tools/flashassets.sh                # writes it to the assets partition
 
 `assets.avm` is not updated over the air.
+
+## Advanced
+
+Two jobs need [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/):
+provisioning NVS, and changing the VM itself. Everything else above works
+without it.
+
+Install it once (v5.5 or newer, matching the fork's CI), then source its
+environment in any shell that needs it:
+
+    git clone -b v5.5 --recursive https://github.com/espressif/esp-idf.git ~/esp/esp-idf
+    ~/esp/esp-idf/install.sh esp32s3
+    . ~/esp/esp-idf/export.sh
+
+### Provisioning NVS
+
+`tools/provision.py` borrows two things from ESP-IDF: its NVS parser, to read
+what the badge already holds, and its NVS image generator, to write the merged
+result back. The generator lives inside ESP-IDF's own virtualenv rather than
+on your `PATH`, which is why sourcing `export.sh` (or just setting `IDF_PATH`)
+is enough — the tool finds the right interpreter itself.
+
+    python3 tools/provision.py --wifi-ssid MyNetwork      # prompts for the passphrase
+    python3 tools/provision.py --dry-run                  # read and show the merge
+    python3 tools/provision.py --forget-wifi              # drop the saved network
+
+Every value comes from the first of: the flag, the environment variable, the
+badge. Anything you do not pass is read off the badge and written back
+unchanged, so provisioning one key never loses the others.
+
+### Changing the VM
+
+The VM, its AtomGL display driver and the websocket component are built from
+the fork at
+[protolux-electronics/AtomVM](https://github.com/protolux-electronics/AtomVM).
+Its `src/platforms/esp32/BADGE-BUILD.md` documents how to reproduce a badge
+build, which CMake flags this board needs, and how the AtomGL and websocket
+submodules fit in. The upstream
+[AtomVM documentation](https://www.atomvm.net/doc/main/) covers the VM's own
+build system, packbeam format and NIF interface.
+
+Once built, flash the VM at `0x10000` and `boot.avm` at `0x1F0000`; both must
+come from the same build. The application at `0x2B8000` survives.
