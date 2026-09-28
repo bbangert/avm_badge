@@ -35,13 +35,14 @@ defmodule Badge.Page.LedTest do
     test "down walks the mode list" do
       state = Led.init()
 
-      assert Led.mode(press(state, :down)) == {:solid, 0}
-      assert Led.mode(press(state, :down, 2)) == :white
-      assert Led.mode(press(state, :down, 3)) == :off
+      assert Led.mode(press(state, :down)) == :dusk
+      assert Led.mode(press(state, :down, 2)) == {:solid, 0}
+      assert Led.mode(press(state, :down, 3)) == :white
+      assert Led.mode(press(state, :down, 4)) == :off
     end
 
     test "down wraps back to the start" do
-      assert Led.mode(press(Led.init(), :down, 4)) == :rainbow
+      assert Led.mode(press(Led.init(), :down, 5)) == :rainbow
     end
 
     test "up wraps backwards" do
@@ -57,21 +58,21 @@ defmodule Badge.Page.LedTest do
 
   describe "hue stepping" do
     test "right advances the hue" do
-      assert Led.mode(press(press(Led.init(), :down), :right)) == {:solid, 15}
+      assert Led.mode(press(press(Led.init(), :down, 2), :right)) == {:solid, 15}
     end
 
     test "hue wraps at 360" do
-      assert Led.mode(press(press(Led.init(), :down), :right, 24)) == {:solid, 0}
+      assert Led.mode(press(press(Led.init(), :down, 2), :right, 24)) == {:solid, 0}
     end
 
     test "left wraps below zero" do
-      assert Led.mode(press(press(Led.init(), :down), :left)) == {:solid, 345}
+      assert Led.mode(press(press(Led.init(), :down, 2), :left)) == {:solid, 345}
     end
 
     test "hue survives a mode change" do
-      state = press(press(press(Led.init(), :down), :right, 4), :down)
+      state = press(press(press(Led.init(), :down, 2), :right, 4), :down)
 
-      assert Led.mode(press(state, :down, 3)) == {:solid, 60}
+      assert Led.mode(press(state, :down, 4)) == {:solid, 60}
     end
   end
 
@@ -89,20 +90,21 @@ defmodule Badge.Page.LedTest do
   describe "render/1" do
     test "names the current mode" do
       assert "rainbow" in texts(Led.init())
-      assert "solid" in texts(press(Led.init(), :down))
-      assert "white" in texts(press(Led.init(), :down, 2))
-      assert "off" in texts(press(Led.init(), :down, 3))
+      assert "dusk" in texts(press(Led.init(), :down))
+      assert "solid" in texts(press(Led.init(), :down, 2))
+      assert "white" in texts(press(Led.init(), :down, 3))
+      assert "off" in texts(press(Led.init(), :down, 4))
     end
 
     test "the swatch follows the hue" do
-      red = swatch(press(Led.init(), :down))
-      other = swatch(press(press(Led.init(), :down), :right, 8))
+      red = swatch(press(Led.init(), :down, 2))
+      other = swatch(press(press(Led.init(), :down, 2), :right, 8))
 
       assert red != other
     end
 
     test "off draws a black swatch" do
-      assert swatch(press(Led.init(), :down, 3)) == Theme.bg()
+      assert swatch(press(Led.init(), :down, 4)) == Theme.bg()
     end
 
     test "every item sits inside the content area" do
@@ -136,13 +138,13 @@ defmodule Badge.Page.LedTest do
     end
 
     test "is reachable from rainbow and reads as white" do
-      state = adopted(%{Led.init() | index: 2})
+      state = adopted(%{Led.init() | index: 3})
 
       assert Led.mode(state) == :white
     end
 
     test "its swatch is white, not the accent colour" do
-      state = adopted(%{Led.init() | index: 2})
+      state = adopted(%{Led.init() | index: 3})
 
       [{:rect, _x, _y, _w, _h, colour}] =
         for {:rect, _x, _y, w, _h, _c} = item <- Led.render(state), w > 100, do: item
@@ -169,7 +171,7 @@ defmodule Badge.Page.LedTest do
     end
 
     test "once loaded, a real change is still pushed" do
-      state = %{Led.init() | loaded: true, index: 3, pushed: :rainbow}
+      state = %{Led.init() | loaded: true, index: 4, pushed: :rainbow}
 
       assert Led.mode(state) == :off
       refute Led.mode(state) == state.pushed
