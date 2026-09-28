@@ -120,5 +120,6 @@ defmodule Badge.Page.Led do
   defp swatch_colour(:off), do: Theme.bg()
   defp swatch_colour(:white), do: Theme.fg()
   defp swatch_colour(:rainbow), do: Theme.accent()
+  defp swatch_colour(:dusk), do: Color.rgb888(LedMode.dusk(0, 255))
   defp swatch_colour({:solid, hue}), do: Color.rgb888(Color.hsv_to_rgb(hue, 255, 255))
 end

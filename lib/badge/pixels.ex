@@ -36,6 +36,8 @@ defmodule Badge.Pixels do
 
   @tick 20
   @hue_step 3
+  @dusk_step 1
+  @dusk_spread 30
 
   # Long enough to catch the eye across a table, short enough not to linger.
   @flash_ticks div(600, @tick)
@@ -47,7 +49,7 @@ defmodule Badge.Pixels do
   @doc """
   Sets what the chain displays, and remembers it.
 
-  `:rainbow` animates; `{:solid, hue}`, `:white` and `:off` are static and are
+  `:rainbow` and `:dusk` animate; `{:solid, hue}`, `:white` and `:off` are static and are
   only written to the chain once.
   """
   def set_mode(mode) do
@@ -152,6 +154,14 @@ defmodule Badge.Pixels do
     frame(spi, phase)
 
     %{state | phase: rem(phase + @hue_step, 360), last: nil}
+  end
+
+  defp paint(%{mode: :dusk, spi: spi, phase: phase} = state) do
+    count = Hardware.pixel_count()
+
+    show(spi, for(i <- 0..(count - 1), do: LedMode.dusk(phase + i * @dusk_spread, @brightness)))
+
+    %{state | phase: rem(phase + @dusk_step, 360), last: nil}
   end
 
   defp paint(%{mode: {:solid, hue}} = state) do
