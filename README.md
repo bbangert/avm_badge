@@ -68,6 +68,19 @@ air, so run it again whenever anything under `assets/` changes — see
 Reflashing leaves NVS alone, so the profile, the badges you have collected and
 the wifi credentials all survive.
 
+### Flashing a batch
+
+    tools/flashstation.exs
+
+takes over the terminal and flashes badges as they are plugged in, several
+at a time. Each board gets a column: it is written in one go (base image,
+assets, firmware), watched until the boot log says `Badge: starting`, then
+the column turns green with a big OK or red with the error. Unplug it and
+the column goes away. Missing tools are installed on the first run, through
+`mise` when it is on `PATH` and otherwise as above. With
+`BADGE_NH_KEY`/`BADGE_NH_SECRET` or `AVM_BADGE_SERVER_URL` set and ESP-IDF
+sourced, it provisions NVS as well.
+
 ### Without a board
 
     iex -S mix     # the firmware against fake hardware, panel at

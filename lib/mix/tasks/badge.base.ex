@@ -4,8 +4,9 @@ defmodule Mix.Tasks.Badge.Base do
   @moduledoc """
   Fetches the release named in `BASE_IMAGE` and writes it to the board.
 
-      mix badge.base            # bootloader, partition table, VM at 0x10000, boot.avm at 0x1F0000
-      mix badge.base --vm-only  # just the VM and boot.avm
+      mix badge.base              # bootloader, partition table, VM at 0x10000, boot.avm at 0x1F0000
+      mix badge.base --vm-only    # just the VM and boot.avm
+      mix badge.base --fetch-only # download and verify into .base/, write nothing
 
   The application at 0x2B8000 survives either flash. `boot.avm` holds the
   standard libraries the VM starts from, so it is always written with the VM.
@@ -24,14 +25,16 @@ defmodule Mix.Tasks.Badge.Base do
 
   @impl Mix.Task
   def run(args) do
-    {options, _rest} = OptionParser.parse!(args, strict: [full: :boolean, vm_only: :boolean])
+    {options, _rest} =
+      OptionParser.parse!(args, strict: [full: :boolean, vm_only: :boolean, fetch_only: :boolean])
+
     tag = "BASE_IMAGE" |> File.read!() |> String.trim()
     dir = Path.join(@cache, tag)
     parts = parts(options)
 
     fetch(tag, dir, parts)
     verify!(dir, parts)
-    flash(dir, parts)
+    unless options[:fetch_only], do: flash(dir, parts)
   end
 
   @doc "What a flash writes: everything unless only the VM was asked for."
