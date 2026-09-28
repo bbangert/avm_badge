@@ -13,7 +13,7 @@ defmodule Badge.LvglSpike do
   @compile {:no_warn_undefined, [:port]}
 
   # :chat_only opens the port for memory stats alone, with LVGL never started.
-  @mode :trace
+  @mode :display
 
   @white 0xF0EAFF
   @cyan 0x5CC8F5
