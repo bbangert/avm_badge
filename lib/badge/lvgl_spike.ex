@@ -12,6 +12,9 @@ defmodule Badge.LvglSpike do
 
   @compile {:no_warn_undefined, [:port]}
 
+  # :chat_only opens the port for memory stats alone, with LVGL never started.
+  @mode :display_only
+
   @white 0xF0EAFF
   @cyan 0x5CC8F5
   @magenta 0xE85FAF
@@ -22,7 +25,22 @@ defmodule Badge.LvglSpike do
     spawn(fn -> run() end)
   end
 
-  defp run do
+  defp run, do: run(@mode)
+
+  defp run(:chat_only) do
+    port = :erlang.open_port({:spawn, ~c"lvgl"}, no_display: true)
+    :io.format(~c"LvglSpike: chat only, no LVGL, stats ~p~n", [call(port, :stats)])
+    chat(port, 0)
+  end
+
+  # Marquees alone, logging memory every 15 s, to see whether LVGL drifts by itself.
+  defp run(:display_only) do
+    port = display_port()
+    draw(port)
+    watch(port)
+  end
+
+  defp run(:display) do
     port =
       :erlang.open_port({:spawn, ~c"lvgl"},
         sclk: Hardware.display_sclk(),
@@ -35,12 +53,7 @@ defmodule Badge.LvglSpike do
       )
 
     :io.format(~c"LvglSpike: port ~p, stats ~p~n", [port, call(port, :stats)])
-
-    call(port, {:bg, 0x16122A})
-    call(port, {:label, 0, 16, 20, "Ben Bangert", @white, 1})
-    call(port, {:marquee, 1, 16, 80, 288, "@Goatmire International Holdings", @cyan, 1})
-    call(port, {:marquee, 2, 16, 140, 288, "synths / climbing / coffee / pixel art / elixir", @lavender, 0})
-    call(port, {:label, 3, 16, 190, "github.com/bbangert", @magenta, 0})
+    draw(port)
 
     Process.sleep(10_000)
     :io.format(~c"LvglSpike: after 10s of marquees, stats ~p~n", [call(port, :stats)])
@@ -50,6 +63,32 @@ defmodule Badge.LvglSpike do
     :io.format(~c"LvglSpike: after bench, stats ~p~n", [call(port, :stats)])
 
     chat(port, 0)
+  end
+
+  defp watch(port) do
+    Process.sleep(15_000)
+    :io.format(~c"LvglSpike: display only, stats ~p~n", [call(port, :stats)])
+    watch(port)
+  end
+
+  defp display_port do
+    :erlang.open_port({:spawn, ~c"lvgl"},
+      sclk: Hardware.display_sclk(),
+      mosi: Hardware.display_mosi(),
+      cs: Hardware.display_cs(),
+      dc: Hardware.display_dc(),
+      reset: Hardware.display_reset(),
+      width: Hardware.display_width(),
+      height: Hardware.display_height()
+    )
+  end
+
+  defp draw(port) do
+    call(port, {:bg, 0x16122A})
+    call(port, {:label, 0, 16, 20, "Ben Bangert", @white, 1})
+    call(port, {:marquee, 1, 16, 80, 288, "@Goatmire International Holdings", @cyan, 1})
+    call(port, {:marquee, 2, 16, 140, 288, "synths / climbing / coffee / pixel art / elixir", @lavender, 0})
+    call(port, {:label, 3, 16, 190, "github.com/bbangert", @magenta, 0})
   end
 
   # Opens the chat once the clock is good, then keeps logging memory.
@@ -65,8 +104,8 @@ defmodule Badge.LvglSpike do
 
         if n > 0,
           do:
-            :io.format(~c"LvglSpike: chat ~p, stats ~p~n", [
-              Badge.Chat.Link.status(),
+            :io.format(~c"LvglSpike: chat ready=~p, stats ~p~n", [
+              Badge.Chat.Link.status().ready,
               call(port, :stats)
             ])
 
