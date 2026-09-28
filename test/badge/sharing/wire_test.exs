@@ -6,8 +6,8 @@ defmodule Badge.Sharing.WireTest do
   alias Badge.Sharing.Wire
 
   describe "fields and tags" do
-    test "every profile field but the QR choice has a tag, in profile order" do
-      assert Wire.fields() == Profile.keys() -- [:qr]
+    test "every profile field but the QR choice and hobbies has a tag, in profile order" do
+      assert Wire.fields() == Profile.keys() -- [:qr, :hobbies]
     end
 
     test "tags are one byte below the printable range, and round-trip" do

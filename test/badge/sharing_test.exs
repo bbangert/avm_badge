@@ -12,8 +12,9 @@ defmodule Badge.SharingTest do
       assert Sharing.default() == [:name]
     end
 
-    test "every profile field but the QR choice can be shared, in profile order" do
-      assert Sharing.fields() == Profile.keys() -- [:qr]
+    # The frame's mask is one byte, and hobbies would be a ninth field.
+    test "every profile field but the QR choice and hobbies can be shared, in profile order" do
+      assert Sharing.fields() == Profile.keys() -- [:qr, :hobbies]
     end
 
     test "toggle adds a field, in field order, and again removes it" do

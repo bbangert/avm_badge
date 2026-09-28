@@ -17,7 +17,7 @@ defmodule Badge.Sim.PixelsTest do
     pid
   end
 
-  defp run_ticks, do: Process.sleep(100)
+  defp run_ticks, do: Process.sleep(900)
 
   test "a failed write drops the frame instead of crashing the chain" do
     log =

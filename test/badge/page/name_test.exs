@@ -2,6 +2,7 @@ defmodule Badge.Page.NameTest do
   use ExUnit.Case, async: true
 
   alias Badge.Font
+  alias Badge.Marquee
   alias Badge.Page.Name
   alias Badge.Profile
   alias Badge.QR
@@ -307,8 +308,8 @@ defmodule Badge.Page.NameTest do
       end
     end
 
-    test "there are three screens: the badge, the big name and the code" do
-      assert Name.screens() == 3
+    test "there are four screens: the badge, the big name, the code and the live one" do
+      assert Name.screens() == 4
     end
 
     test "enter is not a key this page uses on any screen" do
@@ -359,10 +360,9 @@ defmodule Badge.Page.NameTest do
           do: item
     end
 
-    test "is the third and last screen" do
-      assert Name.screens() == 3
+    test "is the third screen, before the live one" do
       assert press(screen(showing(%{name: "Gus"}), 1), {:move, :right}).screen == 2
-      assert press(screen(showing(%{name: "Gus"}), 2), {:move, :right}).screen == 0
+      assert press(screen(showing(%{name: "Gus"}), 2), {:move, :right}).screen == 3
     end
 
     test "leaves the space above the code empty, so a big code cannot run into text" do
@@ -932,6 +932,165 @@ defmodule Badge.Page.NameTest do
       for other <- [0, 2] do
         assert Name.fonts(screen(showing(%{name: "Gus"}), other)) == []
       end
+    end
+  end
+
+  describe "the live screen" do
+    # Saved matches the profile, so a tick has nothing to write to NVS.
+    defp live(overrides) do
+      state = screen(showing(overrides), 3)
+
+      %{state | saved: state.profile}
+    end
+
+    defp held(state), do: at(state, {:decrypt, :hold, 0, 0})
+
+    defp at(state, view), do: %{state | live: {0, 0, view, Marquee.prepare(state.profile)}}
+
+    @full %{
+      name: "Gus",
+      company: "Protolux",
+      hobbies: "synths, coffee",
+      github: "gus"
+    }
+
+    test "is the fourth screen, and wraps round to the badge" do
+      assert press(screen(showing(%{name: "Gus"}), 2), {:move, :right}).screen == 3
+      assert press(live(%{name: "Gus"}), {:move, :right}).screen == 0
+    end
+
+    test "draws a frame every 200 ms, and only while it shows" do
+      assert Name.refresh(live(%{name: "Gus"})) == 200
+      assert Name.refresh(showing(%{name: "Gus"})) == 100
+      assert Name.refresh(press(live(%{name: "Gus"}), {:char, ?e})) == 100
+    end
+
+    test "draws transitions at half the rate, since an effect costs most of a frame" do
+      state = live(%{name: "Gus"})
+
+      assert Name.refresh(at(state, {:rain, :in, 3, 0})) == 400
+      assert Name.refresh(at(state, {:rain, :out, 3, 0})) == 400
+      assert Name.refresh(at(state, {:rain, :hold, 0, 0})) == 200
+      assert Name.refresh(at(state, {:rain, {:glitch, :company, :wipe}, 2, 0})) == 200
+    end
+
+    test "scrolls every 100 ms while holding, but glitches at 200" do
+      state = live(%{name: "Bartholomew Cubbins"})
+
+      assert Name.refresh(at(state, {:rain, :hold, 0, 7})) == 100
+      assert Name.refresh(at(state, {:rain, {:glitch, :company, :wipe}, 2, 7})) == 200
+    end
+
+    test "starts its clock on the first tick, and stops it on leaving" do
+      ticked = Name.tick(live(%{name: "Gus"}))
+
+      assert {started, 0, {:decrypt, :in, 0, 0}, [%{key: :name}]} = ticked.live
+      assert is_integer(started)
+      assert Name.tick(press(ticked, {:move, :right})).live == nil
+    end
+
+    test "a held frame leaves the state alone, so the panel is not redrawn" do
+      state = live(%{name: "Gus"})
+      lines = Marquee.prepare(state.profile)
+      started = :erlang.monotonic_time(:millisecond) - 5_000
+      once = Name.tick(%{state | live: {started, 0, nil, lines}})
+
+      assert {^started, step, {:decrypt, :hold, 0, 0}, ^lines} = once.live
+      assert step >= 25
+      assert Name.tick(once) == once
+    end
+
+    test "a tick that changes nothing on screen leaves the state alone" do
+      state = live(%{name: "Gus"})
+      lines = Marquee.prepare(state.profile)
+      now = :erlang.monotonic_time(:millisecond)
+      same = %{state | live: {now, 0, Marquee.view(lines, 0, 0), lines}}
+
+      assert Name.tick(same) == same
+    end
+
+    test "shows no labels, only the profile" do
+      bodies = texts(held(live(@full)))
+
+      assert "@Protolux" in bodies
+      assert "  synths / coffee   " in bodies
+      assert Enum.any?(bodies, &(:binary.match(&1, "github.com/gus") != :nomatch))
+      refute Enum.any?(bodies, &(:binary.match(&1, "hello") != :nomatch))
+    end
+
+    test "stacks name, company, hobbies and GitHub top down in shrinking fonts" do
+      items = Name.render(held(live(@full)))
+
+      [name_y | _] =
+        for {:text, 0, y, :default16px, _c, _b, row} <- items,
+            :binary.match(row, <<0xDB>>) != :nomatch,
+            do: y
+
+      [company_y] = for {:text, _x, y, :w95fa, _c, _b, "@Protolux"} <- items, do: y
+      [hobbies_y] = for {:text, 0, y, :dogica, _c, _b, "  synths / coffee   "} <- items, do: y
+
+      [github_y] =
+        for {:text, 0, y, :default16px, _c, _b, row} <- items,
+            :binary.match(row, "github.com/gus") != :nomatch,
+            do: y
+
+      assert name_y < company_y and company_y < hobbies_y and hobbies_y < github_y
+    end
+
+    test "a company that fits is drawn in the big-name font, centred" do
+      items = Name.render(held(live(@full)))
+
+      [{:text, x, _y, :w95fa, _c, _b, "@Protolux"}] =
+        for {:text, _, _, :w95fa, _, _, _} = item <- items, do: item
+
+      assert x == div(320 - Font.width(:w95fa, "@Protolux"), 2)
+      assert Name.fonts(live(@full)) == [:w95fa]
+    end
+
+    test "a long company scrolls while the rest keeps still" do
+      state = live(%{name: "Gus", company: "Goatmire International"})
+      first = at(state, {:decrypt, :hold, 0, 0})
+      later = at(state, {:decrypt, :hold, 0, 6})
+
+      assert "@Goatmire Internatio" in texts(first)
+      assert "atmire International" in texts(later)
+    end
+
+    test "leaves out lines that are empty" do
+      items = Name.render(held(live(%{name: "Gus"})))
+
+      assert for({:text, _x, _y, :dogica, _c, _b, _row} <- items, do: 1) == []
+    end
+
+    test "hides the title bar, and only on this screen" do
+      refute Name.chrome?(live(%{name: "Gus"}))
+      assert Name.chrome?(showing(%{name: "Gus"}))
+      assert Name.chrome?(press(live(%{name: "Gus"}), {:char, ?e}))
+    end
+
+    test "keeps everything on the panel, above the page dots" do
+      for state <- [held(live(@full)), held(live(%{@full | name: "Zoë"}))] do
+        for {:text, _x, y, font, _c, _b, _body} <- Name.render(state) do
+          height =
+            case font do
+              :w95fa -> 45
+              :dogica -> 19
+              _font -> 16
+            end
+
+          assert y >= 0
+          assert y + height <= 228
+        end
+      end
+    end
+
+    test "shades the block name from the accent to the cursor colour" do
+      items = Name.render(held(live(%{name: "Gus"})))
+      colours = for {:text, 0, _y, :default16px, colour, _b, _row} <- items, do: colour
+
+      assert length(colours) == 3
+      assert Theme.accent() in colours
+      assert Theme.select() in colours
     end
   end
 end
