@@ -10,7 +10,7 @@ microcontrollers, and is written in Elixir.
     git clone https://github.com/protolux-electronics/avm_badge.git
     cd avm_badge
     mix deps.get
-    mix badge.base --full      # once per board
+    mix badge.base             # once per board
     mix atomvm.esp32.flash
 
 `mix test` runs 783 tests on the host, no board needed. The port is
@@ -79,8 +79,8 @@ The VM this firmware runs on is a fork of AtomVM, built and published by CI at
 [protolux-electronics/AtomVM](https://github.com/protolux-electronics/AtomVM).
 `BASE_IMAGE` names the release this firmware expects.
 
-    mix badge.base --full   # new board: bootloader, partition table, VM, boot.avm
-    mix badge.base          # existing board: the VM and boot.avm
+    mix badge.base            # bootloader, partition table, VM, boot.avm
+    mix badge.base --vm-only  # just the VM and boot.avm
 
 `boot.avm` holds the standard libraries the VM starts from. It is written
 alongside the VM every time, because the two must come from the same build —

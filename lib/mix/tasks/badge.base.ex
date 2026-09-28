@@ -4,11 +4,12 @@ defmodule Mix.Tasks.Badge.Base do
   @moduledoc """
   Fetches the release named in `BASE_IMAGE` and writes it to the board.
 
-      mix badge.base          # the VM at 0x10000 and its boot.avm at 0x1F0000
-      mix badge.base --full   # also the bootloader and partition table, for a new board
+      mix badge.base            # bootloader, partition table, VM at 0x10000, boot.avm at 0x1F0000
+      mix badge.base --vm-only  # just the VM and boot.avm
 
-  The application at 0x2B8000 survives a VM-only flash. `boot.avm` holds the
+  The application at 0x2B8000 survives either flash. `boot.avm` holds the
   standard libraries the VM starts from, so it is always written with the VM.
+  `--full` is accepted and does nothing, since it is now the default.
   """
 
   use Mix.Task
@@ -23,13 +24,24 @@ defmodule Mix.Tasks.Badge.Base do
 
   @impl Mix.Task
   def run(args) do
+    {options, _rest} = OptionParser.parse!(args, strict: [full: :boolean, vm_only: :boolean])
     tag = "BASE_IMAGE" |> File.read!() |> String.trim()
     dir = Path.join(@cache, tag)
-    parts = if "--full" in args, do: [@bootloader, @table, @vm, @boot], else: [@vm, @boot]
+    parts = parts(options)
 
     fetch(tag, dir, parts)
     verify!(dir, parts)
     flash(dir, parts)
+  end
+
+  @doc "What a flash writes: everything unless only the VM was asked for."
+  @spec parts(keyword) :: [{binary, binary}]
+  def parts(options) do
+    if Keyword.get(options, :vm_only, false) do
+      [@vm, @boot]
+    else
+      [@bootloader, @table, @vm, @boot]
+    end
   end
 
   defp fetch(tag, dir, parts) do

@@ -42,7 +42,7 @@ NAMESPACE = "badge"
 CHIP = "esp32s3"
 
 # Never printed back, whether they were supplied or read off the badge.
-SECRET = {"nh_secret", "wifi_psk"}
+SECRET = {"nh_key", "nh_secret", "wifi_psk"}
 
 SETTINGS = [
     ("nh_key", "--nh-key", "BADGE_NH_KEY"),
