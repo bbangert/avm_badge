@@ -13,7 +13,11 @@ badge.
     --nh-secret   BADGE_NH_SECRET     its secret
     --nh-host     BADGE_NH_HOST       hub host; the firmware defaults this
     --wifi-ssid   BADGE_WIFI_SSID
-    --wifi-psk    BADGE_WIFI_PSK
+    --wifi-psk    BADGE_WIFI_PSK      prompted for, hidden, when a network is named
+    --utc-offset  BADGE_UTC_OFFSET    minutes, -720..840; a fallback for time_zone
+    --chat-url    AVM_BADGE_SERVER_URL
+
+`--forget-wifi` drops the saved network, keeping everything else.
 
 Needs ESP-IDF: . $IDF_PATH/export.sh
 
@@ -22,6 +26,7 @@ preserved; they hold wifi driver config and RF calibration, and are rebuilt on
 the next boot at the cost of a slower first connection.
 """
 import argparse
+import getpass
 import importlib.util
 import os
 import subprocess
@@ -45,7 +50,14 @@ SETTINGS = [
     ("wifi_ssid", "--wifi-ssid", "BADGE_WIFI_SSID"),
     ("wifi_psk", "--wifi-psk", "BADGE_WIFI_PSK"),
     ("chat_url", "--chat-url", "AVM_BADGE_SERVER_URL"),
+    ("utc_offset_m", "--utc-offset", "BADGE_UTC_OFFSET"),
 ]
+
+WIFI = ("wifi_ssid", "wifi_psk")
+
+# UTC-12 to UTC+14, matching Badge.Clock.
+MIN_OFFSET = -720
+MAX_OFFSET = 840
 
 
 def load_parser():
@@ -146,6 +158,19 @@ def shown(key, value):
     return text
 
 
+def offset(value):
+    """A UTC offset the firmware will read back as the minutes you meant."""
+    try:
+        minutes = int(value)
+    except ValueError:
+        sys.exit(f"'{value}' is not a whole number of minutes.")
+
+    if not MIN_OFFSET <= minutes <= MAX_OFFSET:
+        sys.exit(f"{minutes} is outside {MIN_OFFSET}..{MAX_OFFSET}; the badge would read it as 0.")
+
+    return str(minutes).encode()
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -153,6 +178,9 @@ def main():
     for _key, flag, env in SETTINGS:
         ap.add_argument(flag, help=f"or {env}")
     ap.add_argument("--port", help="serial device; auto-detected when omitted")
+    ap.add_argument(
+        "--forget-wifi", action="store_true", help="drop the saved network, keep the rest"
+    )
     ap.add_argument("--dry-run", action="store_true", help="say what would happen")
     args = ap.parse_args()
 
@@ -160,7 +188,15 @@ def main():
     for key, flag, env in SETTINGS:
         value = getattr(args, flag.lstrip("-").replace("-", "_")) or os.environ.get(env)
         if value:
-            supplied[key] = value.encode()
+            supplied[key] = offset(value) if key == "utc_offset_m" else value.encode()
+
+    # Typed rather than passed, so a passphrase stays out of the shell history.
+    if "wifi_ssid" in supplied and "wifi_psk" not in supplied:
+        psk = getpass.getpass("Passphrase (hidden): ")
+        if len(psk) < 8:
+            sys.exit("WPA2 passphrases are at least 8 characters.")
+
+        supplied["wifi_psk"] = psk.encode()
 
     # NervesHub is optional; a badge without credentials simply never updates.
     for key in ("nh_key", "nh_secret"):
@@ -190,7 +226,15 @@ def main():
         values = dict(existing)
         values.update(supplied)
 
+        if args.forget_wifi:
+            for key in WIFI:
+                values.pop(key, None)
+
         print(f"\n{NAMESPACE} namespace, {len(values)} keys:")
+        if args.forget_wifi:
+            for key in WIFI:
+                if key in existing:
+                    print(f"  drop {key:12} {shown(key, existing[key])}")
         for key in sorted(values):
             if key in supplied and existing.get(key) != supplied[key]:
                 mark = "set  "

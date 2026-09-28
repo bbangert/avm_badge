@@ -250,6 +250,9 @@ Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
   merges what you pass, and writes it back, so anything you do not pass is
   kept. Values come from a flag, else `BADGE_NH_KEY`-style env vars, else the
   badge. `--dry-run` reads and shows the merge without writing
+- `tools/provision.py` is the only provisioning tool: wifi, NervesHub, the
+  chat URL and the UTC offset, read-merge-written so nothing else is lost.
+  `--forget-wifi` drops the saved network alone
 - `provision.py` does not preserve ESP-IDF's own `nvs.net80211`, `phy` and
   `misc` namespaces; they rebuild on the next boot, costing one slower wifi
   connect while the PHY recalibrates

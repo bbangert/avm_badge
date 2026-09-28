@@ -2,8 +2,8 @@ defmodule Badge.Nvs do
   @moduledoc """
   Reads provisioned settings out of the `:badge` NVS namespace.
 
-  Values are written either by `tools/provision_wifi.py` or by the wifi
-  settings page once a connection succeeds.
+  Values are written either by `tools/provision.py` or by the wifi settings
+  page once a connection succeeds.
   """
 
   @compile {:no_warn_undefined, :esp}

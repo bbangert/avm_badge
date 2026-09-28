@@ -7,7 +7,7 @@ defmodule Badge.Wifi do
   from `Badge.Whenwhere` once there is an IP, and the zone it reports becomes
   a UTC offset through `Badge.Zone`.
 
-  Credentials come from NVS, provisioned by `tools/provision_wifi.py`. With
+  Credentials come from NVS, provisioned by `tools/provision.py`. With
   none present the radio never starts and the rest of the badge is
   unaffected.
 
