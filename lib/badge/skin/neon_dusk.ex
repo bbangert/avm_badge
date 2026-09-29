@@ -10,8 +10,8 @@ defmodule Badge.Skin.NeonDusk do
   alias Badge.Icons
   alias Badge.Theme
 
-  @bar 0x0D0A18
-  @surface 0x16122A
+  @bar 0x07050D
+  @surface 0x0D0A18
   @title 0xF0EAFF
   @caption 0xB3A9D2
   @divider 0x3A3154
