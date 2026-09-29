@@ -36,6 +36,7 @@ defmodule Badge.UI do
   alias Badge.Clock
   alias Badge.Display
   alias Badge.Display.AtomGL
+  alias Badge.Display.Lvgl
   alias Badge.Keyboard
   alias Badge.Page.Home
   alias Badge.Page.Splash
@@ -91,7 +92,7 @@ defmodule Badge.UI do
   def slept(result), do: GenServer.cast(__MODULE__, {:slept, result})
 
   @doc """
-  Opens the AtomGL port and loads the fonts.
+  Opens the display, AtomGL over `spi` or the LVGL port for `:lvgl`, and loads the fonts.
 
   Called once by `Badge`, not from `init/1`, so that restarting this process
   reuses the display rather than opening a second one. Each port carries a
@@ -99,15 +100,27 @@ defmodule Badge.UI do
   single restart into an out-of-memory reboot on a badge running wifi.
   """
   @spec open_display(term) :: Display.t()
+  def open_display(:lvgl) do
+    display = {Lvgl, Lvgl.open()}
+    register_fonts(display)
+
+    :io.format(~c"UI: LVGL port open, ~p pages~n", [length(Pages.all())])
+
+    display
+  end
+
   def open_display(spi) do
     display = {AtomGL, AtomGL.open(spi)}
-
-    :ok = Display.register_font(display, :dogica, @font_dogica)
-    :ok = Display.register_font(display, :pixel_operator, @font_pixel_operator)
+    register_fonts(display)
 
     :io.format(~c"UI: AtomGL port open, ~p pages~n", [length(Pages.all())])
 
     display
+  end
+
+  defp register_fonts(display) do
+    :ok = Display.register_font(display, :dogica, @font_dogica)
+    :ok = Display.register_font(display, :pixel_operator, @font_pixel_operator)
   end
 
   @impl true

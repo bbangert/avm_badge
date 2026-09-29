@@ -21,6 +21,9 @@ defmodule Badge do
 
   @compile {:no_warn_undefined, [:atomvm, :spi]}
 
+  # Which display driver the base image carries: AtomGL, or the LVGL port.
+  @display Application.compile_env(:avm_badge, :display, :atomgl)
+
   def start do
     # First, so every process below prints through the log ring.
     {:ok, _log} = Badge.Log.start_link(:ok)
@@ -34,12 +37,11 @@ defmodule Badge do
       {:error, reason} -> :io.format(~c"Badge: no assets partition: ~p~n", [reason])
     end
 
-    display_spi = open_display_spi()
     pixel_spi = open_pixel_spi()
 
     # Opened here, not in the child, so a Badge.UI restart reuses the display
     # instead of orphaning its framebuffer.
-    display = Badge.UI.open_display(display_spi)
+    display = open_display()
 
     children = [
       {Badge.UI, display},
@@ -65,17 +67,26 @@ defmodule Badge do
     park()
   end
 
-  # AtomGL adds its own SPI device, so device_config is empty here.
-  defp open_display_spi do
-    :spi.open(%{
-      bus_config: %{
-        peripheral: Hardware.display_peripheral(),
-        sclk: Hardware.display_sclk(),
-        mosi: Hardware.display_mosi(),
-        miso: Hardware.display_miso()
-      },
-      device_config: %{}
-    })
+  case @display do
+    :atomgl ->
+      defp open_display, do: Badge.UI.open_display(open_display_spi())
+
+      # AtomGL adds its own SPI device, so device_config is empty here.
+      defp open_display_spi do
+        :spi.open(%{
+          bus_config: %{
+            peripheral: Hardware.display_peripheral(),
+            sclk: Hardware.display_sclk(),
+            mosi: Hardware.display_mosi(),
+            miso: Hardware.display_miso()
+          },
+          device_config: %{}
+        })
+      end
+
+    # The LVGL port brings up its own SPI bus.
+    :lvgl ->
+      defp open_display, do: Badge.UI.open_display(:lvgl)
   end
 
   # LED chain has no clock line, so SCLK is -1.
