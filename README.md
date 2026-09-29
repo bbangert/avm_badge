@@ -36,7 +36,7 @@ that do want it.
 Plug the badge in over USB, then:
 
     git clone https://github.com/protolux-electronics/avm_badge.git
-    cd avm_badge/firmware
+    cd avm_badge
     mix deps.get
     mix badge.base             # once per board: bootloader, VM, boot.avm
     tools/flashassets.sh       # once per board: fonts, icons, splash logo
