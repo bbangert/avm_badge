@@ -6,7 +6,9 @@ defmodule Badge.Sim.Encode do
   @doc "Draw commands plus any bitmaps not in `sent`, and `sent` with them added."
   def encode(items, sent) do
     {commands, assets, sent} =
-      Enum.reduce(items, {[], [], sent}, fn item, {commands, assets, sent} ->
+      items
+      |> Enum.flat_map(&still/1)
+      |> Enum.reduce({[], [], sent}, fn item, {commands, assets, sent} ->
         case command(item) do
           nil ->
             {commands, assets, sent}
@@ -16,8 +18,13 @@ defmodule Badge.Sim.Encode do
 
           {command, {id, w, h, rgba}} ->
             case MapSet.member?(sent, id) do
-              true -> {[command | commands], assets, sent}
-              false -> {[command | commands], [%{id: id, w: w, h: h, rgba: Base.encode64(rgba)} | assets], MapSet.put(sent, id)}
+              true ->
+                {[command | commands], assets, sent}
+
+              false ->
+                {[command | commands],
+                 [%{id: id, w: w, h: h, rgba: Base.encode64(rgba)} | assets],
+                 MapSet.put(sent, id)}
             end
         end
       end)
@@ -26,16 +33,36 @@ defmodule Badge.Sim.Encode do
     {commands, Enum.reverse(assets), sent}
   end
 
-  defp command({:rect, x, y, w, h, colour}), do: {%{t: "rect", x: x, y: y, w: w, h: h, c: colour(colour)}, nil}
+  # The panel scrolls a marquee by itself; the simulator shows where it starts, a text item a line.
+  defp still({:marquee, x, y, _w, font, fg, bg, text, _speed}) do
+    height = Badge.Font.line_height(font)
+
+    text
+    |> IO.iodata_to_binary()
+    |> String.split("\n")
+    |> Enum.with_index()
+    |> Enum.map(fn {line, i} -> {:text, x, y + i * height, font, fg, bg, line} end)
+  end
+
+  defp still(item), do: [item]
+
+  defp command({:rect, x, y, w, h, colour}),
+    do: {%{t: "rect", x: x, y: y, w: w, h: h, c: colour(colour)}, nil}
 
   defp command({:image, x, y, bg, {:rgba8888, w, h, data}}) do
     id = "img#{:erlang.phash2(data)}"
-    {%{t: "img", id: id, x: x, y: y, w: w, h: h, sx: 0, sy: 0, xs: 1, ys: 1, bg: hex(bg)}, {id, w, h, data}}
+
+    {%{t: "img", id: id, x: x, y: y, w: w, h: h, sx: 0, sy: 0, xs: 1, ys: 1, bg: hex(bg)},
+     {id, w, h, data}}
   end
 
-  defp command({:scaled_cropped_image, x, y, w, h, bg, sx, sy, xs, ys, _opts, {:rgba8888, iw, ih, data}}) do
+  defp command(
+         {:scaled_cropped_image, x, y, w, h, bg, sx, sy, xs, ys, _opts, {:rgba8888, iw, ih, data}}
+       ) do
     id = "img#{:erlang.phash2(data)}"
-    {%{t: "img", id: id, x: x, y: y, w: w, h: h, sx: sx, sy: sy, xs: xs, ys: ys, bg: hex(bg)}, {id, iw, ih, data}}
+
+    {%{t: "img", id: id, x: x, y: y, w: w, h: h, sx: sx, sy: sy, xs: xs, ys: ys, bg: hex(bg)},
+     {id, iw, ih, data}}
   end
 
   defp command({:text, x, y, font, fg, bg, text}) do
@@ -48,7 +75,9 @@ defmodule Badge.Sim.Encode do
 
       {w, h, rgba} ->
         id = "txt#{:erlang.phash2({font, fg, bg, text})}"
-        {%{t: "img", id: id, x: x, y: y, w: w, h: h, sx: 0, sy: 0, xs: 1, ys: 1, bg: hex(bg)}, {id, w, h, rgba}}
+
+        {%{t: "img", id: id, x: x, y: y, w: w, h: h, sx: 0, sy: 0, xs: 1, ys: 1, bg: hex(bg)},
+         {id, w, h, rgba}}
     end
   end
 

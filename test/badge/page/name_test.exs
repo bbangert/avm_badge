@@ -1047,13 +1047,38 @@ defmodule Badge.Page.NameTest do
       assert Name.fonts(live(@full)) == [:w95fa]
     end
 
-    test "a long company scrolls while the rest keeps still" do
-      state = live(%{name: "Gus", company: "Goatmire International"})
-      first = at(state, {:decrypt, :hold, 0, 0})
-      later = at(state, {:decrypt, :hold, 0, 6})
+    if Application.compile_env(:avm_badge, :display, :atomgl) == :lvgl do
+      test "a long company scrolls by itself on LVGL, and only while nothing plays on it" do
+        state = live(%{name: "Gus", company: "Goatmire International"})
+        held = Name.render(at(state, {:decrypt, :hold, 0, 0}))
+        glitched = Name.render(at(state, {:decrypt, {:glitch, :company, :wipe}, 3, 0}))
 
-      assert "@Goatmire Internatio" in texts(first)
-      assert "atmire International" in texts(later)
+        assert [{:marquee, 0, _y, 320, :dogica, _fg, 0, "@Goatmire International", 80}] =
+                 for({:marquee, _, _, _, _, _, _, _, _} = item <- held, do: item)
+
+        refute Enum.any?(
+                 glitched,
+                 &match?({:marquee, _, _, _, _, _, _, "@Goatmire International", _}, &1)
+               )
+      end
+
+      test "a long block name scrolls as one label, its three rows together" do
+        items = Name.render(at(live(%{name: "Bartholomew"}), {:decrypt, :hold, 0, 0}))
+
+        assert [{:marquee, 0, 20, 320, :default16px, _fg, 0, text, 80}] =
+                 for({:marquee, _, _, _, _, _, _, _, _} = item <- items, do: item)
+
+        assert length(String.split(text, "\n")) == 3
+      end
+    else
+      test "a long company scrolls while the rest keeps still" do
+        state = live(%{name: "Gus", company: "Goatmire International"})
+        first = at(state, {:decrypt, :hold, 0, 0})
+        later = at(state, {:decrypt, :hold, 0, 6})
+
+        assert "@Goatmire Internatio" in texts(first)
+        assert "atmire International" in texts(later)
+      end
     end
 
     test "leaves out lines that are empty" do

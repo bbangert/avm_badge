@@ -113,6 +113,28 @@ defmodule Badge.Display.Lvgl.FrameTest do
     end
   end
 
+  describe "marquees" do
+    test "are created once, as LVGL's own scrolling label, and cost nothing after" do
+      item = {:marquee, 0, 90, 320, :dogica, 0xFFFFFF, 0, "@Goatmire International", 80}
+      {ops, state} = Frame.frame(Frame.new(), [item])
+
+      assert [{:reset}, {:new, 0, :marquee}, {:set, 0, props}] = ops
+
+      assert props == [
+               x: 0,
+               y: 90,
+               w: 320,
+               font: 1,
+               fg: 0xFFFFFF,
+               bg: -1,
+               text: "@Goatmire International",
+               speed: 80
+             ]
+
+      assert Frame.frame(state, [item]) |> elem(0) == []
+    end
+  end
+
   describe "scaled, cropped images" do
     test "scale by whole factors from the crop's corner" do
       pixels = :binary.copy(<<0, 0, 0, 255>>, 4)

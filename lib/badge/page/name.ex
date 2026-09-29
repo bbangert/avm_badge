@@ -62,6 +62,12 @@ defmodule Badge.Page.Name do
   @live_large_h 45
   @live_dogica_h 19
 
+  # On LVGL a long line scrolls by itself, so the page only redraws for effects.
+  @native_scroll Application.compile_env(:avm_badge, :display, :atomgl) == :lvgl
+  @name_speed 80
+  @line_speed 80
+  @small_speed 40
+
   # The big-name screen, and what it falls back to when a name will not fit.
   @big_font :w95fa
   @big_usable Theme.width() - 2 * @margin
@@ -185,7 +191,7 @@ defmodule Badge.Page.Name do
       {started, _tick, view, lines} ->
         tick = div(now - started, @live_scroll_ms)
 
-        case Marquee.view(lines, div(tick, 2), tick) do
+        case Marquee.view(lines, div(tick, 2), scroll(tick)) do
           ^view -> state
           next -> %{state | live: {started, tick, next, lines}}
         end
@@ -199,6 +205,12 @@ defmodule Badge.Page.Name do
 
   defp live(%{live: nil} = state), do: state
   defp live(state), do: %{state | live: nil}
+
+  if @native_scroll do
+    defp scroll(_tick), do: 0
+  else
+    defp scroll(tick), do: tick
+  end
 
   # Only its own screen builds a code: the encode is heavy enough to slow the
   # panel down, and a finished result is kept for when the screen comes back.
@@ -451,6 +463,16 @@ defmodule Badge.Page.Name do
     :lists.flatmap(fn line -> line_items(line, view) end, lines)
   end
 
+  defp line_items(%{key: key, scrolls: true} = line, {_effect, :hold, _k, _s})
+       when @native_scroll do
+    marquee(line, slot(key))
+  end
+
+  defp line_items(%{key: key, scrolls: true} = line, {_effect, {:glitch, other, _fx}, _k, _s})
+       when @native_scroll and other != key do
+    marquee(line, slot(key))
+  end
+
   defp line_items(%{key: key, font: font} = line, view) do
     rows = Marquee.rows(line, view)
     y = slot(key)
@@ -472,6 +494,38 @@ defmodule Badge.Page.Name do
         text_rows(rows, y, font, line_colour(key))
     end
   end
+
+  # One scrolling label per line; the block name's three rows scroll together as one.
+  defp marquee(%{font: :big, source: rows}, y) do
+    [
+      {:marquee, 0, y, Theme.width(), :default16px, Theme.accent(), 0, join_rows(rows),
+       @name_speed}
+    ]
+  end
+
+  defp marquee(%{key: :name, source: [text]}, y) do
+    [
+      {:marquee, 0, y + @live_row_h, Theme.width(), :default16px, Theme.fg(), 0, text,
+       @small_speed}
+    ]
+  end
+
+  defp marquee(%{key: :company, font: :dogica, source: [text]}, y) do
+    y = y + div(@live_large_h - @live_dogica_h, 2)
+
+    [{:marquee, 0, y, Theme.width(), :dogica, line_colour(:company), 0, text, @line_speed}]
+  end
+
+  defp marquee(%{key: key, font: :dogica, source: [text]}, y) do
+    [{:marquee, 0, y, Theme.width(), :dogica, line_colour(key), 0, text, @line_speed}]
+  end
+
+  defp marquee(%{key: key, font: font, source: [text]}, y) do
+    [{:marquee, 0, y, Theme.width(), font, line_colour(key), 0, text, @small_speed}]
+  end
+
+  defp join_rows([first | rest]),
+    do: :lists.foldl(fn row, acc -> acc <> "\n" <> row end, first, rest)
 
   # Function clauses rather than a map attribute, which is costly to read on the badge.
   defp slot(:name), do: 20

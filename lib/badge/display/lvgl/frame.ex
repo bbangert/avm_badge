@@ -3,7 +3,10 @@ defmodule Badge.Display.Lvgl.Frame do
   Turns each frame's display items into the few LVGL changes it needs.
 
   Pages still return AtomGL-style items: `{:rect, ...}`, `{:text, ...}`,
-  `{:image, ...}` and `{:scaled_cropped_image, ...}`. Each item becomes an
+  `{:image, ...}` and `{:scaled_cropped_image, ...}`, plus one of LVGL's own,
+  `{:marquee, x, y, w, font, fg, bg, text, speed}`: text that scrolls round by
+  itself, `speed` pixels a second, when wider than `w`. Being unchanged from
+  frame to frame, a marquee costs nothing once it is on the panel. Each item becomes an
   LVGL object whose id is its z-order, 0 at the bottom, so the last item,
   the background, is object 0. An item equal to last frame's item at the
   same place costs nothing; a changed one sends only the properties that
@@ -125,6 +128,21 @@ defmodule Badge.Display.Lvgl.Frame do
     props = [x: x, y: y, font: font_id(font), fg: fg, bg: text_bg(bg), text: text(font, text)]
 
     {{:label, props}, images, next, uploads}
+  end
+
+  defp node({:marquee, x, y, w, font, fg, bg, text, speed}, images, next, uploads) do
+    props = [
+      x: x,
+      y: y,
+      w: w,
+      font: font_id(font),
+      fg: fg,
+      bg: text_bg(bg),
+      text: text(font, text),
+      speed: speed
+    ]
+
+    {{:marquee, props}, images, next, uploads}
   end
 
   defp node({:image, x, y, _bg, {:rgba8888, w, h, pixels}}, images, next, uploads) do
