@@ -181,12 +181,10 @@ defmodule Badge.UI do
 
     case state.page.handle_key({:nav, key}, state.page_state) do
       {:ok, page_state} ->
-        dirty = state.dirty or page_state != state.page_state
-
-        {:noreply, %{state | page_state: page_state, dirty: dirty}}
+        {:noreply, pressed(state, page_state)}
 
       :ignore ->
-        {:noreply, navigate(key, state)}
+        {:noreply, draw_now(navigate(key, state))}
     end
   end
 
@@ -195,13 +193,28 @@ defmodule Badge.UI do
 
     case state.page.handle_key(event, state.page_state) do
       {:ok, page_state} ->
-        dirty = state.dirty or page_state != state.page_state
-
-        {:noreply, %{state | page_state: page_state, dirty: dirty}}
+        {:noreply, pressed(state, page_state)}
 
       :ignore ->
         {:noreply, state}
     end
+  end
+
+  # A key that changed the page is drawn at once rather than on the next tick.
+  defp pressed(state, page_state) do
+    case page_state != state.page_state do
+      true -> draw_now(%{state | page_state: page_state, dirty: true})
+      false -> %{state | page_state: page_state}
+    end
+  end
+
+  defp draw_now(%{asleep: true} = state), do: state
+
+  defp draw_now(state) do
+    drawn = sync_fonts(state)
+    render(drawn)
+
+    %{drawn | dirty: false, countdown: reload(drawn.page, drawn.page_state)}
   end
 
   # A page that is finished with the screen hands over by returning `{:goto, page}`.
