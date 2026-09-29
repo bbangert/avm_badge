@@ -11,8 +11,17 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   `:regenerates_assets` because they rewrite tracked files
 - `mix atomvm.check` — the real compatibility gate, and it runs during flash.
   Host tests passing proves nothing
-- `mix atomvm.esp32.flash` — builds, checks, flashes. The port auto-detects;
-  never pass `--port`
+- `mix atomvm.esp32.flash` — builds, checks, flashes the `main.avm` partition
+  it reads off the board. The port auto-detects; never pass `--port`
+- The check's `warning: missing atomvm dependency` is expected: the standard
+  library is the fork's `boot.avm`, and the `atomvm` package would pack a
+  second copy into the 656K slot
+- `mix atomvm.esp32.flash`, `mix badge.base` and `mix badge.assets --flash`
+  run esptool through Pythonx (`ExAtomVM.EsptoolHelper`), which fetches
+  Python and esptool on first use; nothing needs to be on PATH
+- **Never run `mix atomvm.esp32.install` on the badge.** It erases the whole
+  flash, NVS included, and installs upstream AtomVM. `mix badge.base` is the
+  badge's equivalent
 - `iex -S mix` — the firmware on fake hardware, panel at
   http://localhost:3240. `mix sim.check` renders every page once, headless
 - Two mix targets: `:host` is the simulator (`sim/lib` plus
@@ -24,9 +33,10 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 
 - **Opening the serial port resets the badge.** The S3's USB-serial-JTAG
   bridge resets the chip when the host asserts DTR/RTS, and clearing them
-  first does not avoid it. A reader cannot watch a running badge; it has to
-  hold the port open from boot, so chain flash and read (see `README.md`)
-- Never run unbounded `cat`/`screen` on the port — it blocks the next flash
+  first does not avoid it. A reader cannot watch a running badge, so
+  `mix atomvm.esp32.monitor` resets it and shows the boot (see `README.md`)
+- Never run unbounded `cat`/`screen` on the port, and give the monitor a
+  `--timeout` — an open port blocks the next flash
 - `Badge.Log` is the group leader of everything the badge spawns: each
   `io:format` line is echoed, kept for the Settings Log tab, and forwarded to
   the hub while the agent is up. ESP-IDF's own `I (…)` lines are not seen
@@ -41,8 +51,8 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   656K each. NervesHub writes whichever is not running and flips
   `atomvm`/`boot_path` in NVS
 - `assets.avm` at `0x278000` holds the rickroll frames, the `.uf` fonts and
-  the splash logo, mounted by `Badge.start/0`. `tools/flashassets.sh` packs
-  and writes it; it is **not** updated over the air
+  the splash logo, mounted by `Badge.start/0`. `mix badge.assets --flash`
+  packs and writes it; it is **not** updated over the air
 - `python3 tools/check_partitions.py <partitions.csv> [label=path ...]` fails
   if an artifact outgrows its partition
 - A missing assets partition is survivable: the badge boots, prints
@@ -74,12 +84,9 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - **FreeRTOS tick is 10 ms** — the floor for any sleep or timer
 - **SPI `peripheral:` must be a string** (`"spi2"`), not an atom
 - Use plain maps, not structs
-- `atomvm.check` has known false positives: `json:encode/1`, `json:decode/1`,
-  `erlang:binary_part/3`, `lists:keysort/2`, `lists:flatmap/2` all exist in
-  the fork; `File`, `Mix`, `String`, `System` come from Mix tasks that are
-  packed but never run; `GenServer`, `Supervisor`, `network`, `uart` are
-  flagged because the checker cannot see AtomVM's own libraries. Compare the
-  count against `main` rather than reading the list
+- `atomvm.check` is clean, so any entry it lists is real. `use GenServer`
+  injects `handle_call/3` and `handle_cast/2` defaults that call
+  `erlang:phash2/2`, which the check flags, so every GenServer defines both
 
 ## Performance on the badge
 
@@ -240,9 +247,9 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   the merge, `--forget-wifi` drops the saved network alone
 - It needs ESP-IDF for the NVS parser and image generator. The generator lives
   inside IDF's own virtualenv, so the tool finds that interpreter itself
-- Every tool takes esptool under either name: `esptool`, then `esptool.py`,
-  then `python3 -m esptool`. A Homebrew esptool has its own private Python, so
-  the module form is the last resort
+- `provision.py` still shells out to esptool: `esptool`, then `esptool.py`,
+  then `python3 -m esptool`, then IDF's own virtualenv. A Homebrew esptool has
+  its own private Python, so the module forms come last
 - ESP-IDF's own `nvs.net80211`, `phy` and `misc` namespaces are not preserved;
   they rebuild on the next boot, costing one slower wifi connect
 

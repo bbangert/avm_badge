@@ -13,23 +13,24 @@ microcontrollers, and is written in Elixir.
   [mise](https://mise.jdx.dev/lang/elixir.html) (`mise use erlang elixir`) or
   [asdf](https://asdf-vm.com/) (`asdf plugin add erlang && asdf plugin add
   elixir`) are both good choices
-- **[`esptool`](https://docs.espressif.com/projects/esptool/)** — writes the
-  base image, the assets partition and NVS
+
 - **`curl`** — `mix badge.base` downloads the VM release with it, falling
   back to an authenticated [`gh`](https://cli.github.com/)
 
 On macOS:
 
-    brew install esptool
+    brew install gh
+    gh auth login
 
 On Debian or Ubuntu:
 
-    pipx install esptool      # or: pip install --user esptool
+    # gh: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+    gh auth login
 
-`esptool` also ships under its older name `esptool.py`; every tool here takes
-either, falling back to `python3 -m esptool`. ESP-IDF is **not** needed to
-build or flash the firmware — see [Advanced](#advanced) for the two things
-that do want it.
+esptool is **not** needed: the flash tasks run it inside an embedded Python
+through [Pythonx](https://hex.pm/packages/pythonx), which downloads Python and
+esptool on first use. ESP-IDF is **not** needed to build or flash the firmware
+either — see [Advanced](#advanced) for the two things that do want it.
 
 ## Getting started
 
@@ -39,24 +40,22 @@ Plug the badge in over USB, then:
     cd avm_badge
     mix deps.get
     mix badge.base             # once per board: bootloader, VM, boot.avm
-    tools/flashassets.sh       # once per board: fonts, icons, splash logo
+    mix badge.assets --flash   # once per board: fonts, icons, splash logo
     mix atomvm.esp32.flash     # the firmware itself, every time
 
 The serial port is auto-detected, so do not pass `--port`. It appears as
 `/dev/cu.usbmodem*` on macOS and `/dev/ttyACM*` on Linux, and the path changes
 between sessions because the board re-enumerates.
 
-The board resets itself after each write, so chain the read onto the flash to
-watch it boot (`stty -F` on Linux):
+To watch it boot, open the console; the task resets the board and follows it
+through the reset:
 
-    ( mix atomvm.esp32.flash >/dev/null 2>&1; \
-      stty -f /dev/cu.usbmodem* 115200 raw -echo; \
-      timeout 25 cat /dev/cu.usbmodem* )
+    mix atomvm.esp32.monitor --timeout 25
 
 You should see the AtomVM banner, then `Badge: starting`, then the home grid
 on the panel. The six shape keys open the pages; the arrows page the grid.
 
-`tools/flashassets.sh` writes the assets partition, which holds the extra
+`mix badge.assets --flash` writes the assets partition, which holds the extra
 fonts, the splash logo and the rickroll frames. It is **not** updated over the
 air, so run it again whenever anything under `assets/` changes — see
 [Assets](#assets). A badge without it still boots and prints
@@ -163,6 +162,9 @@ avmpack` and reboots in a loop.
 
 Both verify the download's SHA256 before flashing and raise on a mismatch.
 
+Do not use `mix atomvm.esp32.install` on the badge: it erases the whole flash,
+NVS included, and installs upstream AtomVM rather than this fork.
+
 ## Assets
 
 Sources live in `assets/src/`. To regenerate:
@@ -171,7 +173,7 @@ Sources live in `assets/src/`. To regenerate:
     python3 tools/icons.py              # assets/icons/*.rgba
     python3 tools/gif.py                # assets/rickroll/*.rgba
     mix badge.assets                    # packs assets.avm
-    tools/flashassets.sh                # writes it to the assets partition
+    mix badge.assets --flash            # packs it and writes the partition
 
 `assets.avm` is not updated over the air.
 
@@ -190,11 +192,12 @@ environment in any shell that needs it:
 
 ### Provisioning NVS
 
-`tools/provision.py` borrows two things from ESP-IDF: its NVS parser, to read
-what the badge already holds, and its NVS image generator, to write the merged
-result back. The generator lives inside ESP-IDF's own virtualenv rather than
-on your `PATH`, which is why sourcing `export.sh` (or just setting `IDF_PATH`)
-is enough — the tool finds the right interpreter itself.
+`tools/provision.py` borrows three things from ESP-IDF: its NVS parser, to
+read what the badge already holds, its NVS image generator, to write the
+merged result back, and `esptool`, if none is on your `PATH`. The generator
+and `esptool` live inside ESP-IDF's own virtualenv rather than on your `PATH`,
+which is why sourcing `export.sh` (or just setting `IDF_PATH`) is enough — the
+tool finds the right interpreter itself.
 
     python3 tools/provision.py --wifi-ssid MyNetwork      # prompts for the passphrase
     python3 tools/provision.py --dry-run                  # read and show the merge
