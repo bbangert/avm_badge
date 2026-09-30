@@ -5,8 +5,11 @@ defmodule Badge.Display.Lvgl.Frame do
   Pages still return AtomGL-style items: `{:rect, ...}`, `{:text, ...}`,
   `{:image, ...}` and `{:scaled_cropped_image, ...}`, plus one of LVGL's own,
   `{:marquee, x, y, w, font, fg, bg, text, speed}`: text that scrolls round by
-  itself, `speed` pixels a second, when wider than `w`. Being unchanged from
-  frame to frame, a marquee costs nothing once it is on the panel. Each item becomes an
+  itself, `speed` pixels a second, when wider than `w`, and
+  `{:fx_label, x, y, font, fg, bg, text, {effect, :in | :out, steps, ms, row,
+  from_left, block}}`: text that plays a decrypt, rain, wipe or slide effect
+  on itself, a step every `ms`. Being unchanged from frame to frame, either
+  costs nothing once it is on the panel. Each item becomes an
   LVGL object whose id is its z-order, 0 at the bottom, so the last item,
   the background, is object 0. An item equal to last frame's item at the
   same place costs nothing; a changed one sends only the properties that
@@ -111,7 +114,12 @@ defmodule Badge.Display.Lvgl.Frame do
     end
   end
 
-  defp change(i, _prev, {type, props}, ops), do: [{:set, i, props}, {:new, i, type} | ops]
+  defp change(i, _prev, {type, props}, ops),
+    do: [{:set, i, props}, {:new, i, lvgl_type(type)} | ops]
+
+  # An effect label is an ordinary LVGL label playing an effect.
+  defp lvgl_type(:fx), do: :label
+  defp lvgl_type(type), do: type
 
   defp changed([], [], acc), do: :lists.reverse(acc)
   defp changed([same | old], [same | new], acc), do: changed(old, new, acc)
@@ -143,6 +151,31 @@ defmodule Badge.Display.Lvgl.Frame do
     ]
 
     {{:marquee, props}, images, next, uploads}
+  end
+
+  defp node(
+         {:fx_label, x, y, font, fg, bg, text, {effect, direction, steps, ms, row, left, block}},
+         images,
+         next,
+         uploads
+       ) do
+    props = [
+      x: x,
+      y: y,
+      font: font_id(font),
+      fg: fg,
+      bg: text_bg(bg),
+      text: text(font, text),
+      fx: effect_id(effect),
+      fx_dir: if(direction == :out, do: 1, else: 0),
+      fx_steps: steps,
+      fx_ms: ms,
+      fx_row: row,
+      fx_left: if(left, do: 1, else: 0),
+      fx_noise: if(block, do: 1, else: 0)
+    ]
+
+    {{:fx, props}, images, next, uploads}
   end
 
   defp node({:image, x, y, _bg, {:rgba8888, w, h, pixels}}, images, next, uploads) do
@@ -179,6 +212,12 @@ defmodule Badge.Display.Lvgl.Frame do
   # Anything else is drawn as nothing rather than stopping the frame.
   defp node(_item, images, next, uploads),
     do: {{:box, [x: 0, y: 0, w: 0, h: 0, bg: 0]}, images, next, uploads}
+
+  defp effect_id(:decrypt), do: 1
+  defp effect_id(:rain), do: 2
+  defp effect_id(:wipe), do: 3
+  defp effect_id(:slide), do: 4
+  defp effect_id(_effect), do: 0
 
   # AtomGL reads a background of 0 as none, so black text can sit on anything.
   defp text_bg(0), do: -1

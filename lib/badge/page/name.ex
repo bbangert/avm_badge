@@ -191,7 +191,7 @@ defmodule Badge.Page.Name do
       {started, _tick, view, lines} ->
         tick = div(now - started, @live_scroll_ms)
 
-        case Marquee.view(lines, div(tick, 2), scroll(tick)) do
+        case native(Marquee.view(lines, div(tick, 2), scroll(tick))) do
           ^view -> state
           next -> %{state | live: {started, tick, next, lines}}
         end
@@ -199,7 +199,7 @@ defmodule Badge.Page.Name do
       nil ->
         lines = Marquee.prepare(state.profile)
 
-        %{state | live: {now, 0, Marquee.view(lines, 0), lines}}
+        %{state | live: {now, 0, native(Marquee.view(lines, 0)), lines}}
     end
   end
 
@@ -208,8 +208,18 @@ defmodule Badge.Page.Name do
 
   if @native_scroll do
     defp scroll(_tick), do: 0
+
+    # LVGL plays an effect by itself, so a view only changes where an effect starts or ends.
+    defp native({effect, phase, _k, scroll}) when phase == :in or phase == :out,
+      do: {effect, phase, 0, scroll}
+
+    defp native({effect, {:glitch, _key, _fx} = phase, _k, scroll}),
+      do: {effect, phase, 0, scroll}
+
+    defp native(view), do: view
   else
     defp scroll(tick), do: tick
+    defp native(view), do: view
   end
 
   # Only its own screen builds a code: the encode is heavy enough to slow the
@@ -463,6 +473,16 @@ defmodule Badge.Page.Name do
     :lists.flatmap(fn line -> line_items(line, view) end, lines)
   end
 
+  defp line_items(line, {effect, phase, _k, _s})
+       when @native_scroll and (phase == :in or phase == :out) do
+    effect_label(line, effect, phase)
+  end
+
+  defp line_items(%{key: key} = line, {_effect, {:glitch, key, fx}, _k, _s})
+       when @native_scroll do
+    effect_label(line, fx, :in)
+  end
+
   defp line_items(%{key: key, scrolls: true} = line, {_effect, :hold, _k, _s})
        when @native_scroll do
     marquee(line, slot(key))
@@ -494,6 +514,33 @@ defmodule Badge.Page.Name do
         text_rows(rows, y, font, line_colour(key))
     end
   end
+
+  # The line as it holds, handed to LVGL with an effect to play on it.
+  defp effect_label(%{font: font} = line, effect, direction) do
+    rows = Marquee.rows(line, {effect, :hold, 0, 0})
+
+    fx =
+      {effect, direction, Marquee.duration(effect), @live_ms, line.base, line.from_left,
+       font == :big or font == :default16px}
+
+    {x, y, font, colour} = placement(line)
+
+    [{:fx_label, x, y, font, colour, 0, join_rows(rows), fx}]
+  end
+
+  defp placement(%{font: :big, key: key}), do: {0, slot(key), :default16px, Theme.accent()}
+
+  defp placement(%{font: :default16px, key: :name}),
+    do: {0, slot(:name) + @live_row_h, :default16px, Theme.fg()}
+
+  defp placement(%{font: @big_font, key: key} = line),
+    do: {large_x(line), slot(key), @big_font, line_colour(key)}
+
+  defp placement(%{font: :dogica, key: :company}),
+    do:
+      {0, slot(:company) + div(@live_large_h - @live_dogica_h, 2), :dogica, line_colour(:company)}
+
+  defp placement(%{font: font, key: key}), do: {0, slot(key), font, line_colour(key)}
 
   # One scrolling label per line; the block name's three rows scroll together as one.
   defp marquee(%{font: :big, source: rows}, y) do

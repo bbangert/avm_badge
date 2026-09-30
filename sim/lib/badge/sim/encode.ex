@@ -44,6 +44,10 @@ defmodule Badge.Sim.Encode do
     |> Enum.map(fn {line, i} -> {:text, x, y + i * height, font, fg, bg, line} end)
   end
 
+  # An effect plays on the panel; the simulator shows the text it settles on.
+  defp still({:fx_label, x, y, font, fg, bg, text, _fx}),
+    do: still({:marquee, x, y, 0, font, fg, bg, text, 0})
+
   defp still(item), do: [item]
 
   defp command({:rect, x, y, w, h, colour}),

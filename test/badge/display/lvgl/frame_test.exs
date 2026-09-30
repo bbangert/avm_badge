@@ -135,6 +135,36 @@ defmodule Badge.Display.Lvgl.FrameTest do
     end
   end
 
+  describe "effect labels" do
+    test "are an LVGL label told which effect to play, sent once" do
+      item =
+        {:fx_label, 0, 20, :default16px, 0xE85FAF, 0, "GUS",
+         {:rain, :out, 19, 200, 4, false, true}}
+
+      {ops, state} = Frame.frame(Frame.new(), [item])
+
+      assert [{:reset}, {:new, 0, :label}, {:set, 0, props}] = ops
+
+      assert props == [
+               x: 0,
+               y: 20,
+               font: 0,
+               fg: 0xE85FAF,
+               bg: -1,
+               text: "GUS",
+               fx: 2,
+               fx_dir: 1,
+               fx_steps: 19,
+               fx_ms: 200,
+               fx_row: 4,
+               fx_left: 0,
+               fx_noise: 1
+             ]
+
+      assert Frame.frame(state, [item]) |> elem(0) == []
+    end
+  end
+
   describe "scaled, cropped images" do
     test "scale by whole factors from the crop's corner" do
       pixels = :binary.copy(<<0, 0, 0, 255>>, 4)

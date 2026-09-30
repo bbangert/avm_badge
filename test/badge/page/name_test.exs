@@ -1048,6 +1048,37 @@ defmodule Badge.Page.NameTest do
     end
 
     if Application.compile_env(:avm_badge, :display, :atomgl) == :lvgl do
+      test "a whole-screen effect hands every line to LVGL to play" do
+        state = live(@full)
+        items = Name.render(at(state, {:rain, :out, 0, 0}))
+        effects = for {:fx_label, _, _, _, _, _, _, fx} <- items, do: fx
+
+        assert length(effects) == 4
+        assert Enum.all?(effects, &match?({:rain, :out, 19, 200, _row, _left, _block}, &1))
+      end
+
+      test "a glitch plays only on its own line" do
+        items = Name.render(at(live(@full), {:decrypt, {:glitch, :hobbies, :wipe}, 0, 0}))
+
+        assert [
+                 {:fx_label, _, _, :dogica, _, _, "  synths / coffee   ",
+                  {:wipe, :in, _, _, _, _, false}}
+               ] =
+                 for({:fx_label, _, _, _, _, _, _, _} = item <- items, do: item)
+      end
+
+      test "the view keeps still inside a phase, so the page redraws only where one starts or ends" do
+        state = live(%{name: "Gus"})
+        lines = Marquee.prepare(state.profile)
+        now = :erlang.monotonic_time(:millisecond)
+
+        early = Name.tick(%{state | live: {now - 600, 0, nil, lines}})
+        later = Name.tick(%{early | live: put_elem(early.live, 0, now - 1_000)})
+
+        assert {_started, _tick, {:decrypt, :in, 0, 0}, _lines} = early.live
+        assert elem(later.live, 2) == elem(early.live, 2)
+      end
+
       test "a long company scrolls by itself on LVGL, and only while nothing plays on it" do
         state = live(%{name: "Gus", company: "Goatmire International"})
         held = Name.render(at(state, {:decrypt, :hold, 0, 0}))
