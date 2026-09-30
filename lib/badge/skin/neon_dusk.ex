@@ -44,6 +44,11 @@ defmodule Badge.Skin.NeonDusk do
 
   @glow for colour <- @gradient, do: mix.(@surface, colour, 3, 10)
 
+  # The horizon and its glow row as decor lines, drawn over the chrome's own and pulsing together.
+  @horizon_glow for colour <- @horizon, do: mix.(@surface, colour, 3, 10)
+  @pulse_ms 2400
+  @pulse_floor 35
+
   # A striped sun: {dx, dy, w, h} bands, widest at the horizon.
   @sun_x 6
   @sun_y 5
@@ -117,10 +122,13 @@ defmodule Badge.Skin.NeonDusk do
       ]
   end
 
-  # A neon rainbow round the panel, a scan beam, and the odd glitch.
+  # A pulsing horizon, a neon rainbow round the panel, a scan beam, and the odd glitch.
   @impl true
   def decor do
     [
+      {:line, 0, Theme.bar_h(), Theme.width(), 2, @horizon, :pulse, @pulse_ms, @pulse_floor},
+      {:line, 0, Theme.bar_h() + 2, Theme.width(), 1, @horizon_glow, :pulse, @pulse_ms,
+       @pulse_floor},
       {:border, 3, 90, [0xFF2BD6, 0x8A63E8, 0x2BD9FF, 0x2BFF88, 0xFFE14D, 0xFF6A3D]},
       {:beam, 0x5CC8F5, 7000, 2, 64},
       {:glitch, [0xE85FAF, 0x5CC8F5], 3000, 9000}

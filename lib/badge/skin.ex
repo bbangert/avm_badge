@@ -60,6 +60,9 @@ defmodule Badge.Skin do
     * `{:beam, rgb, period_ms, height, opacity}`: a line that sweeps down the
       panel once a period
     * `{:glitch, [rgb], min_ms, max_ms}`: thin bars that flash at random
+    * `{:line, x, y, w, h, [rgb], :pulse | :flow, period_ms, min_percent}`: a
+      gradient line, such as the rule under the title bar, that breathes
+      between `min_percent` and full brightness, or slides along itself
 
   An empty list is none.
   """

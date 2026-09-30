@@ -31,6 +31,12 @@ defmodule Badge.SkinTest do
       assert Macintosh.decor() == []
       assert Enum.any?(NeonDusk.decor(), &match?({:border, _, _, _}, &1))
     end
+
+    test "Neon Dusk's horizon pulses where the chrome draws it" do
+      lines = for {:line, _, y, _, h, _, :pulse, _, _} <- NeonDusk.decor(), do: {y, h}
+
+      assert lines == [{Theme.bar_h(), 2}, {Theme.bar_h() + 2, 1}]
+    end
   end
 
   describe "the list" do
@@ -177,6 +183,11 @@ defmodule Badge.SkinTest do
 
             {:glitch, colours, min_ms, max_ms} ->
               assert length(colours) in 1..8 and min_ms > 0 and max_ms >= min_ms
+
+            {:line, x, y, w, h, colours, mode, period, floor} ->
+              assert x >= 0 and y >= 0 and x + w <= Theme.width() and y + h <= Theme.height()
+              assert length(colours) in 1..8 and Enum.all?(colours, &(&1 in 0..0xFFFFFF))
+              assert mode in [:pulse, :flow] and period > 0 and floor in 0..100
           end
         end
       end
