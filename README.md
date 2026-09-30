@@ -96,7 +96,7 @@ log and leaves the badge off until the next reload compiles.
 ## How it fits together
 
 `Badge.start/0` opens the two SPI buses the board needs (panel and LED chain)
-and starts a `Supervisor` with three children: `Badge.Screen` owns the AtomGL
+and starts a `Supervisor` with three children: `Badge.Screen` owns the
 display port and text buffer, `Badge.Keyboard` scans the matrix and dispatches
 key events, and `Badge.Pixels` drives the LED chain and runs its idle
 animation. See the moduledocs in `lib/badge/` for how each part works;
@@ -105,7 +105,7 @@ animation. See the moduledocs in `lib/badge/` for how each part works;
 ## Testing
 
 Pure modules (`Badge.TextBuffer`, `Badge.Keymap`, `Badge.Sharing`, the wire
-formats) are tested on the host; anything that talks to GPIO, SPI or AtomGL is
+formats) are tested on the host; anything that talks to GPIO, SPI or the display is
 verified on hardware instead. `mix test` needs no board.
 
 ## NervesHub
@@ -156,9 +156,10 @@ reflash of every badge.
 
 ## Base image
 
-The VM this firmware runs on is a fork of AtomVM, built and published by CI at
-[protolux-electronics/AtomVM](https://github.com/protolux-electronics/AtomVM).
-`BASE_IMAGE` names the release this firmware expects.
+The VM this firmware runs on is a fork of AtomVM, published as releases at
+[bbangert/AtomVM](https://github.com/bbangert/AtomVM). `BASE_IMAGE` names the
+release this firmware expects: `badge-v2` carries the LVGL display driver,
+`badge-v1` the older AtomGL one.
 
     mix badge.base            # bootloader, partition table, VM, boot.avm
     mix badge.base --vm-only  # just the VM and boot.avm
@@ -217,12 +218,12 @@ unchanged, so provisioning one key never loses the others.
 
 ### Changing the VM
 
-The VM, its AtomGL display driver and the websocket component are built from
-the fork at
-[protolux-electronics/AtomVM](https://github.com/protolux-electronics/AtomVM).
-Its `src/platforms/esp32/BADGE-BUILD.md` documents how to reproduce a badge
-build, which CMake flags this board needs, and how the AtomGL and websocket
-submodules fit in. The upstream
+The VM, its LVGL display driver and the websocket component are built from
+the `lvgl` branch of the fork at
+[bbangert/AtomVM](https://github.com/bbangert/AtomVM). Its
+`src/platforms/esp32/BADGE-BUILD.md` documents how to reproduce a badge
+build, which CMake flags this board needs, and where the display driver and
+websocket component come from. The upstream
 [AtomVM documentation](https://www.atomvm.net/doc/main/) covers the VM's own
 build system, packbeam format and NIF interface.
 

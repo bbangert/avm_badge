@@ -1,6 +1,6 @@
 # AtomVM badge firmware
 
-Elixir firmware for an ESP32-S3 conference badge: ST7789 display via AtomGL,
+Elixir firmware for an ESP32-S3 conference badge: ST7789 display via LVGL,
 6x13 GPIO keyboard matrix, SK6812 NeoPixels. Runs on AtomVM, not the BEAM.
 
 Setup, flashing and the ESP-IDF workflow are in `README.md`.
@@ -58,7 +58,7 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - A missing assets partition is survivable: the badge boots, prints
   `Badge: no assets partition:` and skips the splash. `:atomvm.read_priv/2`
   answers `:undefined` rather than raising, so a guard that only catches will
-  hand AtomGL `:undefined`
+  hand the display `:undefined`
 - `dogica` and `pixel_operator` are compiled into `main.avm`, so text survives
   a missing assets partition. `w95fa` is read from it on demand
 
@@ -106,18 +106,35 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   `esp32_free_heap_size` nor `esp32_largest_free_block` can see it
 - Measure on hardware before optimising; plausible theories have been wrong
 
-## AtomGL display
+## Display
 
-- `{:update, list}` **repaints the entire screen** — no damage rect. Cost is
-  per frame, not per change
-- Updates are pre-acked at enqueue; the render queue is 32 deep, dropping
-  oldest
+- The backend is picked at compile time: `display: :lvgl` in
+  `config/config.exs`, or `:atomgl` for a badge-v1 base image. Pages that
+  hand the panel an animation branch on
+  `Application.compile_env(:avm_badge, :display)`
+- The VM's `lvgl` port driver lives in the AtomVM fork at
+  `src/platforms/esp32/components/atomvm_lvgl`; its protocol is documented at
+  the top of `atomvm_lvgl.c`. LVGL is only ever called from `esp_lvgl_port`'s
+  task, never from the VM thread
+- `Badge.Display.Lvgl` is a painter process that owns the port, so
+  `update/2` returns at once and only the newest waiting frame is drawn.
+  `Badge.Display.Lvgl.Frame` diffs each frame: an unchanged item costs
+  nothing, a changed one sends only the props that differ
+- A driver still busy answers `busy`; the painter retries briefly, then drops
+  the frame and diffs the next against what the panel really shows
 - Z-order is tail-to-head: background rect **last**, cursor **first**
-- `:default16px` (8x16) is the only built-in font: code page 437, drawn a byte
+- Items the panel animates by itself: `:marquee`, `:fx_label`, `:flipbook`,
+  and any item wrapped in `{:motion, ...}` or `{:glide, ...}`. The simulator
+  draws a still of each in `Badge.Sim.Encode.still/1`; a new one goes there
+  too
+- Images are uploaded once per distinct picture and freed once unused; the
+  driver holds 256 at a time
+- Skin decorations (`Badge.Skin.decor/0`) run in the driver over every page:
+  lines only with the title bar, a border or chaser only where the page's
+  `border?/1` is true
+- `:default16px` (8x16) is the built-in font: code page 437, drawn a byte
   per glyph. Fold text with `Badge.Text.cp437/1` first, or UTF-8 above ASCII
   comes out as box-drawing garbage
-- Rotation 3 needs AtomGL branch `led-modes` in the base image. Without it the
-  panel is **silently black** — no error anywhere in Elixir
 
 ## Skins
 
