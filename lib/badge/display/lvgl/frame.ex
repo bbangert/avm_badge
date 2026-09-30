@@ -42,7 +42,7 @@ defmodule Badge.Display.Lvgl.Frame do
 
   @doc "A state with nothing drawn; its first frame resets the panel."
   @spec new() :: map
-  def new, do: %{items: [], nodes: [], images: %{}, recent: [], next_image: 0, fresh: true}
+  def new, do: %{items: [], nodes: [], images: %{}, recent: [], fresh: true}
 
   @doc """
   The operations that turn the previous frame into `items`, and the new state.
@@ -54,14 +54,13 @@ defmodule Badge.Display.Lvgl.Frame do
   def frame(state, items) do
     bottom_up = :lists.reverse(items)
 
-    {nodes, ops, uploads, {images, recent}, next_image} =
+    {nodes, ops, uploads, {images, recent}} =
       walk(
         bottom_up,
         state.items,
         state.nodes,
         0,
         {state.images, state.recent},
-        state.next_image,
         [],
         [],
         []
@@ -80,14 +79,13 @@ defmodule Badge.Display.Lvgl.Frame do
          nodes: nodes,
          images: images,
          recent: recent,
-         next_image: next_image,
          fresh: false
      }}
   end
 
   # An item equal to last frame's at the same place keeps its node and costs nothing.
-  defp walk([], _prev_items, _prev_nodes, _i, images, next, nodes, ops, uploads) do
-    {:lists.reverse(nodes), :lists.reverse(ops), :lists.reverse(uploads), images, next}
+  defp walk([], _prev_items, _prev_nodes, _i, images, nodes, ops, uploads) do
+    {:lists.reverse(nodes), :lists.reverse(ops), :lists.reverse(uploads), images}
   end
 
   defp walk(
@@ -96,16 +94,15 @@ defmodule Badge.Display.Lvgl.Frame do
          [node | prev_nodes],
          i,
          images,
-         next,
          nodes,
          ops,
          uploads
        ) do
-    walk(rest, prev_items, prev_nodes, i + 1, images, next, [node | nodes], ops, uploads)
+    walk(rest, prev_items, prev_nodes, i + 1, images, [node | nodes], ops, uploads)
   end
 
-  defp walk([item | rest], prev_items, prev_nodes, i, images, next, nodes, ops, uploads) do
-    {node, images, next, uploads} = node(item, images, next, uploads)
+  defp walk([item | rest], prev_items, prev_nodes, i, images, nodes, ops, uploads) do
+    {node, images, uploads} = node(item, images, uploads)
     {prev_node, prev_items, prev_nodes} = pop(prev_items, prev_nodes)
 
     walk(
@@ -114,7 +111,6 @@ defmodule Badge.Display.Lvgl.Frame do
       prev_nodes,
       i + 1,
       images,
-      next,
       [node | nodes],
       change(i, prev_node, node, ops),
       uploads
@@ -148,17 +144,17 @@ defmodule Badge.Display.Lvgl.Frame do
   defp deletes(top, count, acc) when top < count, do: :lists.reverse(acc)
   defp deletes(top, count, acc), do: deletes(top - 1, count, [{:del, top} | acc])
 
-  defp node({:rect, x, y, w, h, colour}, images, next, uploads) do
-    {{:box, [x: x, y: y, w: w, h: h, bg: colour]}, images, next, uploads}
+  defp node({:rect, x, y, w, h, colour}, images, uploads) do
+    {{:box, [x: x, y: y, w: w, h: h, bg: colour]}, images, uploads}
   end
 
-  defp node({:text, x, y, font, fg, bg, text}, images, next, uploads) do
+  defp node({:text, x, y, font, fg, bg, text}, images, uploads) do
     props = [x: x, y: y, font: font_id(font), fg: fg, bg: text_bg(bg), text: text(font, text)]
 
-    {{:label, props}, images, next, uploads}
+    {{:label, props}, images, uploads}
   end
 
-  defp node({:marquee, x, y, w, font, fg, bg, text, speed}, images, next, uploads) do
+  defp node({:marquee, x, y, w, font, fg, bg, text, speed}, images, uploads) do
     props = [
       x: x,
       y: y,
@@ -170,13 +166,12 @@ defmodule Badge.Display.Lvgl.Frame do
       speed: speed
     ]
 
-    {{:marquee, props}, images, next, uploads}
+    {{:marquee, props}, images, uploads}
   end
 
   defp node(
          {:fx_label, x, y, font, fg, bg, text, {effect, direction, steps, ms, row, left, block}},
          images,
-         next,
          uploads
        ) do
     props = [
@@ -195,11 +190,11 @@ defmodule Badge.Display.Lvgl.Frame do
       fx_noise: if(block, do: 1, else: 0)
     ]
 
-    {{:fx, props}, images, next, uploads}
+    {{:fx, props}, images, uploads}
   end
 
-  defp node({:motion, item, {mx, my, direction, delay, ms, ease}}, images, next, uploads) do
-    {{type, props}, images, next, uploads} = node(item, images, next, uploads)
+  defp node({:motion, item, {mx, my, direction, delay, ms, ease}}, images, uploads) do
+    {{type, props}, images, uploads} = node(item, images, uploads)
 
     motion = [
       mx: mx,
@@ -210,33 +205,32 @@ defmodule Badge.Display.Lvgl.Frame do
       mease: ease_id(ease)
     ]
 
-    {{{:moving, type}, props ++ motion}, images, next, uploads}
+    {{{:moving, type}, props ++ motion}, images, uploads}
   end
 
   # The glide time goes last, so a new object is put in place before it starts gliding.
-  defp node({:glide, item, ms}, images, next, uploads) do
-    {{type, props}, images, next, uploads} = node(item, images, next, uploads)
+  defp node({:glide, item, ms}, images, uploads) do
+    {{type, props}, images, uploads} = node(item, images, uploads)
 
-    {{{:gliding, type}, props ++ [glide: ms]}, images, next, uploads}
+    {{{:gliding, type}, props ++ [glide: ms]}, images, uploads}
   end
 
   defp node(
          {:flipbook, x, y, scale, frame_ms, [{:rgba8888, w, h, _pixels} | _more] = pictures},
          images,
-         next,
          uploads
        ) do
-    {ids, images, next, uploads} = pictures(pictures, scale, images, next, uploads, <<>>)
+    {ids, images, uploads} = pictures(pictures, scale, images, uploads, <<>>)
     props = [x: x, y: y, w: w * scale, h: h * scale, frames: ids, frame_ms: frame_ms]
 
-    {{:flipbook, props}, images, next, uploads}
+    {{:flipbook, props}, images, uploads}
   end
 
-  defp node({:image, x, y, _bg, {:rgba8888, w, h, pixels}}, images, next, uploads) do
-    {src, images, next, uploads} = image(w, h, pixels, 1, images, next, uploads)
+  defp node({:image, x, y, _bg, {:rgba8888, w, h, pixels}}, images, uploads) do
+    {src, images, uploads} = image(w, h, pixels, 1, images, uploads)
     props = [x: x, y: y, w: w, h: h, src: src, sx: @scale_one, sy: @scale_one, ox: 0, oy: 0]
 
-    {{:image, props}, images, next, uploads}
+    {{:image, props}, images, uploads}
   end
 
   # An even scale is done once, when the picture is uploaded, so it draws as a plain copy.
@@ -244,11 +238,10 @@ defmodule Badge.Display.Lvgl.Frame do
          {:scaled_cropped_image, x, y, w, h, _bg, src_x, src_y, scale, scale, _opts,
           {:rgba8888, iw, ih, pixels}},
          images,
-         next,
          uploads
        )
        when is_integer(scale) and scale >= 1 do
-    {src, images, next, uploads} = image(iw, ih, pixels, scale, images, next, uploads)
+    {src, images, uploads} = image(iw, ih, pixels, scale, images, uploads)
 
     props = [
       x: x,
@@ -262,17 +255,16 @@ defmodule Badge.Display.Lvgl.Frame do
       oy: -src_y * scale
     ]
 
-    {{:image, props}, images, next, uploads}
+    {{:image, props}, images, uploads}
   end
 
   defp node(
          {:scaled_cropped_image, x, y, w, h, _bg, src_x, src_y, x_scale, y_scale, _opts,
           {:rgba8888, iw, ih, pixels}},
          images,
-         next,
          uploads
        ) do
-    {src, images, next, uploads} = image(iw, ih, pixels, 1, images, next, uploads)
+    {src, images, uploads} = image(iw, ih, pixels, 1, images, uploads)
 
     props = [
       x: x,
@@ -286,18 +278,18 @@ defmodule Badge.Display.Lvgl.Frame do
       oy: -src_y
     ]
 
-    {{:image, props}, images, next, uploads}
+    {{:image, props}, images, uploads}
   end
 
   # Anything else is drawn as nothing rather than stopping the frame.
-  defp node(_item, images, next, uploads),
-    do: {{:box, [x: 0, y: 0, w: 0, h: 0, bg: 0]}, images, next, uploads}
+  defp node(_item, images, uploads),
+    do: {{:box, [x: 0, y: 0, w: 0, h: 0, bg: 0]}, images, uploads}
 
-  defp pictures([], _scale, images, next, uploads, ids), do: {ids, images, next, uploads}
+  defp pictures([], _scale, images, uploads, ids), do: {ids, images, uploads}
 
-  defp pictures([{:rgba8888, w, h, pixels} | rest], scale, images, next, uploads, ids) do
-    {id, images, next, uploads} = image(w, h, pixels, scale, images, next, uploads)
-    pictures(rest, scale, images, next, uploads, <<ids::binary, id::16-little>>)
+  defp pictures([{:rgba8888, w, h, pixels} | rest], scale, images, uploads, ids) do
+    {id, images, uploads} = image(w, h, pixels, scale, images, uploads)
+    pictures(rest, scale, images, uploads, <<ids::binary, id::16-little>>)
   end
 
   defp ease_id(:ease_out), do: 1
@@ -339,13 +331,13 @@ defmodule Badge.Display.Lvgl.Frame do
   # The same picture drawn many times costs one fingerprint: a recent binary is matched by comparison.
   @recent 8
 
-  defp image(w, h, pixels, scale, {images, recent}, next, uploads) do
+  defp image(w, h, pixels, scale, {images, recent}, uploads) do
     {key, recent} = fingerprint(w, h, pixels, recent)
 
-    {src, images, next, uploads} =
-      register({key, scale}, w, h, scale, pixels, images, next, uploads)
+    {src, images, uploads} =
+      register({key, scale}, w, h, scale, pixels, images, uploads)
 
-    {src, {images, recent}, next, uploads}
+    {src, {images, recent}, uploads}
   end
 
   defp fingerprint(w, h, pixels, recent) do
@@ -364,14 +356,14 @@ defmodule Badge.Display.Lvgl.Frame do
   defp seen(pixels, [_other | rest]), do: seen(pixels, rest)
 
   # The driver holds a fixed number of pictures, so the lowest id not in use is taken.
-  defp register(key, w, h, scale, pixels, images, next, uploads) do
+  defp register(key, w, h, scale, pixels, images, uploads) do
     case Map.get(images, key) do
       nil ->
         id = free_id(Map.values(images), 0)
-        {id, Map.put(images, key, id), next, [upload(id, w, h, pixels, scale) | uploads]}
+        {id, Map.put(images, key, id), [upload(id, w, h, pixels, scale) | uploads]}
 
       id ->
-        {id, images, next, uploads}
+        {id, images, uploads}
     end
   end
 
