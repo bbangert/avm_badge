@@ -142,6 +142,7 @@ defmodule Badge.Page.SensorsTest do
     defp bottom({:text, _x, y, _f, _fg, _bg, _body}), do: y + 16
     defp bottom({:rect, _x, y, _w, h, _c}), do: y + h
     defp bottom({:image, _x, y, _bg, {:rgba8888, _w, h, _bin}}), do: y + h
+    defp bottom({:glide, item, _ms}), do: bottom(item)
 
     test "emits no background rect, since the router adds it" do
       refute Enum.any?(Sensors.render(Sensors.init()), fn

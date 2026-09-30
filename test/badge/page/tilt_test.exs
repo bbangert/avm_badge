@@ -7,7 +7,7 @@ defmodule Badge.Page.TiltTest do
   alias Badge.Theme
 
   defp marker(state) do
-    [{:image, x, y, _bg, _img} | _rest] = Tilt.render(state)
+    [{:glide, {:image, x, y, _bg, _img}, _ms} | _rest] = Tilt.render(state)
 
     {x, y}
   end
@@ -152,7 +152,13 @@ defmodule Badge.Page.TiltTest do
     test "the marker is the first item, so it draws over the readout" do
       [first | _rest] = Tilt.render(levelled())
 
-      assert {:image, _x, _y, _bg, {:rgba8888, _w, _h, _bin}} = first
+      assert {:glide, {:image, _x, _y, _bg, {:rgba8888, _w, _h, _bin}}, _ms} = first
+    end
+
+    test "the marker glides to each reading within one refresh" do
+      [{:glide, _marker, ms} | _rest] = Tilt.render(levelled())
+
+      assert ms > 0 and ms <= Tilt.refresh(levelled())
     end
 
     test "shows both angles" do

@@ -11,8 +11,9 @@ defmodule Badge.Page.Settings.SudoTest do
       assert Sudo.title() == "Sudo Mode"
     end
 
-    test "repaints promptly, so a new frame is not held back" do
-      assert Sudo.refresh(Sudo.init()) == 100
+    test "never repaints for the loop, which the panel plays by itself" do
+      assert Sudo.refresh(Sudo.init()) >= 10_000
+      assert Sudo.tick(Sudo.init()) == Sudo.init()
     end
 
     test "holds each frame long enough to see" do
@@ -53,6 +54,13 @@ defmodule Badge.Page.Settings.SudoTest do
       end
     end
 
+    test "the flipbook carries every frame, a frame interval each" do
+      [{:flipbook, _x, _y, _scale, ms, pictures} | _rest] = Sudo.render(0)
+
+      assert ms == Sudo.frame_ms()
+      assert length(pictures) == Rickroll.count()
+    end
+
     test "every frame renders" do
       for frame <- 0..(Rickroll.count() - 1) do
         assert [_image, _caption] = Sudo.render(frame)
@@ -73,7 +81,7 @@ defmodule Badge.Page.Settings.SudoTest do
 
   describe "render/1" do
     test "the image clears the tab rule rather than butting against it" do
-      [{:scaled_cropped_image, _x, y, _w, _h, _bg, _sx, _sy, _s1, _s2, [], _img} | _rest] =
+      [{:flipbook, _x, y, _scale, _ms, _pictures} | _rest] =
         Sudo.render(0)
 
       assert y > Settings.content_top()
@@ -86,8 +94,10 @@ defmodule Badge.Page.Settings.SudoTest do
     end
 
     test "the image is centred and sits inside the content area" do
-      [{:scaled_cropped_image, x, y, w, h, _bg, _sx, _sy, _s1, _s2, [], _img} | _rest] =
+      [{:flipbook, x, y, scale, _ms, [{:rgba8888, w, h, _px} | _more]} | _rest] =
         Sudo.render(0)
+
+      {w, h} = {w * scale, h * scale}
 
       assert x == div(Theme.width() - w, 2)
       assert y >= Settings.content_top()
@@ -96,9 +106,11 @@ defmodule Badge.Page.Settings.SudoTest do
 
     test "the caption clears the image and fits the panel" do
       [
-        {:scaled_cropped_image, _x, y, _w, h, _bg, _sx, _sy, _s1, _s2, [], _img},
+        {:flipbook, _x, y, scale, _ms, [{:rgba8888, _w, h, _px} | _more]},
         {:text, cx, cy, _f, _c, _b, body}
       ] = Sudo.render(0)
+
+      h = h * scale
 
       assert cy >= y + h
       assert cy + 16 <= Theme.height()

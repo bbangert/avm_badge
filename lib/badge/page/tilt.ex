@@ -38,6 +38,8 @@ defmodule Badge.Page.Tilt do
   @rest_y div(@centre_y - @half_h + div(@quantum, 2), @quantum) * @quantum
 
   @readout_y 218
+  @native Application.compile_env(:avm_badge, :display, :atomgl) == :lvgl
+  @glide_ms 300
 
   @impl true
   def refresh(_state), do: 333
@@ -68,7 +70,14 @@ defmodule Badge.Page.Tilt do
 
   @impl true
   def render(state) do
-    [Icons.item(@marker, state.x, state.y), readout(state)]
+    [marker(state), readout(state)]
+  end
+
+  if @native do
+    # The panel slides the marker to each new reading by itself.
+    defp marker(state), do: {:glide, Icons.item(@marker, state.x, state.y), @glide_ms}
+  else
+    defp marker(state), do: Icons.item(@marker, state.x, state.y)
   end
 
   defp readout(%{roll: roll, pitch: pitch}) do

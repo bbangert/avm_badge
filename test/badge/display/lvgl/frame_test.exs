@@ -241,6 +241,55 @@ defmodule Badge.Display.Lvgl.FrameTest do
     end
   end
 
+  describe "flipbooks" do
+    @red {:rgba8888, 1, 1, <<255, 0, 0, 255>>}
+    @blue {:rgba8888, 1, 1, <<0, 0, 255, 255>>}
+    @book {:flipbook, 10, 20, 3, 200, [@red, @blue]}
+
+    test "uploads every picture enlarged, then names them in order" do
+      {ops, _state} = Frame.frame(Frame.new(), [@book, @bg])
+
+      assert {:img, 0, :rgba8888, 1, 1, _red, 3} = :lists.nth(2, ops)
+      assert {:img, 1, :rgba8888, 1, 1, _blue, 3} = :lists.nth(3, ops)
+      assert {:new, 1, :flipbook} in ops
+
+      assert {:set, 1,
+              [x: 10, y: 20, w: 3, h: 3, frames: <<0::16-little, 1::16-little>>, frame_ms: 200]} in ops
+    end
+
+    test "keeps its pictures while it shows and frees them once it goes" do
+      {_ops, state} = run([[@book, @bg]])
+      {same, state} = Frame.frame(state, [@book, @bg])
+      {gone, _state} = Frame.frame(state, [@bg])
+
+      assert same == []
+      assert {:unimg, 0} in gone and {:unimg, 1} in gone
+    end
+  end
+
+  describe "gliding" do
+    test "sends the glide time after the position, and later only the new position" do
+      {ops, state} = Frame.frame(Frame.new(), [{:glide, @icon, 300}, @bg])
+      {moved, _state} = Frame.frame(state, [{:glide, put_elem(@icon, 1, 290), 300}, @bg])
+
+      assert {:set, 1,
+              [x: 280, y: 3, w: 2, h: 1, src: 0, sx: 256, sy: 256, ox: 0, oy: 0, glide: 300]} in ops
+
+      assert moved == [{:set, 1, [x: 290]}]
+    end
+  end
+
+  describe "image ids" do
+    test "reuse the lowest one freed, so a slideshow never runs out" do
+      pictures = for n <- 1..300, do: {:image, 0, 0, 0, {:rgba8888, 1, 1, <<n::32>>}}
+
+      {ops, _state} = run(for picture <- pictures, do: [picture, @bg])
+
+      assert [{:img, id, :rgba8888, 1, 1, _}] = for({:img, _, _, _, _, _} = op <- ops, do: op)
+      assert id < 2
+    end
+  end
+
   describe "fonts" do
     test "have fixed ids, with unknown fonts drawn in the built-in one" do
       assert Frame.font_id(:default16px) == 0

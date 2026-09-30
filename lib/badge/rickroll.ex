@@ -64,6 +64,14 @@ defmodule Badge.Rickroll do
      [], {:rgba8888, @size, @size, frame(wrap(index))}}
   end
 
+  @doc "A display item that plays the whole loop by itself, `frame_ms` a frame; LVGL only."
+  @spec flipbook(integer, integer, pos_integer) :: tuple
+  def flipbook(x, y, frame_ms) do
+    pictures = for index <- :lists.seq(0, @count - 1), do: {:rgba8888, @size, @size, frame(index)}
+
+    {:flipbook, x, y, @scale, frame_ms, pictures}
+  end
+
   # A clock that started below zero, as the host's does, still lands on a frame.
   defp wrap(index), do: rem(rem(index, @count) + @count, @count)
 

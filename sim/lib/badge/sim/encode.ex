@@ -48,6 +48,13 @@ defmodule Badge.Sim.Encode do
   defp still({:fx_label, x, y, font, fg, bg, text, _fx}),
     do: still({:marquee, x, y, 0, font, fg, bg, text, 0})
 
+  defp still({:motion, item, _motion}), do: still(item)
+  defp still({:glide, item, _ms}), do: still(item)
+
+  # A flipbook plays on the panel; the simulator shows its first picture.
+  defp still({:flipbook, x, y, scale, _ms, [{:rgba8888, w, h, _pixels} = first | _more]}),
+    do: [{:scaled_cropped_image, x, y, w * scale, h * scale, 0, 0, 0, scale, scale, [], first}]
+
   defp still(item), do: [item]
 
   defp command({:rect, x, y, w, h, colour}),

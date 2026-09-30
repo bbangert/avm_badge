@@ -12,7 +12,11 @@ defmodule Badge.Display.Lvgl.Frame do
   costs nothing once it is on the panel. Any item can also be wrapped as
   `{:motion, item, {mx, my, :in | :out, delay_ms, ms, ease}}`: LVGL glides it
   in from `mx, my` away once `delay_ms` has passed, or out to there and hides
-  it, eased `:linear`, `:ease_out`, `:overshoot` or `:bounce`. Each item becomes an
+  it, eased `:linear`, `:ease_out`, `:overshoot` or `:bounce`, or as
+  `{:glide, item, ms}`: once placed, a new position is slid to over `ms`
+  rather than jumped to. `{:flipbook, x, y, scale, frame_ms, [picture]}`
+  shows each `{:rgba8888, w, h, pixels}` picture in turn, enlarged `scale`
+  times, for `frame_ms` each, and loops. Each item becomes an
   LVGL object whose id is its z-order, 0 at the bottom, so the last item,
   the background, is object 0. An item equal to last frame's item at the
   same place costs nothing; a changed one sends only the properties that
@@ -133,6 +137,7 @@ defmodule Badge.Display.Lvgl.Frame do
 
   # An effect label is an ordinary LVGL label playing an effect; a moving object is its own kind.
   defp lvgl_type({:moving, type}), do: lvgl_type(type)
+  defp lvgl_type({:gliding, type}), do: lvgl_type(type)
   defp lvgl_type(:fx), do: :label
   defp lvgl_type(type), do: type
 
@@ -208,6 +213,25 @@ defmodule Badge.Display.Lvgl.Frame do
     {{{:moving, type}, props ++ motion}, images, next, uploads}
   end
 
+  # The glide time goes last, so a new object is put in place before it starts gliding.
+  defp node({:glide, item, ms}, images, next, uploads) do
+    {{type, props}, images, next, uploads} = node(item, images, next, uploads)
+
+    {{{:gliding, type}, props ++ [glide: ms]}, images, next, uploads}
+  end
+
+  defp node(
+         {:flipbook, x, y, scale, frame_ms, [{:rgba8888, w, h, _pixels} | _more] = pictures},
+         images,
+         next,
+         uploads
+       ) do
+    {ids, images, next, uploads} = pictures(pictures, scale, images, next, uploads, <<>>)
+    props = [x: x, y: y, w: w * scale, h: h * scale, frames: ids, frame_ms: frame_ms]
+
+    {{:flipbook, props}, images, next, uploads}
+  end
+
   defp node({:image, x, y, _bg, {:rgba8888, w, h, pixels}}, images, next, uploads) do
     {src, images, next, uploads} = image(w, h, pixels, 1, images, next, uploads)
     props = [x: x, y: y, w: w, h: h, src: src, sx: @scale_one, sy: @scale_one, ox: 0, oy: 0]
@@ -268,6 +292,13 @@ defmodule Badge.Display.Lvgl.Frame do
   # Anything else is drawn as nothing rather than stopping the frame.
   defp node(_item, images, next, uploads),
     do: {{:box, [x: 0, y: 0, w: 0, h: 0, bg: 0]}, images, next, uploads}
+
+  defp pictures([], _scale, images, next, uploads, ids), do: {ids, images, next, uploads}
+
+  defp pictures([{:rgba8888, w, h, pixels} | rest], scale, images, next, uploads, ids) do
+    {id, images, next, uploads} = image(w, h, pixels, scale, images, next, uploads)
+    pictures(rest, scale, images, next, uploads, <<ids::binary, id::16-little>>)
+  end
 
   defp ease_id(:ease_out), do: 1
   defp ease_id(:overshoot), do: 2
@@ -332,14 +363,22 @@ defmodule Badge.Display.Lvgl.Frame do
   defp seen(pixels, [{pixels, key} | _rest]), do: key
   defp seen(pixels, [_other | rest]), do: seen(pixels, rest)
 
+  # The driver holds a fixed number of pictures, so the lowest id not in use is taken.
   defp register(key, w, h, scale, pixels, images, next, uploads) do
     case Map.get(images, key) do
       nil ->
-        {next, Map.put(images, key, next), next + 1,
-         [upload(next, w, h, pixels, scale) | uploads]}
+        id = free_id(Map.values(images), 0)
+        {id, Map.put(images, key, id), next, [upload(id, w, h, pixels, scale) | uploads]}
 
       id ->
         {id, images, next, uploads}
+    end
+  end
+
+  defp free_id(taken, id) do
+    case :lists.member(id, taken) do
+      true -> free_id(taken, id + 1)
+      false -> id
     end
   end
 
@@ -351,8 +390,16 @@ defmodule Badge.Display.Lvgl.Frame do
   defp used([{:image, [{:x, _}, {:y, _}, {:w, _}, {:h, _}, {:src, src} | _]} | rest], acc),
     do: used(rest, [src | acc])
 
-  defp used([{{:moving, :image}, props} | rest], acc), do: used([{:image, props} | rest], acc)
+  defp used([{:flipbook, [_x, _y, _w, _h, {:frames, ids} | _]} | rest], acc),
+    do: used(rest, frame_ids(ids, acc))
+
+  defp used([{{wrap, type}, props} | rest], acc) when wrap == :moving or wrap == :gliding,
+    do: used([{type, props} | rest], acc)
+
   defp used([_node | rest], acc), do: used(rest, acc)
+
+  defp frame_ids(<<>>, acc), do: acc
+  defp frame_ids(<<id::16-little, rest::binary>>, acc), do: frame_ids(rest, [id | acc])
 
   defp frees(images, used) do
     :lists.foldl(
