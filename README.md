@@ -13,53 +13,50 @@ microcontrollers, and is written in Elixir.
   [mise](https://mise.jdx.dev/lang/elixir.html) (`mise use erlang elixir`) or
   [asdf](https://asdf-vm.com/) (`asdf plugin add erlang && asdf plugin add
   elixir`) are both good choices
-- **[`esptool`](https://docs.espressif.com/projects/esptool/)** — writes the
-  base image, the assets partition and NVS
-- **[`gh`](https://cli.github.com/)**, authenticated — `mix badge.base`
-  downloads the VM release with it
 
-On macOS:
+- **`curl`** — `mix badge.base` downloads the VM release with it. macOS and
+  most Linux distributions already have it. Without `curl` it uses an
+  authenticated [`gh`](https://cli.github.com/) instead (`brew install gh`
+  on macOS, then `gh auth login`)
 
-    brew install esptool gh
-    gh auth login
-
-On Debian or Ubuntu:
-
-    pipx install esptool      # or: pip install --user esptool
-    # gh: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
-    gh auth login
-
-`esptool` also ships under its older name `esptool.py`; every tool here takes
-either, falling back to `python3 -m esptool`. ESP-IDF is **not** needed to
-build or flash the firmware — see [Advanced](#advanced) for the two things
-that do want it.
+That is all. esptool is **not** needed: the flash tasks run it inside an
+embedded Python through [Pythonx](https://hex.pm/packages/pythonx), which
+downloads Python and esptool the first time a task needs them. ESP-IDF is
+**not** needed to build or flash the firmware either — see
+[Advanced](#advanced) for the two things that do want it.
 
 ## Getting started
 
 Plug the badge in over USB, then:
 
     git clone https://github.com/protolux-electronics/avm_badge.git
-    cd avm_badge/firmware
+    cd avm_badge
     mix deps.get
     mix badge.base             # once per board: bootloader, VM, boot.avm
-    tools/flashassets.sh       # once per board: fonts, icons, splash logo
+    mix badge.assets --flash   # once per board: fonts, icons, splash logo
     mix atomvm.esp32.flash     # the firmware itself, every time
+
+The first of these to flash downloads Python and esptool, so it needs a
+network connection and takes a minute longer. Later runs reuse them.
 
 The serial port is auto-detected, so do not pass `--port`. It appears as
 `/dev/cu.usbmodem*` on macOS and `/dev/ttyACM*` on Linux, and the path changes
-between sessions because the board re-enumerates.
+between sessions because the board re-enumerates. On Linux your user needs to
+be in the `dialout` group (or your distribution's equivalent) to open it.
 
-The board resets itself after each write, so chain the read onto the flash to
-watch it boot (`stty -F` on Linux):
+To watch it boot, open the console; the task resets the board and follows it
+through the reset:
 
-    ( mix atomvm.esp32.flash >/dev/null 2>&1; \
-      stty -f /dev/cu.usbmodem* 115200 raw -echo; \
-      timeout 25 cat /dev/cu.usbmodem* )
+    mix atomvm.esp32.monitor --timeout 25
 
 You should see the AtomVM banner, then `Badge: starting`, then the home grid
 on the panel. The six shape keys open the pages; the arrows page the grid.
 
-`tools/flashassets.sh` writes the assets partition, which holds the extra
+To get the badge online, open Settings (the diamond key), go to the WiFi tab,
+pick a network and type its passphrase. The badge remembers it. The clock,
+chat and Settings → Update all need a network.
+
+`mix badge.assets --flash` writes the assets partition, which holds the extra
 fonts, the splash logo and the rickroll frames. It is **not** updated over the
 air, so run it again whenever anything under `assets/` changes — see
 [Assets](#assets). A badge without it still boots and prints
@@ -68,12 +65,33 @@ air, so run it again whenever anything under `assets/` changes — see
 Reflashing leaves NVS alone, so the profile, the badges you have collected and
 the wifi credentials all survive.
 
+### Flashing a batch
+
+    tools/flashstation.exs
+
+takes over the terminal and flashes badges as they are plugged in, several
+at a time. Each board gets a column: it is written in one go (base image,
+assets, firmware), watched until the boot log says `Badge: starting`, then
+the column turns green with a big OK or red with the error. Unplug it and
+the column goes away. Unlike the mix tasks, the station runs a standalone
+`esptool` on your `PATH`. If there is none, it installs one on the first run,
+through `mise`, `brew` or `pipx`, whichever it finds. A C compiler is needed
+once, for the `muontrap` wrapper that keeps every child process contained.
+With `BADGE_NH_KEY`/`BADGE_NH_SECRET` or `AVM_BADGE_SERVER_URL` set and
+ESP-IDF sourced, it provisions NVS as well.
+
 ### Without a board
 
     iex -S mix     # the firmware against fake hardware, panel at
                    # http://localhost:3240
-    mix test       # 1313 tests on the host
+    mix test       # the whole suite, on the host
     mix sim.check  # renders every page once, no browser
+
+The simulator draws the badge itself: click its keys or type. On a wide
+window a panel beside it shows the screen large, the log, or both. After
+editing code, press **Reload and reboot** to recompile and restart the badge
+on the new code, with no need to restart `iex`. A compile error shows in the
+log and leaves the badge off until the next reload compiles.
 
 ## How it fits together
 
@@ -90,16 +108,18 @@ Pure modules (`Badge.TextBuffer`, `Badge.Keymap`, `Badge.Sharing`, the wire
 formats) are tested on the host; anything that talks to GPIO, SPI or AtomGL is
 verified on hardware instead. `mix test` needs no board.
 
-## NervesHub (optional)
+## NervesHub
 
-Over-the-air updates need a NervesHub device key. Export both:
+Over-the-air updates work out of the box: the badge product's shared secret is
+compiled into `Badge.Update.Link`, so firmware you built yourself updates from
+the same hub as everyone else's. Open Settings → Update to see it.
+
+To point a badge at your own product instead, export your credentials and
+provision them into NVS, where they override the built-in pair:
 
     export BADGE_NH_KEY=...
     export BADGE_NH_SECRET=...
-
-then run `tools/provision.py`, which merges them into the badge's NVS and
-leaves every other key alone. The tools warn and continue when these are
-unset; a badge without them simply never updates.
+    python3 tools/provision.py
 
 ## Chat server
 
@@ -150,6 +170,9 @@ avmpack` and reboots in a loop.
 
 Both verify the download's SHA256 before flashing and raise on a mismatch.
 
+Do not use `mix atomvm.esp32.install` on the badge: it erases the whole flash,
+NVS included, and installs upstream AtomVM rather than this fork.
+
 ## Assets
 
 Sources live in `assets/src/`. To regenerate:
@@ -158,7 +181,7 @@ Sources live in `assets/src/`. To regenerate:
     python3 tools/icons.py              # assets/icons/*.rgba
     python3 tools/gif.py                # assets/rickroll/*.rgba
     mix badge.assets                    # packs assets.avm
-    tools/flashassets.sh                # writes it to the assets partition
+    mix badge.assets --flash            # packs it and writes the partition
 
 `assets.avm` is not updated over the air.
 
@@ -177,11 +200,12 @@ environment in any shell that needs it:
 
 ### Provisioning NVS
 
-`tools/provision.py` borrows two things from ESP-IDF: its NVS parser, to read
-what the badge already holds, and its NVS image generator, to write the merged
-result back. The generator lives inside ESP-IDF's own virtualenv rather than
-on your `PATH`, which is why sourcing `export.sh` (or just setting `IDF_PATH`)
-is enough — the tool finds the right interpreter itself.
+`tools/provision.py` borrows three things from ESP-IDF: its NVS parser, to
+read what the badge already holds, its NVS image generator, to write the
+merged result back, and `esptool`, if none is on your `PATH`. The generator
+and `esptool` live inside ESP-IDF's own virtualenv rather than on your `PATH`,
+which is why sourcing `export.sh` (or just setting `IDF_PATH`) is enough — the
+tool finds the right interpreter itself.
 
     python3 tools/provision.py --wifi-ssid MyNetwork      # prompts for the passphrase
     python3 tools/provision.py --dry-run                  # read and show the merge

@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 508 608">
+  <rect x="0" y="0" width="500" height="600" rx="35" fill="#DDD7CC"/>
+  <rect x="4" y="4" width="492" height="592" rx="31" fill="none" stroke="#CBC4B6" stroke-width="3"/>
+  <rect x="100.8" y="58.0" width="298.5" height="227.4" rx="4" fill="#3A3842"/>
+  <rect id="screen" x="107.8" y="65.0" width="284.5" height="213.4" rx="1" fill="#050506"/>
+  <rect data-key="Esc" x="30.0" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="51.3" y="336.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="9" font-weight="500" text-anchor="middle" dominant-baseline="central">Esc</text>
+  <rect data-key="Square" x="79.7" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <rect x="95.0" y="330.7" width="11.9" height="11.9" rx="1.5" fill="#E5484D"/>
+  <rect data-key="Triangle" x="129.3" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <polygon points="150.7,329.7 158.4,342.6 143.0,342.6" fill="#FF8A1F" stroke-linejoin="round"/>
+  <rect data-key="Cross" x="179.0" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <path d="M194.7 331.1 L205.9 342.3 M205.9 331.1 L194.7 342.3" stroke="#F2C12E" stroke-width="3.4" stroke-linecap="round" fill="none"/>
+  <rect data-key="Circle" x="278.3" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <circle cx="299.7" cy="336.7" r="7.0" fill="#3FB36B"/>
+  <rect data-key="Clover" x="328.0" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <circle cx="349.3" cy="332.5" r="2.9" fill="#3B82F6"/><circle cx="353.5" cy="336.7" r="2.9" fill="#3B82F6"/><circle cx="349.3" cy="340.9" r="2.9" fill="#3B82F6"/><circle cx="345.1" cy="336.7" r="2.9" fill="#3B82F6"/>
+  <rect data-key="Diamond" x="377.7" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <polygon points="399.0,328.6 405.3,336.7 399.0,344.7 392.7,336.7" fill="#9B6BE8"/>
+  <rect data-key="Bksp" x="427.3" y="320.0" width="42.7" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="448.7" y="336.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="20" font-weight="500" text-anchor="middle" dominant-baseline="central">⌫</text>
+  <rect data-key="`" x="30.0" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="43.7" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">~</text>
+  <rect data-key="1" x="64.4" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="78.1" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">1</text>
+  <rect data-key="2" x="98.8" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="112.5" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">2</text>
+  <rect data-key="3" x="133.2" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="146.8" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">3</text>
+  <rect data-key="4" x="167.5" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="181.2" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">4</text>
+  <rect data-key="5" x="201.9" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="215.6" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">5</text>
+  <rect data-key="6" x="236.3" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="250.0" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">6</text>
+  <rect data-key="7" x="270.7" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="284.4" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">7</text>
+  <rect data-key="8" x="305.1" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="318.8" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">8</text>
+  <rect data-key="9" x="339.5" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="353.2" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">9</text>
+  <rect data-key="0" x="373.8" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="387.5" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">0</text>
+  <rect data-key="-" x="408.2" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="421.9" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">-</text>
+  <rect data-key="=" x="442.6" y="362.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="456.3" y="379.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">=</text>
+  <rect data-key="Tab" x="30.0" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="43.7" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="9" font-weight="500" text-anchor="middle" dominant-baseline="central">Tab</text>
+  <rect data-key="Q" x="64.4" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="78.1" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Q</text>
+  <rect data-key="W" x="98.8" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="112.5" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">W</text>
+  <rect data-key="E" x="133.2" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="146.8" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">E</text>
+  <rect data-key="R" x="167.5" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="181.2" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">R</text>
+  <rect data-key="T" x="201.9" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="215.6" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">T</text>
+  <rect data-key="Y" x="236.3" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="250.0" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Y</text>
+  <rect data-key="U" x="270.7" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="284.4" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">U</text>
+  <rect data-key="I" x="305.1" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="318.8" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">I</text>
+  <rect data-key="O" x="339.5" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="353.2" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">O</text>
+  <rect data-key="P" x="373.8" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="387.5" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">P</text>
+  <rect data-key="[" x="408.2" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="421.9" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">[</text>
+  <rect data-key="]" x="442.6" y="404.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="456.3" y="421.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">]</text>
+  <rect data-key="Fn" x="30.0" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="43.7" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="9" font-weight="500" text-anchor="middle" dominant-baseline="central">Fn</text>
+  <rect data-key="A" x="64.4" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="78.1" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">A</text>
+  <rect data-key="S" x="98.8" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="112.5" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">S</text>
+  <rect data-key="D" x="133.2" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="146.8" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">D</text>
+  <rect data-key="F" x="167.5" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="181.2" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">F</text>
+  <rect data-key="G" x="201.9" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="215.6" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">G</text>
+  <rect data-key="H" x="236.3" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="250.0" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">H</text>
+  <rect data-key="J" x="270.7" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="284.4" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">J</text>
+  <rect data-key="K" x="305.1" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="318.8" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">K</text>
+  <rect data-key="L" x="339.5" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="353.2" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">L</text>
+  <rect data-key=";" x="373.8" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="387.5" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">;</text>
+  <rect data-key="'" x="408.2" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="421.9" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">'</text>
+  <rect data-key="Enter" x="442.6" y="447.0" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="456.3" y="463.7" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">↵</text>
+  <rect data-key="LShift" x="30.0" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="43.7" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="20" font-weight="500" text-anchor="middle" dominant-baseline="central">⇧</text>
+  <rect data-key="Z" x="64.4" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="78.1" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Z</text>
+  <rect data-key="X" x="98.8" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="112.5" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">X</text>
+  <rect data-key="C" x="133.2" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="146.8" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">C</text>
+  <rect data-key="V" x="167.5" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="181.2" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">V</text>
+  <rect data-key="B" x="201.9" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="215.6" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">B</text>
+  <rect data-key="N" x="236.3" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="250.0" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">N</text>
+  <rect data-key="M" x="270.7" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="284.4" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">M</text>
+  <rect data-key="," x="305.1" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="318.8" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">,</text>
+  <rect data-key="." x="339.5" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="353.2" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">.</text>
+  <rect data-key="/" x="373.8" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="387.5" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">/</text>
+  <rect data-key="Up" x="408.2" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="421.9" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">↑</text>
+  <rect data-key="RShift" x="442.6" y="489.3" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="456.3" y="506.0" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="20" font-weight="500" text-anchor="middle" dominant-baseline="central">⇧</text>
+  <rect data-key="Ctrl" x="30.0" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="43.7" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="9" font-weight="500" text-anchor="middle" dominant-baseline="central">Ctrl</text>
+  <rect data-key="SP" x="64.4" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="78.1" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="7.5" font-weight="500" text-anchor="middle" dominant-baseline="central">Super</text>
+  <rect data-key="Alt" x="98.8" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="112.5" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="9" font-weight="500" text-anchor="middle" dominant-baseline="central">Alt</text>
+  <rect data-key="\" x="133.2" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="146.8" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">\</text>
+  <rect data-key="Space" x="167.5" y="531.7" width="164.9" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <rect data-key="AltGr" x="339.5" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="353.2" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="9" font-weight="500" text-anchor="middle" dominant-baseline="central">Alt</text>
+  <rect data-key="Left" x="373.8" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="387.5" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">←</text>
+  <rect data-key="Down" x="408.2" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="421.9" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">↓</text>
+  <rect data-key="Right" x="442.6" y="531.7" width="27.4" height="33.3" rx="5" fill="#2A2830" stroke="#15141A" stroke-width="1.5"/>
+  <text x="456.3" y="548.3" fill="#F6F2EA" font-family="'DejaVu Sans Mono', Menlo, 'SF Mono', Monaco, Consolas, 'Roboto Mono', 'Liberation Mono', sans-serif" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">→</text>
+</svg>

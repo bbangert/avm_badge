@@ -16,6 +16,21 @@ defmodule Badge.Update.LinkTest do
     }
   end
 
+  describe "the built-in credentials" do
+    test "a build with no provisioning still knows a key and a secret" do
+      {key, secret} = Link.default_credentials()
+
+      assert byte_size(key) > 0
+      assert byte_size(secret) > 0
+    end
+
+    test "the key is a NervesHub product key" do
+      {key, _secret} = Link.default_credentials()
+
+      assert :binary.part(key, 0, 4) == "nhp_"
+    end
+  end
+
   describe "describing the running firmware" do
     test "reads the keys nh_flash actually answers with" do
       assert Link.firmware(metadata()) == %{
@@ -80,6 +95,25 @@ defmodule Badge.Update.LinkTest do
       assert Link.blocker(%{radio: :connecting, synced: false}) == "wifi connecting"
       assert Link.blocker(%{radio: :failed, synced: false}) == "wifi failed"
       assert Link.blocker(%{radio: :disabled, synced: false}) == "wifi off"
+    end
+  end
+
+  describe "what a reported update mode asks for" do
+    @fresh %{asked: false, checked: false}
+
+    test "a badge allowed to manage its updates asks to, once" do
+      assert Link.mode_action(:automatic, true, @fresh) == :switch
+      assert Link.mode_action(:automatic, true, %{@fresh | asked: true}) == :none
+    end
+
+    test "a badge that is not allowed stays on pushed offers" do
+      assert Link.mode_action(:automatic, false, @fresh) == :none
+      assert Link.mode_action(:unknown, false, @fresh) == :none
+    end
+
+    test "once managing its updates, it checks for one, once per connection" do
+      assert Link.mode_action(:device_managed, true, @fresh) == :check
+      assert Link.mode_action(:device_managed, true, %{@fresh | checked: true}) == :none
     end
   end
 end

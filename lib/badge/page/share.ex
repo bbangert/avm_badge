@@ -284,8 +284,15 @@ defmodule Badge.Page.Share do
   defp sharing_key({:move, :down}, state),
     do: {:ok, %{state | cursor: clamp(state.cursor + 1, last_field())}}
 
+  defp sharing_key({:edit, :newline}, state), do: toggle(state)
+
+  defp sharing_key({:char, char}, state) when char == ?\s or char == ?x or char == ?X,
+    do: toggle(state)
+
+  defp sharing_key(_event, _state), do: :ignore
+
   # An empty field cannot be ticked; a tick it already carries can still be cleared.
-  defp sharing_key({:edit, :newline}, state) do
+  defp toggle(state) do
     key = :lists.nth(state.cursor + 1, Sharing.fields())
 
     tickable =
@@ -297,8 +304,6 @@ defmodule Badge.Page.Share do
       {:ok, state}
     end
   end
-
-  defp sharing_key(_event, _state), do: :ignore
 
   defp collected_key({:move, :up}, state), do: {:ok, scroll(state, -1)}
   defp collected_key({:move, :down}, state), do: {:ok, scroll(state, 1)}

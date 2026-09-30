@@ -80,6 +80,7 @@ defmodule Badge.Display.Lvgl do
         cs: Hardware.display_cs(),
         dc: Hardware.display_dc(),
         reset: Hardware.display_reset(),
+        clock_hz: Hardware.display_clock_hz(),
         width: Hardware.display_width(),
         height: Hardware.display_height()
       )

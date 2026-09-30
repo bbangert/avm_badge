@@ -11,12 +11,15 @@ defmodule Badge.Sim.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      %{id: Badge.Log, start: {Badge.Log, :start_link, [:ok]}},
+      Badge.Sim.Console,
+      %{id: Badge.Log, start: {Badge.Sim.Console, :start_log, []}},
       Badge.Sim.Board,
-      {PhoenixPlayground, live: Badge.Sim.Live, file: nil, live_reload: false, open_browser: false, port: @port}
+      {PhoenixPlayground,
+       live: Badge.Sim.Live, file: nil, live_reload: false, open_browser: false, port: @port}
     ]
 
-    with {:ok, pid} <- Supervisor.start_link(children, strategy: :one_for_one, name: Badge.Sim.Supervisor) do
+    with {:ok, pid} <-
+           Supervisor.start_link(children, strategy: :one_for_one, name: Badge.Sim.Supervisor) do
       Badge.Sim.log("sim: listening on http://localhost:#{@port}")
       {:ok, pid}
     end
