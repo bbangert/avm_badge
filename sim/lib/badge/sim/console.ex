@@ -27,10 +27,23 @@ defmodule Badge.Sim.Console do
   @doc "Sends `pid` `{:log, lines}` for every line from now on, starting with the kept ones."
   def subscribe(pid), do: GenServer.cast(__MODULE__, {:subscribe, pid})
 
+  @doc "Sends `message` to every subscribed viewer."
+  def broadcast(message) do
+    case Process.whereis(__MODULE__) do
+      nil -> :ok
+      console -> GenServer.cast(console, {:broadcast, message})
+    end
+  end
+
   @impl true
   def init(:ok), do: {:ok, %{host: Process.group_leader(), lines: [], viewers: [], partial: ""}}
 
   @impl true
+  def handle_cast({:broadcast, message}, state) do
+    for viewer <- state.viewers, do: send(viewer, message)
+    {:noreply, state}
+  end
+
   def handle_cast({:subscribe, pid}, state) do
     Process.monitor(pid)
     send(pid, {:log, Enum.reverse(state.lines)})
@@ -68,7 +81,8 @@ defmodule Badge.Sim.Console do
       |> String.split("\n")
       |> Enum.reverse()
 
-    lines = Enum.reverse(lines)
+    # The host keeps its colours; a viewer gets plain text.
+    lines = for line <- Enum.reverse(lines), do: String.replace(line, ~r/\e\[[0-9;]*m/, "")
     for viewer <- state.viewers, lines != [], do: send(viewer, {:log, lines})
 
     %{state | lines: Enum.take(Enum.reverse(lines) ++ state.lines, @keep), partial: partial}

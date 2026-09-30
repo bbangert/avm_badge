@@ -16,10 +16,6 @@ defmodule Badge.Sim.Live do
   alias Badge.Sim.Display
   alias Badge.Theme
 
-  @shapes for {key, n} <- Enum.with_index(Badge.Pages.keys(), 1),
-              into: %{},
-              do: {"F#{n}", key}
-
   @svg_path Path.expand("../../../priv/badge.svg", __DIR__)
   @external_resource @svg_path
   @svg File.read!(@svg_path)
@@ -51,11 +47,20 @@ defmodule Badge.Sim.Live do
       Console.subscribe(self())
     end
 
-    {:ok, assign(socket, held: [])}
+    {:ok, assign(socket, held: [], reloading: false)}
   end
 
   @impl true
   def handle_info({:asset, asset}, socket), do: {:noreply, push_event(socket, "asset", asset)}
+
+  def handle_info({:reloaded, :error}, socket) do
+    {:noreply, socket |> released() |> push_event("backlight", %{level: 0})}
+  end
+
+  def handle_info({:reloaded, _result}, socket) do
+    Display.attach(self())
+    {:noreply, released(socket)}
+  end
 
   def handle_info({:log, lines}, socket),
     do: {:noreply, push_event(socket, "log", %{lines: lines})}
@@ -96,10 +101,19 @@ defmodule Badge.Sim.Live do
     {:noreply, socket}
   end
 
+  def handle_event("reboot", _params, %{assigns: %{reloading: true}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("reboot", _params, socket) do
-    Board.reboot()
-    Display.attach(self())
-    {:noreply, hold(socket, [])}
+    Task.start(&Board.reload/0)
+    {:noreply, assign(socket, reloading: true)}
+  end
+
+  # The keyboard came back up empty, so only the page needs telling.
+  defp released(socket) do
+    socket
+    |> assign(reloading: false, held: [])
+    |> push_event("held", %{labels: []})
   end
 
   defp hold(socket, held) do
@@ -120,12 +134,24 @@ defmodule Badge.Sim.Live do
   defp event("ArrowRight"), do: {:move, :right}
 
   defp event(key) do
-    case {Map.get(@shapes, key), String.length(key)} do
+    case {shape_key(key), String.length(key)} do
       {nil, 1} -> {:char, hd(String.to_charlist(key))}
       {nil, _} -> nil
       {shape, _} -> {:nav, shape}
     end
   end
+
+  # Looked up at run time, so editing a page does not recompile this module.
+  defp shape_key("F" <> digits) do
+    keys = Badge.Pages.keys()
+
+    case Integer.parse(digits) do
+      {n, ""} when n >= 1 and n <= length(keys) -> Enum.at(keys, n - 1)
+      _other -> nil
+    end
+  end
+
+  defp shape_key(_key), do: nil
 
   @impl true
   def render(assigns) do
@@ -146,12 +172,15 @@ defmodule Badge.Sim.Live do
         </div>
         <footer class="hint">
           <p>Click or type. F1–F6 are the shape keys.</p>
-          <button phx-click="reboot" class="cap">Reboot</button>
+          <button phx-click="reboot" class="cap" disabled={@reloading} title="Recompile changed code, then reboot">
+            {if @reloading, do: "Reloading", else: "Reload and reboot"}
+          </button>
         </footer>
       </section>
 
-      <section class="bench" id="bench" phx-update="ignore" data-view="screen">
-        <nav class="views" aria-label="Side panel">
+      <section class="bench" id="bench" phx-update="ignore">
+        <div class="views" id="views">
+        <nav class="tabs" aria-label="Side panel">
           <button class="cap" data-show="screen" aria-pressed="true">Screen</button>
           <button class="cap" data-show="log" aria-pressed="false">Log</button>
           <button class="cap" data-show="both" aria-pressed="false">Both</button>
@@ -160,6 +189,7 @@ defmodule Badge.Sim.Live do
           <canvas id="big" width={@panel_width} height={@panel_height}></canvas>
         </div>
         <ol class="log" id="log" aria-live="off"></ol>
+        </div>
       </section>
     </main>
 
@@ -213,7 +243,8 @@ defmodule Badge.Sim.Live do
           for (const key of keys) key.classList.toggle("held", labels.includes(key.dataset.key));
         });
 
-        const bench = this.el.querySelector("#bench");
+        // On a child of the ignored section, which LiveView leaves alone on a re-render.
+        const bench = this.el.querySelector("#views");
         const views = bench.querySelectorAll("[data-show]");
         const show = (view) => {
           bench.dataset.view = view;
@@ -221,7 +252,9 @@ defmodule Badge.Sim.Live do
           try { localStorage.setItem("sim-view", view); } catch (_) {}
         };
         for (const b of views) b.addEventListener("click", () => show(b.dataset.show));
-        try { const saved = localStorage.getItem("sim-view"); if (saved) show(saved); } catch (_) {}
+        let saved = null;
+        try { saved = localStorage.getItem("sim-view"); } catch (_) {}
+        show(saved || "screen");
 
         const log = bench.querySelector("#log");
         this.handleEvent("log", ({lines}) => {
@@ -291,6 +324,7 @@ defmodule Badge.Sim.Live do
       }
       .cap:hover { background: var(--bezel); }
       .cap:active { box-shadow: none; transform: translateY(1px); }
+      .cap:disabled { color: var(--dim); cursor: progress; box-shadow: none; }
       .cap:focus-visible { outline: 2px solid var(--board); outline-offset: 2px; }
       .cap[aria-pressed="true"] { background: var(--board); color: var(--key); }
 
@@ -298,7 +332,7 @@ defmodule Badge.Sim.Live do
         flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px;
         background: var(--key); border: 1px solid var(--bezel); border-radius: 12px; padding: 16px;
       }
-      .views { display: flex; gap: 8px; }
+      .tabs { display: flex; gap: 8px; }
       .stage { flex: 1; min-height: 0; container-type: size; display: grid; place-items: center; }
       #big {
         width: min(100cqw, 100cqh * 4 / 3); height: auto; aspect-ratio: 4 / 3;
@@ -312,10 +346,11 @@ defmodule Badge.Sim.Live do
       }
       .log .tag { color: #9B6BE8; }
       .log:empty::before { content: "Nothing logged yet."; color: var(--dim); }
-      .bench[data-view="screen"] .log { display: none; }
-      .bench[data-view="log"] .stage { display: none; }
-      .bench[data-view="both"] .stage { flex: 3; }
-      .bench[data-view="both"] .log { flex: 2; }
+      .views { display: contents; }
+      .views:not([data-view="log"], [data-view="both"]) .log { display: none; }
+      .views[data-view="log"] .stage { display: none; }
+      .views[data-view="both"] .stage { flex: 3; }
+      .views[data-view="both"] .log { flex: 2; }
 
       @media (max-width: 1100px) {
         #badge { height: auto; min-height: 100vh; justify-content: center; }
