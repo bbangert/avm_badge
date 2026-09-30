@@ -18,7 +18,7 @@ defmodule Mix.Tasks.Badge.Base do
 
   alias ExAtomVM.EsptoolHelper
 
-  @repo "protolux-electronics/AtomVM"
+  @repo "bbangert/AtomVM"
   @cache ".base"
   @vm {"atomvm-esp32s3-badge.bin", 0x10000}
   @boot {"boot.avm", 0x1F0000}
