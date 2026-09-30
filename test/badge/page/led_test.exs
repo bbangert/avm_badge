@@ -1,8 +1,12 @@
 defmodule Badge.Page.LedTest do
   use ExUnit.Case, async: true
 
+  alias Badge.LedEffect
   alias Badge.Page.Led
   alias Badge.Theme
+
+  defp loaded(setting \\ LedEffect.default()),
+    do: %{Led.init() | setting: setting, pushed: setting, loaded: true}
 
   defp press(state, dir) do
     {:ok, next} = Led.handle_key({:move, dir}, state)
@@ -14,12 +18,6 @@ defmodule Badge.Page.LedTest do
 
   defp texts(state), do: for({:text, _x, _y, _f, _fg, _bg, body} <- Led.render(state), do: body)
 
-  defp swatch(state) do
-    [colour | _rest] = for {:rect, _x, _y, 304, 60, colour} <- Led.render(state), do: colour
-
-    colour
-  end
-
   describe "identity" do
     test "announces itself for the home grid" do
       assert Led.title() == "LED"
@@ -27,88 +25,120 @@ defmodule Badge.Page.LedTest do
     end
   end
 
-  describe "mode cycling" do
-    test "starts on rainbow" do
-      assert Led.mode(Led.init()) == :rainbow
+  describe "rows" do
+    test "are the effect, then the options it uses" do
+      setting = %{LedEffect.default() | effect: :chase}
+
+      assert Led.rows(setting) == [:effect | LedEffect.options(:chase)]
     end
 
-    test "down walks the mode list" do
-      state = Led.init()
+    test "a single-hue palette adds a hue row after the colours" do
+      setting = %{LedEffect.default() | effect: :breathe, palette: :hue}
 
-      assert Led.mode(press(state, :down)) == :dusk
-      assert Led.mode(press(state, :down, 2)) == {:solid, 0}
-      assert Led.mode(press(state, :down, 3)) == :white
-      assert Led.mode(press(state, :down, 4)) == :off
+      assert [:effect, :palette, :hue | _rest] = Led.rows(setting)
     end
 
-    test "down wraps back to the start" do
-      assert Led.mode(press(Led.init(), :down, 5)) == :rainbow
-    end
-
-    test "up wraps backwards" do
-      assert Led.mode(press(Led.init(), :up)) == :off
-    end
-
-    test "up and down are inverses" do
-      state = press(Led.init(), :down)
-
-      assert press(state, :up) == Led.init()
+    test "off has only the effect row" do
+      assert Led.rows(%{LedEffect.default() | effect: :off}) == [:effect]
     end
   end
 
-  describe "hue stepping" do
-    test "right advances the hue" do
-      assert Led.mode(press(press(Led.init(), :down, 2), :right)) == {:solid, 15}
+  describe "keys" do
+    test "right steps to the next effect, left back again" do
+      state = loaded()
+      [_first, second | _rest] = LedEffect.effects()
+
+      assert press(state, :right).setting.effect == second
+      assert press(press(state, :right), :left).setting.effect == :rainbow
     end
 
-    test "hue wraps at 360" do
-      assert Led.mode(press(press(Led.init(), :down, 2), :right, 24)) == {:solid, 0}
+    test "effects wrap round both ways" do
+      assert press(loaded(), :left).setting.effect == :lists.last(LedEffect.effects())
+      assert press(loaded(), :right, length(LedEffect.effects())).setting.effect == :rainbow
     end
 
-    test "left wraps below zero" do
-      assert Led.mode(press(press(Led.init(), :down, 2), :left)) == {:solid, 345}
+    test "down moves to an option and right changes it" do
+      state = press(loaded(), :down)
+
+      assert Enum.at(Led.rows(state.setting), 1) == :speed
+      assert press(state, :right).setting.speed == LedEffect.default().speed + 1
     end
 
-    test "hue survives a mode change" do
-      state = press(press(press(Led.init(), :down, 2), :right, 4), :down)
+    test "options stop at their ends" do
+      state = press(loaded(), :down)
 
-      assert Led.mode(press(state, :down, 4)) == {:solid, 60}
+      assert press(state, :right, 20).setting.speed == 10
+      assert press(state, :left, 20).setting.speed == 1
     end
-  end
 
-  describe "handle_key/2" do
-    test "is pure — no process is needed to press a key" do
-      assert {:ok, _state} = Led.handle_key({:move, :down}, Led.init())
+    test "the cursor stays on the rows there are" do
+      state = press(loaded(), :down, 20)
+
+      assert state.cursor == length(Led.rows(state.setting)) - 1
+    end
+
+    test "changing to an effect with fewer rows pulls the cursor in" do
+      state = %{loaded(%{LedEffect.default() | effect: :twinkle}) | cursor: 0}
+      moved = press(state, :right)
+
+      assert moved.cursor <= length(Led.rows(moved.setting)) - 1
+    end
+
+    test "direction flips either way" do
+      setting = %{LedEffect.default() | effect: :chase}
+      row = Enum.find_index(Led.rows(setting), &(&1 == :direction))
+      state = %{loaded(setting) | cursor: row}
+
+      assert press(state, :right).setting.direction == :ccw
+      assert press(press(state, :right), :left).setting.direction == :cw
     end
 
     test "typing does nothing here" do
       assert Led.handle_key({:char, ?a}, Led.init()) == :ignore
-      assert Led.handle_key({:edit, :newline}, Led.init()) == :ignore
+    end
+  end
+
+  describe "tick/1" do
+    test "a page that has not loaded yet has pushed nothing" do
+      refute Led.init().loaded
+      assert Led.init().pushed == nil
+    end
+
+    test "an unchanged setting is not pushed again" do
+      state = loaded()
+
+      assert Led.tick(state) == state
     end
   end
 
   describe "render/1" do
-    test "names the current mode" do
-      assert "rainbow" in texts(Led.init())
-      assert "dusk" in texts(press(Led.init(), :down))
-      assert "solid" in texts(press(Led.init(), :down, 2))
-      assert "white" in texts(press(Led.init(), :down, 3))
-      assert "off" in texts(press(Led.init(), :down, 4))
+    test "names the effect and each option" do
+      body = texts(loaded(%{LedEffect.default() | effect: :chase, palette: :fire}))
+
+      assert "chase" in body
+      assert "fire" in body
+      assert "clockwise" in body
     end
 
-    test "the swatch follows the hue" do
-      red = swatch(press(Led.init(), :down, 2))
-      other = swatch(press(press(Led.init(), :down, 2), :right, 8))
+    test "the swatch shows each palette colour" do
+      setting = %{LedEffect.default() | effect: :drift, palette: :fire}
+      blocks = for {:rect, _x, 168, _w, _h, colour} <- Led.render(loaded(setting)), do: colour
 
-      assert red != other
+      assert blocks == LedEffect.colours(:fire, 0)
     end
 
-    test "off draws a black swatch" do
-      assert swatch(press(Led.init(), :down, 4)) == Theme.bg()
+    test "the swatch spans the same width whatever the palette" do
+      for palette <- LedEffect.palettes() do
+        setting = %{LedEffect.default() | effect: :drift, palette: palette}
+        widths = for {:rect, _x, 168, w, _h, _c} <- Led.render(loaded(setting)), do: w
+
+        assert Enum.sum(widths) == 304
+      end
     end
 
     test "every item sits inside the content area" do
-      for item <- Led.render(Led.init()) do
+      for effect <- LedEffect.effects(),
+          item <- Led.render(loaded(%{LedEffect.default() | effect: effect})) do
         y =
           case item do
             {:rect, _x, y, _w, _h, _c} -> y
@@ -118,63 +148,6 @@ defmodule Badge.Page.LedTest do
         assert y >= Theme.content_top()
         assert y < Theme.height()
       end
-    end
-
-    test "emits no background rect" do
-      refute Enum.any?(Led.render(Led.init()), fn
-               {:rect, 0, 0, 320, 240, _colour} -> true
-               _item -> false
-             end)
-    end
-  end
-
-  describe "white" do
-    defp adopted(state), do: %{state | loaded: true}
-
-    test "is one of the modes you can page to" do
-      names = for mode <- Badge.LedMode.modes(), do: Badge.LedMode.name(mode)
-
-      assert "white" in names
-    end
-
-    test "is reachable from rainbow and reads as white" do
-      state = adopted(%{Led.init() | index: 3})
-
-      assert Led.mode(state) == :white
-    end
-
-    test "its swatch is white, not the accent colour" do
-      state = adopted(%{Led.init() | index: 3})
-
-      [{:rect, _x, _y, _w, _h, colour}] =
-        for {:rect, _x, _y, w, _h, _c} = item <- Led.render(state), w > 100, do: item
-
-      assert colour == Theme.fg()
-    end
-
-    test "paging wraps through every mode and back" do
-      seen =
-        for step <- 0..(length(Badge.LedMode.modes()) - 1) do
-          Led.mode(adopted(%{Led.init() | index: step}))
-        end
-
-      assert length(seen) == length(Badge.LedMode.modes())
-      assert :white in seen
-      assert :off in seen
-    end
-  end
-
-  describe "adopting the live mode" do
-    test "a page that has not loaded yet pushes nothing" do
-      refute Led.init().loaded
-      assert Led.init().pushed == nil
-    end
-
-    test "once loaded, a real change is still pushed" do
-      state = %{Led.init() | loaded: true, index: 4, pushed: :rainbow}
-
-      assert Led.mode(state) == :off
-      refute Led.mode(state) == state.pushed
     end
   end
 end

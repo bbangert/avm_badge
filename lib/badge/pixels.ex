@@ -1,66 +1,37 @@
 defmodule Badge.Pixels do
   @moduledoc """
-  Drives the SK6812 / WS2812 chain using the SPI peripheral as a waveform
-  generator.
+  The LED ring in the badge's corners.
 
-  These LEDs read a self-clocked NRZ bitstream: each bit is a fixed-width
-  pulse whose high time carries the value (short = 0, long = 1). A frame is
-  latched by holding the line low past the chip's reset threshold. Each LED
-  bit is expanded to four SPI bits (`0b1000` for 0, `0b1100` for 1), so each
-  colour byte becomes four SPI bytes and each pixel costs twelve.
-
-  The animation runs on a timer rather than a sleep loop so it shares the
-  scheduler with the keyboard scan and display updates.
+  Effects run in the `leds` port driver, in C, so this process only hands
+  the driver a setting (see `Badge.LedEffect`) when it changes and remembers
+  it in NVS. `start_link/1` takes the module that talks to the chain:
+  `Badge.Pixels.Port` on the badge, a stand-in in the simulator.
   """
 
   use GenServer
 
-  import Bitwise
-
-  alias Badge.Color
   alias Badge.Hardware
-  alias Badge.LedMode
+  alias Badge.LedEffect
   alias Badge.Nvs
 
-  @compile {:no_warn_undefined, :spi}
+  @nvs_key :led_mode
 
-  @device :pixels
+  # A setting stepped through on the page is saved once it stops changing.
+  @save_ms 1500
 
-  # Expansion table, indexed by a pair of LED bits: 0b1000 / 0b1100 per bit.
-  @nibble_pairs {0x88, 0x8C, 0xC8, 0xCC}
-
-  # Idle bytes to hold the line low long enough to latch a frame.
-  @latch :binary.copy(<<0>>, 40)
-
-  @brightness 40
-
-  @tick 400
-  @hue_step 6
-  @dusk_step 3
-  @dusk_spread 30
-
-  # Long enough to catch the eye across a table, short enough not to linger.
-  @flash_ticks div(600, @tick)
-
-  def start_link(spi) do
-    GenServer.start_link(__MODULE__, spi, name: __MODULE__)
+  def start_link(driver) do
+    GenServer.start_link(__MODULE__, driver, name: __MODULE__)
   end
 
-  @doc """
-  Sets what the chain displays, and remembers it.
+  @doc "Shows a setting now, and saves it once it has stopped changing."
+  @spec set(map) :: :ok
+  def set(setting), do: GenServer.cast(__MODULE__, {:set, setting})
 
-  `:rainbow` and `:dusk` animate; `{:solid, hue}`, `:white` and `:off` are static and are
-  only written to the chain once.
-  """
-  def set_mode(mode) do
-    GenServer.cast(__MODULE__, {:mode, mode})
-  end
+  @doc "What the ring is set to, so a page can adopt it rather than reset it."
+  @spec setting() :: map
+  def setting, do: GenServer.call(__MODULE__, :setting)
 
-  @doc "What the chain is showing, so a page can adopt it rather than reset it."
-  @spec mode() :: atom | {atom, integer}
-  def mode, do: GenServer.call(__MODULE__, :mode)
-
-  @doc "Blanks the chain, leaving the mode to come back to."
+  @doc "Darkens the ring, leaving the setting to come back to."
   @spec sleep() :: :ok
   def sleep, do: GenServer.cast(__MODULE__, :sleep)
 
@@ -68,34 +39,16 @@ defmodule Badge.Pixels do
   @spec wake() :: :ok
   def wake, do: GenServer.cast(__MODULE__, :wake)
 
-  @doc """
-  Shows a colour briefly, then goes back to whatever was set before.
-
-  The countdown rides the animation tick that is already running, so a flash
-  costs no timer and cannot outlive the chain going quiet.
-  """
+  @doc "Flashes the whole ring in a hue over whatever is running."
   @spec flash(non_neg_integer) :: :ok
-  def flash(hue) do
-    GenServer.cast(__MODULE__, {:flash, hue, @flash_ticks})
-  end
+  def flash(hue), do: GenServer.cast(__MODULE__, {:flash, hue})
 
   @impl true
-  def init(spi) do
-    :io.format(~c"Pixels: ~p LEDs on GPIO ~p at ~p Hz~n", [
-      Hardware.pixel_count(),
-      Hardware.pixel_data(),
-      Hardware.pixel_clock_hz()
-    ])
+  def init(driver) do
+    chain = driver.open(Hardware.pixel_data(), Hardware.pixel_count())
+    :ok = driver.call(chain, {:order, Hardware.pixel_order()})
 
-    state = %{
-      spi: spi,
-      phase: 0,
-      mode: :rainbow,
-      last: nil,
-      flash: nil,
-      asleep: false,
-      failing: false
-    }
+    state = %{driver: driver, chain: chain, setting: LedEffect.default(), asleep: false, due: nil}
 
     {:ok, state, {:continue, :restore}}
   end
@@ -103,133 +56,54 @@ defmodule Badge.Pixels do
   # Reads NVS after init/1 returns, not during it.
   @impl true
   def handle_continue(:restore, state) do
-    mode = LedMode.decode(Nvs.get(:led_mode))
+    setting = LedEffect.decode(Nvs.get(@nvs_key))
+    :io.format(~c"Pixels: ~s~n", [LedEffect.encode(setting)])
 
-    :io.format(~c"Pixels: ~s~n", [LedMode.encode(mode)])
-
-    send(self(), :tick)
-
-    {:noreply, %{state | mode: mode}}
+    {:noreply, show(%{state | setting: setting})}
   end
 
   @impl true
-  def handle_call(:mode, _from, state), do: {:reply, state.mode, state}
+  def handle_call(:setting, _from, state), do: {:reply, state.setting, state}
 
   @impl true
-  # Repeating a mode is free; only a change is worth a flash write.
-  def handle_cast({:mode, mode}, %{mode: mode} = state), do: {:noreply, state}
+  def handle_cast({:set, setting}, %{setting: setting} = state), do: {:noreply, state}
 
-  def handle_cast({:mode, mode}, state) do
-    Nvs.put(:led_mode, LedMode.encode(mode))
+  def handle_cast({:set, setting}, state) do
+    due = make_ref()
+    Process.send_after(self(), {:save, due}, @save_ms)
 
-    {:noreply, %{state | mode: mode}}
+    {:noreply, show(%{state | setting: setting, due: due})}
   end
 
-  def handle_cast(:sleep, state), do: {:noreply, %{state | asleep: true}}
+  def handle_cast(:sleep, state), do: {:noreply, show(%{state | asleep: true})}
+  def handle_cast(:wake, state), do: {:noreply, show(%{state | asleep: false})}
 
-  # `last` is cleared so the chain is repainted even if the colour is unchanged.
-  def handle_cast(:wake, state), do: {:noreply, %{state | asleep: false, last: nil}}
+  # A badge in a pocket stays dark, flash or not.
+  def handle_cast({:flash, _hue}, %{asleep: true} = state), do: {:noreply, state}
 
-  def handle_cast({:flash, hue, ticks}, state) do
-    {:noreply, %{state | flash: {hue, ticks}}}
+  def handle_cast({:flash, hue}, state) do
+    state.driver.call(state.chain, LedEffect.flash(hue))
+
+    {:noreply, state}
   end
 
   @impl true
-  def handle_info(:tick, state) do
-    next = paint(state)
+  def handle_info({:save, due}, %{due: due} = state) do
+    Nvs.put(@nvs_key, LedEffect.encode(state.setting))
 
-    # Sleeps rather than using Process.send_after/3.
-    Process.sleep(@tick)
-    send(self(), :tick)
-
-    {:noreply, next}
+    {:noreply, %{state | due: nil}}
   end
 
-  # Asleep outranks everything, including a flash: a badge in a pocket stays dark.
-  defp paint(%{asleep: true} = state), do: hold(state, {0, 0, 0})
+  # A newer change has its own save coming.
+  def handle_info({:save, _stale}, state), do: {:noreply, state}
 
-  # A flash outranks the mode until its ticks run out, then the mode resumes
-  # on its own because `last` no longer matches.
-  defp paint(%{flash: {_hue, 0}} = state), do: paint(%{state | flash: nil})
-
-  defp paint(%{flash: {hue, left}} = state) do
-    lit = hold(state, Color.hsv_to_rgb(hue, 255, @brightness))
-
-    %{lit | flash: {hue, left - 1}}
+  defp show(%{asleep: true} = state) do
+    state.driver.call(state.chain, LedEffect.command(%{effect: :off}))
+    state
   end
 
-  defp paint(%{mode: :rainbow, phase: phase} = state) do
-    count = Hardware.pixel_count()
-    pixels = for i <- 0..(count - 1), do: rainbow(phase + i * div(360, count))
-
-    %{show(state, pixels) | phase: rem(phase + @hue_step, 360), last: nil}
+  defp show(state) do
+    state.driver.call(state.chain, LedEffect.command(state.setting))
+    state
   end
-
-  defp paint(%{mode: :dusk, phase: phase} = state) do
-    count = Hardware.pixel_count()
-    pixels = for i <- 0..(count - 1), do: LedMode.dusk(phase + i * @dusk_spread, @brightness)
-
-    %{show(state, pixels) | phase: rem(phase + @dusk_step, 360), last: nil}
-  end
-
-  defp paint(%{mode: {:solid, hue}} = state) do
-    hold(state, Color.hsv_to_rgb(hue, 255, @brightness))
-  end
-
-  defp paint(%{mode: :white} = state), do: hold(state, {@brightness, @brightness, @brightness})
-
-  defp paint(%{mode: :off} = state), do: hold(state, {0, 0, 0})
-
-  # A static mode would otherwise rewrite the chain fifty times a second.
-  defp hold(%{last: colour} = state, colour), do: state
-
-  # `last` only moves on a write that landed, so a failed one is retried next tick.
-  defp hold(state, colour) do
-    case show(state, List.duplicate(colour, Hardware.pixel_count())) do
-      %{failing: false} = shown -> %{shown | last: colour}
-      failed -> failed
-    end
-  end
-
-  defp rainbow(hue), do: Color.hsv_to_rgb(rem(hue, 360), 255, @brightness)
-
-  # A write fails when internal RAM has no DMA buffer to spare; the frame is dropped.
-  defp show(state, pixels) do
-    frame =
-      pixels
-      |> Enum.map(&encode_pixel/1)
-      |> Enum.reduce(<<>>, fn bytes, acc -> acc <> bytes end)
-
-    case :spi.write(state.spi, @device, %{write_data: frame <> @latch}) do
-      :ok -> recovered(state)
-      error -> failed(state, error)
-    end
-  end
-
-  defp failed(%{failing: true} = state, _error), do: state
-
-  defp failed(state, error) do
-    :io.format(~c"Pixels: write failed ~p~n", [error])
-
-    %{state | failing: true}
-  end
-
-  defp recovered(%{failing: true} = state) do
-    :io.format(~c"Pixels: writing again~n")
-
-    %{state | failing: false}
-  end
-
-  defp recovered(state), do: state
-
-  # SK6812 and WS2812 both take green first.
-  defp encode_pixel({r, g, b}) do
-    encode_byte(g) <> encode_byte(r) <> encode_byte(b)
-  end
-
-  defp encode_byte(byte) do
-    <<expand(byte >>> 6), expand(byte >>> 4), expand(byte >>> 2), expand(byte)>>
-  end
-
-  defp expand(bits), do: elem(@nibble_pairs, bits &&& 0x03)
 end

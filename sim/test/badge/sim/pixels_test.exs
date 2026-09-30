@@ -3,63 +3,64 @@ defmodule Badge.Sim.PixelsTest do
 
   import ExUnit.CaptureIO
 
+  alias Badge.LedEffect
   alias Badge.Pixels
+  alias Badge.Sim.Leds
 
   setup do
     start_supervised!(Badge.Sim.Nvs)
-    on_exit(fn -> Application.delete_env(:avm_badge, :spi_fails) end)
+    Leds.reset()
     :ok
   end
 
   defp start do
-    pid = start_supervised!({Pixels, :sim_spi})
-    Process.group_leader(pid, Process.group_leader())
-    pid
-  end
-
-  defp run_ticks, do: Process.sleep(900)
-
-  test "a failed write drops the frame instead of crashing the chain" do
-    log =
-      capture_io(fn ->
-        pid = start()
-        Application.put_env(:avm_badge, :spi_fails, true)
-        run_ticks()
-
-        assert Process.alive?(pid)
-        assert Pixels.mode() == :rainbow
-      end)
-
-    assert log =~ "Pixels: write failed {error,257}"
-  end
-
-  test "failures are logged once, and recovery once" do
-    log =
-      capture_io(fn ->
-        start()
-        Application.put_env(:avm_badge, :spi_fails, true)
-        run_ticks()
-        Application.put_env(:avm_badge, :spi_fails, false)
-        run_ticks()
-      end)
-
-    assert length(String.split(log, "write failed")) == 2
-    assert length(String.split(log, "writing again")) == 2
-  end
-
-  test "a static mode is retried until a write lands" do
     capture_io(fn ->
-      pid = start()
-      Application.put_env(:avm_badge, :spi_fails, true)
-      Pixels.set_mode(:white)
-      run_ticks()
-
-      assert :sys.get_state(pid).last == nil
-
-      Application.put_env(:avm_badge, :spi_fails, false)
-      run_ticks()
-
-      assert :sys.get_state(pid).last == {40, 40, 40}
+      pid = start_supervised!({Pixels, Leds})
+      :sys.get_state(pid)
     end)
+  end
+
+  test "starts the ring on the saved setting, corners in order" do
+    Badge.Nvs.put(:led_mode, "chase pal=fire")
+    start()
+
+    assert {:effect, :chase, [0xFFB040 | _rest], _opts} = Leds.last(:effect)
+    assert {:order, [_, _, _, _]} = Leds.last(:order)
+  end
+
+  test "a new setting is shown at once and saved once it settles" do
+    start()
+    setting = %{LedEffect.default() | effect: :candle}
+    Pixels.set(setting)
+
+    assert Pixels.setting() == setting
+    assert {:effect, :candle, _colours, _opts} = Leds.last(:effect)
+
+    Process.sleep(1700)
+    assert Badge.Nvs.get(:led_mode) == LedEffect.encode(setting)
+  end
+
+  test "sleep darkens the ring and wake brings the setting back" do
+    start()
+    Pixels.sleep()
+    Pixels.setting()
+    assert Leds.last(:effect) == {:effect, :off, [], []}
+
+    Pixels.wake()
+    Pixels.setting()
+    assert {:effect, :rainbow, _colours, _opts} = Leds.last(:effect)
+  end
+
+  test "a flash is passed on, but not while asleep" do
+    start()
+    Pixels.flash(120)
+    Pixels.setting()
+    assert {:flash, 0x00FF00, _ms} = Leds.last(:flash)
+
+    Leds.reset()
+    Pixels.sleep()
+    Pixels.flash(0)
+    Pixels.setting()
+    assert Leds.last(:flash) == nil
   end
 end

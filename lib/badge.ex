@@ -17,8 +17,6 @@ defmodule Badge do
   when the start function returns.
   """
 
-  alias Badge.Hardware
-
   @compile {:no_warn_undefined, [:atomvm, :spi]}
 
   # Which display driver the base image carries: AtomGL, or the LVGL port.
@@ -37,8 +35,6 @@ defmodule Badge do
       {:error, reason} -> :io.format(~c"Badge: no assets partition: ~p~n", [reason])
     end
 
-    pixel_spi = open_pixel_spi()
-
     # Opened here, not in the child, so a Badge.UI restart reuses the display
     # instead of orphaning its framebuffer.
     display = open_display()
@@ -48,7 +44,7 @@ defmodule Badge do
       {Badge.Backlight, :ok},
       {Badge.Keyboard, :ok},
       {Badge.Wifi, :ok},
-      {Badge.Pixels, pixel_spi},
+      {Badge.Pixels, Badge.Pixels.Port},
       {Badge.Sensors, :ok},
       {Badge.Power, :ok},
       {Badge.Ir.Link, :ok},
@@ -75,10 +71,10 @@ defmodule Badge do
       defp open_display_spi do
         :spi.open(%{
           bus_config: %{
-            peripheral: Hardware.display_peripheral(),
-            sclk: Hardware.display_sclk(),
-            mosi: Hardware.display_mosi(),
-            miso: Hardware.display_miso()
+            peripheral: Badge.Hardware.display_peripheral(),
+            sclk: Badge.Hardware.display_sclk(),
+            mosi: Badge.Hardware.display_mosi(),
+            miso: Badge.Hardware.display_miso()
           },
           device_config: %{}
         })
@@ -87,26 +83,6 @@ defmodule Badge do
     # The LVGL port brings up its own SPI bus.
     :lvgl ->
       defp open_display, do: Badge.UI.open_display(:lvgl)
-  end
-
-  # LED chain has no clock line, so SCLK is -1.
-  defp open_pixel_spi do
-    :spi.open(%{
-      bus_config: %{
-        peripheral: Hardware.pixel_peripheral(),
-        sclk: Hardware.pixel_sclk(),
-        mosi: Hardware.pixel_data()
-      },
-      device_config: %{
-        pixels: %{
-          clock_speed_hz: Hardware.pixel_clock_hz(),
-          mode: 0,
-          cs: -1,
-          address_len_bits: 0,
-          command_len_bits: 0
-        }
-      }
-    })
   end
 
   defp park do

@@ -32,10 +32,9 @@ defmodule Badge.Hardware do
 
   # SK6812/WS2812 chain; no clock line, so SCLK is -1.
   def pixel_data, do: 14
-  def pixel_sclk, do: -1
-  def pixel_peripheral, do: "spi3"
-  def pixel_clock_hz, do: 3_200_000
   def pixel_count, do: 4
+  # Chain index of each corner, in clockwise order.
+  def pixel_order, do: [0, 1, 2, 3]
 
   # Battery and VBUS each read through a 1/2 voltage divider.
   def adc_battery_pin, do: 1

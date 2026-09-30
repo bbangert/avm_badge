@@ -56,7 +56,7 @@ defmodule Badge.Cluster.Remote do
       machine: :erlang.system_info(:machine),
       wifi: Wifi.status(),
       cluster: Link.status(),
-      leds: Pixels.mode()
+      leds: Pixels.setting()
     }
   end
 
@@ -100,9 +100,13 @@ defmodule Badge.Cluster.Remote do
   @spec pages() :: [module]
   def pages, do: Badge.Pages.all()
 
-  @doc "Sets the LED chain, to a mode from `Badge.LedMode.modes/0` or `{:solid, hue}`."
-  @spec leds(atom | {atom, integer}) :: :ok
-  def leds(mode), do: Pixels.set_mode(mode)
+  @doc """
+  Sets the LED ring: an effect from `Badge.LedEffect.effects/0`, or a map of
+  any `Badge.LedEffect` fields, merged over what is showing.
+  """
+  @spec leds(atom | map) :: :ok
+  def leds(effect) when is_atom(effect), do: leds(%{effect: effect})
+  def leds(changes), do: Pixels.set(Map.merge(Pixels.setting(), changes))
 
   @doc "The most recent console lines, oldest first."
   @spec log(pos_integer) :: [binary]

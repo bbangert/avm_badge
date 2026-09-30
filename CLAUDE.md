@@ -1,7 +1,8 @@
 # AtomVM badge firmware
 
 Elixir firmware for an ESP32-S3 conference badge: ST7789 display via LVGL,
-6x13 GPIO keyboard matrix, SK6812 NeoPixels. Runs on AtomVM, not the BEAM.
+6x13 GPIO keyboard matrix, four SK6812 NeoPixels in the corners. Runs on
+AtomVM, not the BEAM.
 
 Setup, flashing and the ESP-IDF workflow are in `README.md`.
 
@@ -135,6 +136,20 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - `:default16px` (8x16) is the built-in font: code page 437, drawn a byte
   per glyph. Fold text with `Badge.Text.cp437/1` first, or UTF-8 above ASCII
   comes out as box-drawing garbage
+
+## LEDs
+
+- Four SK6812s, one in each corner, form a ring. Effects run in the VM's
+  `leds` port driver (`components/atomvm_leds` in the AtomVM fork): RMT
+  output, a 100 Hz timer, gamma and dithering, all in C. Its protocol is at
+  the top of `atomvm_leds.c`
+- `Badge.LedEffect` is the pure model: effects, the options each uses,
+  palettes, the NVS text and the driver request. `Badge.Pixels` only forwards
+  a setting when it changes and saves it once it settles
+- `Hardware.pixel_order/0` maps ring positions, in clockwise order,
+  to chain indices; chase and bounce travel in that order
+- The simulator has no LEDs: `Badge.Sim.Leds` records the last request of
+  each kind for tests
 
 ## Skins
 

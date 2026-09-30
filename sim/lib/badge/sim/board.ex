@@ -20,7 +20,7 @@ defmodule Badge.Sim.Board do
 
     hardware = [
       {Badge.Backlight, :ok},
-      {Badge.Pixels, :sim_spi},
+      {Badge.Pixels, Badge.Sim.Leds},
       {Badge.Sensors, :ok},
       {Badge.Power, :ok},
       {Badge.Schedule.Link, :ok}

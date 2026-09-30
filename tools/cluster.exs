@@ -68,7 +68,7 @@ defmodule Cluster do
   @doc "Every page the badge can be sent to."
   def pages, do: call(@remote, :pages, [])
 
-  @doc "Sets the LED chain: `:rainbow`, `:white`, `:off` or `{:solid, hue}`."
+  @doc "Sets the LED ring: an effect such as `:chase`, or a map like `%{palette: :fire, speed: 7}`."
   def leds(mode), do: call(@remote, :leds, [mode])
 
   @doc "Prints the badge's most recent console lines."

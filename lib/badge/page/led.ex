@@ -1,35 +1,36 @@
 defmodule Badge.Page.Led do
   @moduledoc """
-  Picks what the NeoPixel chain shows.
+  Picks what the LED ring shows: an effect, then its colours and options.
 
-  `handle_key/2` only moves the selection; the cast to `Badge.Pixels`
-  happens in `tick/1`, and only when the selected mode actually changed.
-  That keeps key handling pure and testable off the board.
+  The first row is the effect; below it come only the options that effect
+  uses (see `Badge.LedEffect.options/1`), plus a hue row when the palette is
+  a single hue. Up and down pick a row, left and right change it.
+
+  `handle_key/2` only edits the setting; `tick/1` hands it to
+  `Badge.Pixels`, and only when it changed, which keeps key handling pure and
+  testable off the board.
   """
 
   use Badge.Page
 
-  alias Badge.Color
-  alias Badge.LedMode
+  alias Badge.LedEffect
   alias Badge.Nav
   alias Badge.Pixels
   alias Badge.Theme
 
-  @modes LedMode.modes()
-  @mode_count length(@modes)
-
-  @hue_step 15
+  @effects LedEffect.effects()
+  @palettes LedEffect.palettes()
 
   @label_x 8
-  @value_x 96
-  @mode_y 40
-  @hue_y 64
+  @value_x 112
+  @first_y 36
+  @row_h 20
   @help_y 210
 
   @swatch_x 8
-  @swatch_y 110
+  @swatch_y 168
   @swatch_w 304
-  @swatch_h 60
+  @swatch_h 28
 
   @impl true
   def title, do: "LED"
@@ -38,88 +39,139 @@ defmodule Badge.Page.Led do
   def icon, do: :circle
 
   @impl true
-  def init, do: %{index: 0, hue: 0, pushed: nil, loaded: false}
+  def init, do: %{setting: LedEffect.default(), cursor: 0, pushed: nil, loaded: false}
 
   @impl true
   def handle_key({:move, :down}, state) do
-    {:ok, %{state | index: rem(state.index + 1, @mode_count)}}
+    {:ok, %{state | cursor: min(state.cursor + 1, length(rows(state.setting)) - 1)}}
   end
 
   def handle_key({:move, :up}, state) do
-    {:ok, %{state | index: rem(state.index + @mode_count - 1, @mode_count)}}
+    {:ok, %{state | cursor: max(state.cursor - 1, 0)}}
   end
 
-  def handle_key({:move, :right}, state) do
-    {:ok, %{state | hue: rem(state.hue + @hue_step, 360)}}
-  end
-
-  def handle_key({:move, :left}, state) do
-    {:ok, %{state | hue: rem(state.hue + 360 - @hue_step, 360)}}
-  end
-
+  def handle_key({:move, :right}, state), do: {:ok, change(state, 1)}
+  def handle_key({:move, :left}, state), do: {:ok, change(state, -1)}
   def handle_key(_event, _state), do: :ignore
 
-  # Adopts what the chain is already showing, so opening the page cannot
-  # overwrite a saved mode with this page's starting selection.
+  # Adopts what the ring is already showing, so opening the page cannot
+  # overwrite a saved setting with this page's starting one.
   @impl true
-  def tick(%{loaded: false} = state), do: adopt(state, Pixels.mode())
+  def tick(%{loaded: false} = state) do
+    setting = Pixels.setting()
+    %{state | setting: setting, pushed: setting, loaded: true}
+  end
 
-  def tick(%{pushed: pushed} = state) do
-    case mode(state) do
-      ^pushed ->
-        state
+  def tick(%{setting: setting, pushed: setting} = state), do: state
 
-      current ->
-        Pixels.set_mode(current)
+  def tick(state) do
+    Pixels.set(state.setting)
+    %{state | pushed: state.setting}
+  end
 
-        %{state | pushed: current}
+  @doc "The rows a setting shows: the effect, then the options it uses."
+  @spec rows(map) :: [atom]
+  def rows(setting) do
+    options = LedEffect.options(setting.effect)
+
+    case setting.palette == :hue and :lists.member(:palette, options) do
+      true -> [:effect | with_hue(options)]
+      false -> [:effect | options]
     end
   end
 
-  defp adopt(state, {:solid, hue} = current) do
-    %{state | index: index_of(:solid), hue: hue, pushed: current, loaded: true}
+  defp with_hue([:palette | rest]), do: [:palette, :hue | rest]
+  defp with_hue([option | rest]), do: [option | with_hue(rest)]
+
+  defp change(state, delta) do
+    row = :lists.nth(state.cursor + 1, rows(state.setting))
+    setting = adjust(state.setting, row, delta)
+
+    # A new effect can have fewer rows than the one before.
+    cursor = min(state.cursor, length(rows(setting)) - 1)
+
+    %{state | setting: setting, cursor: cursor}
   end
 
-  defp adopt(state, current) do
-    %{state | index: index_of(current), pushed: current, loaded: true}
+  defp adjust(setting, :effect, delta),
+    do: %{setting | effect: cycle(@effects, setting.effect, delta)}
+
+  defp adjust(setting, :palette, delta),
+    do: %{setting | palette: cycle(@palettes, setting.palette, delta)}
+
+  defp adjust(setting, :direction, _delta),
+    do: %{setting | direction: if(setting.direction == :cw, do: :ccw, else: :cw)}
+
+  defp adjust(setting, :hue, delta),
+    do: %{setting | hue: rem(setting.hue + delta * 15 + 360, 360)}
+
+  defp adjust(setting, :speed, delta), do: step(setting, :speed, delta, 1, 10)
+  defp adjust(setting, :brightness, delta), do: step(setting, :brightness, delta * 5, 5, 100)
+  defp adjust(setting, key, delta), do: step(setting, key, delta * 10, 0, 100)
+
+  defp step(setting, key, delta, low, high) do
+    Map.put(setting, key, max(low, min(high, Map.fetch!(setting, key) + delta)))
   end
 
-  defp index_of(mode), do: index_of(@modes, mode, 0)
-
-  defp index_of([], _mode, _position), do: 0
-  defp index_of([mode | _rest], mode, position), do: position
-  defp index_of([_other | rest], mode, position), do: index_of(rest, mode, position + 1)
-
-  @doc "The chain mode the current selection means."
-  def mode(%{index: index, hue: hue}) do
-    case :lists.nth(index + 1, @modes) do
-      :solid -> {:solid, hue}
-      other -> other
-    end
+  defp cycle(list, current, delta) do
+    count = length(list)
+    :lists.nth(rem(index_of(list, current, 0) + delta + count, count) + 1, list)
   end
+
+  defp index_of([], _item, _position), do: 0
+  defp index_of([item | _rest], item, position), do: position
+  defp index_of([_other | rest], item, position), do: index_of(rest, item, position + 1)
 
   @impl true
   def render(state) do
-    [
-      {:text, @label_x, @mode_y, :default16px, Theme.dim(), Theme.bg(), "mode"},
-      {:text, @value_x, @mode_y, :default16px, Theme.fg(), Theme.bg(), name(state)},
-      {:text, @label_x, @hue_y, :default16px, Theme.dim(), Theme.bg(), "hue"},
-      {:text, @value_x, @hue_y, :default16px, Theme.fg(), Theme.bg(),
-       :erlang.integer_to_binary(state.hue)}
-    ] ++
-      Nav.hint([{"up/down", "mode"}, {"left/right", "hue"}], @help_y, Theme.dim()) ++
-      [swatch(state)]
+    rows = rows(state.setting)
+
+    lines =
+      for {row, i} <- :lists.zip(rows, :lists.seq(0, length(rows) - 1)) do
+        y = @first_y + i * @row_h
+        colour = if i == state.cursor, do: Theme.select(), else: Theme.fg()
+
+        [
+          {:text, @label_x, y, :default16px, Theme.dim(), Theme.bg(), label(row)},
+          {:text, @value_x, y, :default16px, colour, Theme.bg(), value(state.setting, row)}
+        ]
+      end
+
+    :lists.append(lines) ++
+      Nav.hint([{"up/down", "choose"}, {"left/right", "change"}], @help_y, Theme.dim()) ++
+      swatch(LedEffect.colours(state.setting))
   end
 
-  defp name(%{index: index}), do: LedMode.name(:lists.nth(index + 1, @modes))
+  defp label(:effect), do: "effect"
+  defp label(:palette), do: "colours"
+  defp label(:hue), do: "hue"
+  defp label(:speed), do: "speed"
+  defp label(:brightness), do: "brightness"
+  defp label(:spread), do: "spread"
+  defp label(:direction), do: "direction"
+  defp label(:trail), do: "trail"
+  defp label(:density), do: "density"
 
-  defp swatch(state) do
-    {:rect, @swatch_x, @swatch_y, @swatch_w, @swatch_h, swatch_colour(mode(state))}
+  defp value(setting, :effect), do: :erlang.atom_to_binary(setting.effect)
+  defp value(setting, :palette), do: :erlang.atom_to_binary(setting.palette)
+  defp value(setting, :hue), do: :erlang.integer_to_binary(setting.hue)
+  defp value(setting, :speed), do: :erlang.integer_to_binary(setting.speed) <> "/10"
+  defp value(%{direction: :cw}, :direction), do: "clockwise"
+  defp value(_setting, :direction), do: "anticlockwise"
+  defp value(setting, key), do: :erlang.integer_to_binary(Map.fetch!(setting, key)) <> "%"
+
+  # One block per colour, across the full swatch width.
+  defp swatch([]), do: [{:rect, @swatch_x, @swatch_y, @swatch_w, @swatch_h, Theme.dim()}]
+
+  defp swatch(colours) do
+    count = length(colours)
+    w = div(@swatch_w, count)
+
+    for {colour, i} <- :lists.zip(colours, :lists.seq(0, count - 1)) do
+      last = i == count - 1
+
+      {:rect, @swatch_x + i * w, @swatch_y, if(last, do: @swatch_w - i * w, else: w), @swatch_h,
+       colour}
+    end
   end
-
-  defp swatch_colour(:off), do: Theme.bg()
-  defp swatch_colour(:white), do: Theme.fg()
-  defp swatch_colour(:rainbow), do: Theme.accent()
-  defp swatch_colour(:dusk), do: Color.rgb888(LedMode.dusk(0, 255))
-  defp swatch_colour({:solid, hue}), do: Color.rgb888(Color.hsv_to_rgb(hue, 255, 255))
 end
