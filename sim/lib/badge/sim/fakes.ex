@@ -35,7 +35,11 @@ defmodule Badge.Sim.Fakes do
           _, d -> d
         end
       ),
-      fake(Badge.Keyboard, fn {:holding?, _label}, _ -> false end),
+      fake(
+        Badge.Keyboard,
+        fn {:holding?, label}, d -> :lists.member(label, Map.get(d, :held, [])) end,
+        fn {:held, labels}, d -> Map.put(d, :held, labels) end
+      ),
       fake(Badge.Update.Link, fn :status, _ ->
         %{
           identifier: "90DA72000001",

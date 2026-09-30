@@ -23,6 +23,9 @@ defmodule Badge.Sim.Display do
     GenServer.call(__MODULE__, {:await_frame, sequence, timeout}, :infinity)
   end
 
+  @doc "Sets the panel's brightness for every viewer, from 0 (dark) to 1."
+  def backlight(level), do: GenServer.cast(__MODULE__, {:backlight, level})
+
   @impl Badge.Display
   def update(display, items), do: GenServer.call(display, {:update, items})
 
@@ -45,7 +48,8 @@ defmodule Badge.Sim.Display do
        asset_cache: %{},
        sequence: 0,
        waiters: [],
-       fonts: %{}
+       fonts: %{},
+       backlight: LEDC.level()
      }}
   end
 
@@ -94,8 +98,14 @@ defmodule Badge.Sim.Display do
   end
 
   @impl true
+  def handle_cast({:backlight, level}, state) do
+    for viewer <- state.viewers, do: send(viewer, {:backlight, level})
+    {:noreply, %{state | backlight: level}}
+  end
+
   def handle_cast({:attach, pid}, state) do
     viewers = attach_viewer(pid, state.viewers)
+    send(pid, {:backlight, state.backlight})
     {frame, assets, sent} = Encode.encode(state.items, MapSet.new())
     asset_cache = cache_assets(state.asset_cache, assets)
     publish([pid], assets, frame)

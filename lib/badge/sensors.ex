@@ -38,13 +38,13 @@ defmodule Badge.Sensors do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  @doc "Reads the accelerometer now, in milli-g."
+  @doc "Reads the accelerometer now, in milli-g in the panel's frame (see `Badge.Accel`)."
   @spec acceleration() :: Accel.mg()
   def acceleration do
     GenServer.call(__MODULE__, :acceleration)
   end
 
-  @doc "Reads the accelerometer now and returns roll and pitch in whole degrees."
+  @doc "Reads the accelerometer now and returns roll and pitch as `Badge.Accel.orientation/1` does."
   @spec orientation() :: {integer, integer}
   def orientation do
     GenServer.call(__MODULE__, :orientation)
@@ -87,6 +87,9 @@ defmodule Badge.Sensors do
   def handle_call(:temperature, _from, state) do
     {:reply, read_temp(state.i2c), state}
   end
+
+  @impl true
+  def handle_cast(request, state), do: {:stop, {:bad_cast, request}, state}
 
   defp read_accel(%{i2c: i2c, accel: previous}) do
     case I2C.read_bytes(i2c, @sc7a20_addr, @sc7a20_out_x_l ||| @sc7a20_auto_increment, 6) do

@@ -19,11 +19,12 @@ defmodule Badge.Skin do
   alias Badge.Skin.Macintosh
   alias Badge.Skin.NeonDusk
   alias Badge.Skin.Win95
+  alias Badge.Skin.WinXP
 
   @key :badge_skin
   @nvs_key :skin
   @default Dark
-  @all [Dark, Win95, Macintosh, NeonDusk]
+  @all [Dark, Win95, WinXP, Macintosh, NeonDusk]
 
   @doc "The label shown when picking a skin, and what it is stored as."
   @callback name() :: binary
