@@ -11,7 +11,7 @@ defmodule Badge.Skin.NeonDusk do
   alias Badge.Theme
 
   @bar 0x07050D
-  @surface 0x0D0A18
+  @surface 0x000000
   @title 0xF0EAFF
   @caption 0xB3A9D2
   @divider 0x3A3154
@@ -47,8 +47,15 @@ defmodule Badge.Skin.NeonDusk do
   # A striped sun: {dx, dy, w, h} bands, widest at the horizon.
   @sun_x 6
   @sun_y 5
-  @sun [{4, 0, 4, 1}, {2, 1, 8, 1}, {1, 2, 10, 1}, {0, 3, 12, 2}, {0, 6, 12, 2}, {0, 9, 12, 1},
-        {0, 11, 12, 1}]
+  @sun [
+    {4, 0, 4, 1},
+    {2, 1, 8, 1},
+    {1, 2, 10, 1},
+    {0, 3, 12, 2},
+    {0, 6, 12, 2},
+    {0, 9, 12, 1},
+    {0, 11, 12, 1}
+  ]
 
   @status_y 3
   @status_margin 6
@@ -108,6 +115,16 @@ defmodule Badge.Skin.NeonDusk do
         {:rect, 0, 0, Theme.width(), Theme.bar_h(), @bar},
         {:rect, 0, 0, Theme.width(), Theme.height(), @surface}
       ]
+  end
+
+  # A neon rainbow round the panel, a scan beam, and the odd glitch.
+  @impl true
+  def decor do
+    [
+      {:border, 3, 90, [0xFF2BD6, 0x8A63E8, 0x2BD9FF, 0x2BFF88, 0xFFE14D, 0xFF6A3D]},
+      {:beam, 0x5CC8F5, 7000, 2, 64},
+      {:glitch, [0xE85FAF, 0x5CC8F5], 3000, 9000}
+    ]
   end
 
   @impl true
