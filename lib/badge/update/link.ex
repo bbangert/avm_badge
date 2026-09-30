@@ -6,9 +6,12 @@ defmodule Badge.Update.Link do
   started until the clock has synced: a shared-secret signature is refused if
   it was made more than ninety seconds ago, and a badge boots at the epoch.
 
-  Updates and reboots are both manual, so the agent reports an offer and stops
-  there. `install/0` starts the download in its own process and `reboot/0`
-  restarts once it has landed. Nothing here happens without a keypress.
+  Where the product allows it the badge manages its own updates: it switches
+  NervesHub to device-managed mode on joining, checks for an update, and
+  `install/0` asks for it, which the agent downloads. Otherwise NervesHub pushes
+  offers, and `install/0` downloads one in its own process. Either way
+  `reboot/0` restarts once it has landed, and nothing installs without a
+  keypress.
 
   There is no automatic rollback below this: a badge that boots into broken
   firmware stays there until `revert/0` is reached.
@@ -96,7 +99,10 @@ defmodule Badge.Update.Link do
       trial: false,
       starting: false,
       metadata: nil,
-      download: nil
+      download: nil,
+      managed: false,
+      asked: false,
+      checked: false
     }
 
     start_ticker()
@@ -138,15 +144,24 @@ defmodule Badge.Update.Link do
 
   def handle_cast(:check, %{agent: nil} = state), do: {:noreply, state}
 
+  def handle_cast(:check, %{managed: true} = state),
+    do: {:noreply, ask(:check, &NervesHubLink.check_for_update/1, state)}
+
   def handle_cast(:check, state) do
     NervesHubLink.push(state.agent, "check_update", %{})
 
     {:noreply, state}
   end
 
-  def handle_cast(:install, %{payload: nil} = state), do: {:noreply, state}
-
   def handle_cast(:install, %{state: :downloading} = state), do: {:noreply, state}
+
+  def handle_cast(:install, %{managed: true, state: :offered} = state) do
+    :io.format(~c"Update: requesting ~s~n", [state.offer])
+
+    {:noreply, ask(:request, &NervesHubLink.request_update/1, state)}
+  end
+
+  def handle_cast(:install, %{payload: nil} = state), do: {:noreply, state}
 
   def handle_cast(:install, state) do
     :io.format(~c"Update: installing ~p~n", [state.payload])
@@ -222,11 +237,19 @@ defmodule Badge.Update.Link do
     {:noreply, start_agent(described)}
   end
 
+  # Answers from a connection that has since gone are dropped.
+  def handle_info({:asked, agent, what, result}, %{agent: agent} = state),
+    do: {:noreply, answered(what, result, state)}
+
+  def handle_info({:asked, _agent, _what, _result}, state), do: {:noreply, state}
+
   def handle_info({:nh_ota, _pid, {:progress, percent}}, state) do
     report(state, percent)
 
     {:noreply, %{state | percent: percent}}
   end
+
+  def handle_info({:nh_ota, _pid, :started}, state), do: {:noreply, state}
 
   def handle_info({:nh_ota, _pid, {:ok, slot}}, state) do
     :io.format(~c"Update: written to ~s~n", [slot])
@@ -267,7 +290,9 @@ defmodule Badge.Update.Link do
   defp hub({:joined, response}, state) do
     :io.format(~c"Update: joined~n")
 
-    offered(response, %{state | state: :current, reason: nil, trial: pending?()})
+    joined = %{state | state: :current, reason: nil, trial: pending?()}
+
+    offered(response, %{joined | managed: false, asked: false, checked: false})
   end
 
   defp hub({:joined, topic, _response}, state) do
@@ -313,10 +338,102 @@ defmodule Badge.Update.Link do
 
   defp hub({:firmware_committed, _slot}, state), do: %{state | trial: false}
 
+  defp hub({:update_mode, mode, allowed}, state) do
+    :io.format(~c"Update: mode ~p, managed updates allowed ~p~n", [mode, allowed])
+
+    reported = %{state | managed: mode == :device_managed}
+
+    case mode_action(mode, allowed, state) do
+      :switch ->
+        ask(:mode, &NervesHubLink.set_update_mode(&1, :device_managed), %{reported | asked: true})
+
+      :check ->
+        ask(:check, &NervesHubLink.check_for_update/1, %{reported | checked: true})
+
+      :none ->
+        reported
+    end
+  end
+
+  defp hub({:update_started, _pid}, state), do: %{state | state: :downloading, percent: nil}
+
+  defp hub({:update_ready, slot}, state) do
+    :io.format(~c"Update: written to ~s~n", [slot])
+
+    %{state | state: :ready, percent: 100, target: slot}
+  end
+
+  defp hub({:update_failed, reason}, state) do
+    :io.format(~c"Update: failed ~p~n", [reason])
+
+    failed(state, reason)
+  end
+
   defp hub(event, state) do
     :io.format(~c"Update: hub ~p~n", [event])
 
     state
+  end
+
+  @doc """
+  What a reported update mode asks of the badge: `:switch` to device-managed
+  mode, `:check` for an update, or `:none`. `flags` says whether this
+  connection has already asked to switch and already checked.
+  """
+  @spec mode_action(atom, boolean, %{asked: boolean, checked: boolean}) ::
+          :switch | :check | :none
+  def mode_action(:device_managed, _allowed, %{checked: false}), do: :check
+  def mode_action(:device_managed, _allowed, _flags), do: :none
+  def mode_action(_mode, true, %{asked: false}), do: :switch
+  def mode_action(_mode, _allowed, _flags), do: :none
+
+  # The agent answers these once NervesHub has, so they wait in a process of their own.
+  defp ask(what, call, %{agent: agent} = state) do
+    link = self()
+
+    spawn(fn -> send(link, {:asked, agent, what, call.(agent)}) end)
+
+    state
+  end
+
+  # The mode itself arrives as an `update_mode` event, which starts the check.
+  defp answered(:mode, {:ok, _mode}, state), do: state
+
+  defp answered(:mode, {:error, reason}, state) do
+    :io.format(~c"Update: staying on pushed updates ~p~n", [reason])
+
+    state
+  end
+
+  defp answered(:check, {:ok, %{available: true, firmware_meta: meta}}, %{state: now} = state)
+       when now == :current or now == :failed do
+    offered(%{"update_available" => true, "firmware_meta" => meta}, %{state | reason: nil})
+  end
+
+  defp answered(:check, {:ok, %{available: false}}, %{state: now} = state)
+       when now == :current or now == :failed do
+    :io.format(~c"Update: up to date~n")
+
+    %{state | state: :current, reason: nil}
+  end
+
+  defp answered(:check, {:ok, _result}, state), do: state
+
+  defp answered(:check, {:error, reason}, state) do
+    :io.format(~c"Update: check failed ~p~n", [reason])
+
+    failed(state, reason)
+  end
+
+  defp answered(:request, :ok, %{state: :offered} = state),
+    do: %{state | state: :downloading, percent: nil}
+
+  defp answered(:request, :ok, state), do: state
+
+  defp answered(:request, {:error, reason}, state) do
+    :io.format(~c"Update: request refused ~p~n", [reason])
+
+    failed(state, reason)
   end
 
   @doc """
@@ -407,6 +524,8 @@ defmodule Badge.Update.Link do
       host: host(),
       updates: :manual,
       reboot: :manual,
+      # The agent only runs on the Update tab, so it cannot prove new firmware in time.
+      firmware_trial: :off,
       firmware: {:metadata, state.metadata},
       console: true,
       extensions: :all
@@ -437,7 +556,10 @@ defmodule Badge.Update.Link do
         payload: nil,
         starting: false,
         metadata: nil,
-        download: nil
+        download: nil,
+        managed: false,
+        asked: false,
+        checked: false
     }
   end
 

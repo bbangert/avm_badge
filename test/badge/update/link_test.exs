@@ -97,4 +97,23 @@ defmodule Badge.Update.LinkTest do
       assert Link.blocker(%{radio: :disabled, synced: false}) == "wifi off"
     end
   end
+
+  describe "what a reported update mode asks for" do
+    @fresh %{asked: false, checked: false}
+
+    test "a badge allowed to manage its updates asks to, once" do
+      assert Link.mode_action(:automatic, true, @fresh) == :switch
+      assert Link.mode_action(:automatic, true, %{@fresh | asked: true}) == :none
+    end
+
+    test "a badge that is not allowed stays on pushed offers" do
+      assert Link.mode_action(:automatic, false, @fresh) == :none
+      assert Link.mode_action(:unknown, false, @fresh) == :none
+    end
+
+    test "once managing its updates, it checks for one, once per connection" do
+      assert Link.mode_action(:device_managed, true, @fresh) == :check
+      assert Link.mode_action(:device_managed, true, %{@fresh | checked: true}) == :none
+    end
+  end
 end

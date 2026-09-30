@@ -1,8 +1,8 @@
 defmodule Badge.Page.About do
   @moduledoc """
-  The Goatmire badge story, credits and repository QR code.
+  What the badge is, a QR code for its repository, and who made it.
 
-  Left and right move through the three static screens. The repository code is
+  Left and right move through the three tabs. The repository code is
   encoded in the background when the page opens, so a slow encode on AtomVM
   never holds up the panel, and uses the same AtomGL item on hardware and in
   the simulator.
@@ -10,7 +10,7 @@ defmodule Badge.Page.About do
 
   use Badge.Page
 
-  alias Badge.Font
+  alias Badge.FontType
   alias Badge.Icons
   alias Badge.Nav
   alias Badge.QR
@@ -18,7 +18,28 @@ defmodule Badge.Page.About do
 
   @repository "https://github.com/protolux-electronics/avm_badge"
 
-  @screens 3
+  @titles ["Badge", "Getting started", "Credits"]
+  @screens length(@titles)
+
+  @margin 8
+  @strip_y Theme.content_top()
+  @rule_y @strip_y + 22
+  @top @rule_y + 8
+  @line_h 18
+  @blank_h 10
+  @indent 16
+
+  # The shape keys' colours, the same on every skin.
+  @red 0xE5484D
+  @yellow 0xF2C12E
+  @green 0x3FB36B
+  @blue 0x3B82F6
+
+  @qr_scale 3
+  @qr_w (case QR.encode(@repository) do
+           {:ok, %{image: {:rgba8888, width, _height, _pixels}}} -> width * @qr_scale
+         end)
+  @qr_text_x @margin + @qr_w + 12
 
   @impl true
   def title, do: "About"
@@ -59,74 +80,80 @@ defmodule Badge.Page.About do
   def handle_key(_event, _state), do: :ignore
 
   @impl true
-  def render(%{index: index} = state), do: screen(index, state) ++ Nav.dots(@screens, index)
+  def render(%{index: index} = state) do
+    Nav.tabs(@titles, index, @strip_y) ++
+      Theme.rule(@margin, @rule_y, Theme.width() - 2 * @margin) ++ screen(index, state)
+  end
 
   defp screen(0, _state) do
-    [
-      heading("Description"),
-      centered("Made for Goatmire", 62),
-      text(16, 86, "An open, hackable badge by"),
-      centered("Protolux Electronics", 106),
-      text(16, 136, "ESP32-S3 + ST7789 display"),
-      text(16, 160, "6x13 keyboard + SK6812 LEDs"),
-      text(16, 184, "Elixir firmware on AtomVM")
-    ]
+    lines(@margin, @top, [
+      {Theme.fg(), "Made for Goatmire Elixir by Protolux"},
+      {Theme.fg(), "Electronics."},
+      nil,
+      {Theme.dim(), "An ESP32-S3 runs AtomVM, a small"},
+      {Theme.dim(), "Erlang VM, so all of the firmware is"},
+      {Theme.dim(), "Elixir. It has wifi, an IR link for"},
+      {Theme.dim(), "swapping contacts, a 320x240 screen"},
+      {Theme.dim(), "and a full keyboard."},
+      nil,
+      {Theme.dim(), "The code is open source, so go ahead"},
+      {Theme.dim(), "and change it."}
+    ])
   end
 
-  defp screen(1, _state) do
-    [
-      heading("Credits"),
-      credit("Gus Workman", 68),
-      credit("Lars Wikman", 100),
-      credit("Pepe Marquez", 132),
-      credit("Davide Bettio", 164)
-    ]
+  defp screen(1, state) do
+    qr(state) ++
+      lines(@qr_text_x, @top, [
+        {Theme.fg(), "Scan this for the"},
+        {Theme.fg(), "source code."},
+        nil,
+        {Theme.dim(), "The readme shows you"},
+        {Theme.dim(), "how to flash your own"},
+        {Theme.dim(), "changes."}
+      ]) ++ repository_label(@top + @qr_w + 12)
   end
 
-  defp screen(2, %{qr: {:ok, code}}) do
-    scale = 3
-    width = (code.size + 8) * scale
-
-    [heading("Getting started"), QR.item(code, div(Theme.width() - width, 2), 54, scale)] ++
-      repository_label(190)
+  defp screen(2, _state) do
+    lines(@margin, @top, [
+      {Theme.dim(), "Brought to you by"},
+      nil,
+      {@red, "Gus Workman", @indent},
+      {@yellow, "Lars Wikman", @indent},
+      {@green, "Pepe Marquez", @indent},
+      {@blue, "Davide Bettio", @indent},
+      nil,
+      {Theme.dim(), "Thanks also to everyone who sent in"},
+      {Theme.dim(), "code, and to all the people who helped"},
+      {Theme.dim(), "us assemble badges at the conference."}
+    ])
   end
 
-  defp screen(2, %{qr: :pending}) do
-    [heading("Getting started"), centered("Generating...", 104)] ++ repository_label(190)
+  defp qr(%{qr: {:ok, code}}), do: [QR.item(code, @margin, @top, @qr_scale)]
+  defp qr(%{qr: :pending}), do: lines(@margin, @top, [{Theme.dim(), "Encoding..."}])
+  defp qr(%{qr: {:error, _reason}}), do: lines(@margin, @top, [{Theme.dim(), "No QR code"}])
+
+  # A `nil` line is a blank one; a third element indents the line.
+  defp lines(x, y, lines) do
+    {items, _y} =
+      Enum.reduce(lines, {[], y}, fn
+        nil, {items, y} -> {items, y + @blank_h}
+        {colour, body}, {items, y} -> {[text(x, y, colour, body) | items], y + @line_h}
+        {colour, body, dx}, {items, y} -> {[text(x + dx, y, colour, body) | items], y + @line_h}
+      end)
+
+    :lists.reverse(items)
   end
 
-  defp screen(2, %{qr: {:error, _reason}}) do
-    [heading("Getting started"), centered("QR unavailable", 104)] ++ repository_label(190)
-  end
-
-  defp text(x, y, body) do
-    {:text, x, y, :default16px, Theme.fg(), Theme.bg(), body}
-  end
-
-  defp heading(body) do
-    x = div(Theme.width() - byte_size(body) * 8, 2)
-    {:text, x, 30, :default16px, Theme.accent(), Theme.bg(), body}
-  end
-
-  defp centered(body, y), do: centered(body, y, :default16px)
-
-  defp centered(body, y, font) do
-    x = div(Theme.width() - Font.width(font, body), 2)
-    {:text, x, y, font, Theme.fg(), Theme.bg(), body}
-  end
-
-  defp credit(body, y), do: centered(body, y, :pixel_operator)
+  defp text(x, y, colour, body), do: {:text, x, y, FontType.body(), colour, Theme.bg(), body}
 
   defp repository_label(y) do
     body = "protolux-electronics/avm_badge"
     {icon_width, _height} = Icons.size(:github)
     gap = 6
-    width = icon_width + gap + Font.width(:pixel_operator, body)
-    x = div(Theme.width() - width, 2)
 
     [
-      Icons.item(:github, x, y),
-      {:text, x + icon_width + gap, y, :pixel_operator, Theme.fg(), Theme.bg(), body}
+      Icons.item(:github, @margin, y),
+      {:text, @margin + icon_width + gap, y, FontType.heading(), Theme.dim(), Theme.bg(), body}
     ]
   end
 end
