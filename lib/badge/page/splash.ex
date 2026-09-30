@@ -50,6 +50,13 @@ defmodule Badge.Page.Splash do
   # Jitter on the frame a piece lands, then the frame after, in pixels.
   @jitter [10, 3]
 
+  # On LVGL the pieces glide by themselves, so the page draws once per phase.
+  @native Application.compile_env(:avm_badge, :display, :atomgl) == :lvgl
+  @glide_in_ms 200
+  @glide_out_ms 120
+  @arrive_push 10
+  @leave_push 6
+
   @impl true
   def title, do: "Goatmire"
 
@@ -112,7 +119,7 @@ defmodule Badge.Page.Splash do
 
     case elapsed >= @total_ms do
       true -> {:goto, Home}
-      false -> %{state | step: step(elapsed)}
+      false -> %{state | step: phase_step(elapsed)}
     end
   end
 
@@ -120,7 +127,69 @@ defmodule Badge.Page.Splash do
   def handle_key(_event, state), do: {:ok, %{state | done: true}}
 
   @impl true
-  def render(state), do: frame(state.step, state.seed, state.image)
+  # Frame by frame for AtomGL; one step a phase for LVGL, which moves the pieces itself.
+  if @native do
+    def render(state), do: gliding(state.step, state.seed, state.image)
+
+    defp phase_step(elapsed) do
+      case step(elapsed) do
+        {phase, _n} -> {phase, 0}
+      end
+    end
+  else
+    def render(state), do: frame(state.step, state.seed, state.image)
+
+    defp phase_step(elapsed), do: step(elapsed)
+  end
+
+  @doc """
+  Display items for a whole phase on LVGL: each piece glides in on the delay
+  it would have landed at, pushed sideways the way its jitter went, and out
+  again the same way.
+  """
+  @spec gliding({atom, non_neg_integer}, pos_integer, tuple | nil) :: [tuple]
+  def gliding(_step, _seed, nil), do: [cover()]
+  def gliding({:hold, _n}, _seed, image), do: [Logo.item(@x, @y, image), cover()]
+
+  def gliding({:in, _n}, seed, image) do
+    pieces = pieces(seed)
+    count = length(pieces)
+
+    # Arrivals end a glide before the hold, so the last piece has settled when the logo takes over.
+    spread = @in_frames * @frame_ms - @glide_in_ms
+
+    items =
+      for {piece, index} <- pieces do
+        delay = div(land_frame(index, count, @in_frames) * spread, @in_frames)
+        push = push(seed, index, @arrive_push)
+
+        {:motion, item(piece, 0, image), {push, 0, :in, delay, @glide_in_ms, :overshoot}}
+      end
+
+    items ++ [cover()]
+  end
+
+  def gliding({:out, _n}, seed, image) do
+    pieces = pieces(seed)
+    count = length(pieces)
+
+    items =
+      for {piece, index} <- pieces do
+        delay = land_frame(count - 1 - index, count, @out_frames) * @frame_ms
+        push = push(seed, index, @leave_push)
+
+        {:motion, item(piece, 0, image), {push, 0, :out, delay, @glide_out_ms, :ease_out}}
+      end
+
+    items ++ [cover()]
+  end
+
+  # The same side a piece's jitter pushes it, kept on the panel.
+  defp push(seed, index, amount) do
+    {roll, _next} = roll(mix(seed, index * 7 + 3))
+
+    clamp((1 - 2 * rem(roll, 2)) * amount)
+  end
 
   @doc """
   Which part of the sequence `elapsed` milliseconds falls in, and the frame within it.

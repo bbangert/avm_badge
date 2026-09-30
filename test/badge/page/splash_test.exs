@@ -87,7 +87,8 @@ defmodule Badge.Page.SplashTest do
 
     test "a piece that landed two frames ago is at rest" do
       earlier =
-        for {_x, _y, _w, _h, cx, cy} <- pieces(Splash.frame({:in, 7}, @seed, @image)), do: {cx, cy}
+        for {_x, _y, _w, _h, cx, cy} <- pieces(Splash.frame({:in, 7}, @seed, @image)),
+            do: {cx, cy}
 
       rested =
         for {x, _y, _w, _h, cx, cy} <- pieces(Splash.frame({:in, 9}, @seed, @image)),
@@ -100,7 +101,8 @@ defmodule Badge.Page.SplashTest do
 
     test "a landing piece is jittered sideways, then still" do
       moved =
-        for n <- 0..9, {x, _y, _w, _h, cx, _cy} <- pieces(Splash.frame({:in, n}, @seed, @image)) do
+        for n <- 0..9,
+            {x, _y, _w, _h, cx, _cy} <- pieces(Splash.frame({:in, n}, @seed, @image)) do
           x - cx * 2 - home_x()
         end
 
@@ -184,6 +186,46 @@ defmodule Badge.Page.SplashTest do
 
     test "is all there is without a logo" do
       assert [{:rect, 0, 0, _w, _h, 0x000000}] = Splash.frame({:in, 3}, @seed, nil)
+    end
+  end
+
+  describe "gliding, for LVGL" do
+    @image {:rgba8888, 120, 68, :binary.copy(<<0, 0, 0, 255>>, 120 * 68)}
+
+    test "brings every piece in at once, each on its own delay, and none after the hold starts" do
+      items = Splash.gliding({:in, 0}, @seed, @image)
+      motions = for {:motion, _item, motion} <- items, do: motion
+
+      assert length(motions) == length(Splash.pieces(@seed))
+      assert Enum.all?(motions, &match?({_push, 0, :in, _delay, 200, :overshoot}, &1))
+
+      delays = for {_push, _y, _dir, delay, ms, _ease} <- motions, do: delay + ms
+      assert Enum.max(delays) <= 1_000
+      assert length(Enum.uniq(for {_, _, _, delay, _, _} <- motions, do: delay)) > 1
+    end
+
+    test "pushes each piece the way its jitter goes, and keeps the black cover underneath" do
+      items = Splash.gliding({:in, 0}, @seed, @image)
+
+      assert List.last(items) == {:rect, 0, 0, 320, 240, 0x000000}
+
+      assert Enum.all?(
+               for({:motion, _, {push, _, _, _, _, _}} <- items, do: push),
+               &(&1 in [-10, 10])
+             )
+    end
+
+    test "sends every piece out on its own delay" do
+      motions =
+        for {:motion, _item, motion} <- Splash.gliding({:out, 0}, @seed, @image), do: motion
+
+      assert length(motions) == length(Splash.pieces(@seed))
+      assert Enum.all?(motions, &match?({_push, 0, :out, _delay, 120, :ease_out}, &1))
+    end
+
+    test "holds the whole logo still" do
+      assert [{:scaled_cropped_image, _, _, _, _, _, 0, 0, _, _, [], @image}, _cover] =
+               Splash.gliding({:hold, 0}, @seed, @image)
     end
   end
 end
