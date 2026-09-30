@@ -158,8 +158,9 @@ reflash of every badge.
 
 The VM this firmware runs on is a fork of AtomVM, published as releases at
 [bbangert/AtomVM](https://github.com/bbangert/AtomVM). `BASE_IMAGE` names the
-release this firmware expects: `badge-v3` adds the LED effects driver to
-`badge-v2`'s LVGL display driver, and `badge-v1` has the older AtomGL one.
+release this firmware expects: `badge-v4` is `badge-v3` trimmed for flash
+and internal RAM, `badge-v3` adds the LED effects driver to `badge-v2`'s LVGL
+display driver, and `badge-v1` has the older AtomGL one.
 
     mix badge.base            # bootloader, partition table, VM, boot.avm
     mix badge.base --vm-only  # just the VM and boot.avm
