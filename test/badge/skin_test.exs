@@ -26,11 +26,11 @@ defmodule Badge.SkinTest do
   end
 
   describe "decorations" do
-    test "only Neon Dusk has any, a travelling border among them" do
+    test "only Neon Dusk has any, a chaser round the edge among them" do
       assert Dark.decor() == []
       assert Win95.decor() == []
       assert Macintosh.decor() == []
-      assert Enum.any?(NeonDusk.decor(), &match?({:border, _, _, _}, &1))
+      assert Enum.any?(NeonDusk.decor(), &match?({:chaser, _, _, _, _, _}, &1))
     end
 
     test "a page gets lines only with its title bar, and a border only if it asks" do
@@ -39,7 +39,7 @@ defmodule Badge.SkinTest do
       end
 
       assert :lists.usort(kinds.(true, false)) == [:beam, :glitch, :line]
-      assert :lists.usort(kinds.(false, true)) == [:beam, :border, :glitch]
+      assert :lists.usort(kinds.(false, true)) == [:beam, :chaser, :glitch]
       assert :lists.usort(kinds.(false, false)) == [:beam, :glitch]
       assert Skin.decor(Dark, true, true) == []
     end
@@ -187,6 +187,11 @@ defmodule Badge.SkinTest do
           case spec do
             {:border, thickness, speed, colours} ->
               assert thickness in 1..8 and speed >= 0
+              assert length(colours) in 1..8
+              assert Enum.all?(colours, &(&1 in 0..0xFFFFFF))
+
+            {:chaser, thickness, speed, length, trail, colours} ->
+              assert thickness in 1..8 and speed > 0 and length > 0 and trail >= 0
               assert length(colours) in 1..8
               assert Enum.all?(colours, &(&1 in 0..0xFFFFFF))
 

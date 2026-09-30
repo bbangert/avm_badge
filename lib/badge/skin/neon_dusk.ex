@@ -129,7 +129,7 @@ defmodule Badge.Skin.NeonDusk do
       {:line, 0, Theme.bar_h(), Theme.width(), 2, @horizon, :pulse, @pulse_ms, @pulse_floor},
       {:line, 0, Theme.bar_h() + 2, Theme.width(), 1, @horizon_glow, :pulse, @pulse_ms,
        @pulse_floor},
-      {:border, 3, 360, [0xFF2BD6, 0x8A63E8, 0x2BD9FF, 0x2BFF88, 0xFFE14D, 0xFF6A3D]},
+      {:chaser, 3, 420, 36, 64, [0xE8FBFF, 0x2BD9FF, 0xFF2BD6]},
       {:beam, 0x5CC8F5, 7000, 2, 64},
       {:glitch, [0xE85FAF, 0x5CC8F5], 3000, 9000}
     ]

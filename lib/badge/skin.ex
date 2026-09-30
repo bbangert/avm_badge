@@ -58,6 +58,9 @@ defmodule Badge.Skin do
 
     * `{:border, thickness, pixels_per_second, [rgb]}`: a frame round the panel
       whose colours travel round it
+    * `{:chaser, thickness, pixels_per_second, length, trail, [rgb]}`: a line
+      `length` pixels long running clockwise round the panel's edge, coloured
+      head to tail, trailed by `trail` pixels that fade out
     * `{:beam, rgb, period_ms, height, opacity}`: a line that sweeps down the
       panel once a period
     * `{:glitch, [rgb], min_ms, max_ms}`: thin bars that flash at random
@@ -66,8 +69,8 @@ defmodule Badge.Skin do
       between `min_percent` and full brightness, or slides along itself
 
   An empty list is none. A line belongs to the title bar, so it shows only
-  where the bar does, and a border only on a page that asks for one; see
-  `decor/3`.
+  where the bar does, and a border or chaser only on a page that asks for
+  one; see `decor/3`.
   """
   @callback decor() :: [tuple]
 
@@ -84,6 +87,10 @@ defmodule Badge.Skin do
     do: chrome?
 
   defp shown?({:border, _thickness, _speed, _colours}, _chrome?, border?), do: border?
+
+  defp shown?({:chaser, _thickness, _speed, _length, _trail, _colours}, _chrome?, border?),
+    do: border?
+
   defp shown?(_spec, _chrome?, _border?), do: true
 
   @doc "Every skin, in the order they are picked through."
