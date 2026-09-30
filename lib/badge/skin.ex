@@ -52,6 +52,19 @@ defmodule Badge.Skin do
   @doc "A horizontal rule `w` wide with its top-left corner at `x, y`."
   @callback rule(x :: integer, y :: integer, w :: integer) :: [tuple]
 
+  @doc """
+  Decorations the display runs over every page by itself, on LVGL only:
+
+    * `{:border, thickness, pixels_per_second, [rgb]}`: a frame round the panel
+      whose colours travel round it
+    * `{:beam, rgb, period_ms, height, opacity}`: a line that sweeps down the
+      panel once a period
+    * `{:glitch, [rgb], min_ms, max_ms}`: thin bars that flash at random
+
+  An empty list is none.
+  """
+  @callback decor() :: [tuple]
+
   @doc "Every skin, in the order they are picked through."
   def all, do: @all
 

@@ -53,6 +53,9 @@ defmodule Badge.Skin.Dark do
   end
 
   @impl true
+  def decor, do: []
+
+  @impl true
   def rule(x, y, w), do: [{:rect, x, y, w, 1, dim()}]
 
   # default16px is 8px per character, so this is the one thing in the bar that can be centred.

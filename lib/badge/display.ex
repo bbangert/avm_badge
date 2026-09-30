@@ -6,6 +6,7 @@ defmodule Badge.Display do
   @callback update(term, [tuple]) :: :ok
   @callback register_font(term, atom, binary) :: :ok
   @callback deregister_font(term, atom) :: :ok
+  @callback decor(term, [tuple]) :: :ok
 
   @doc "Draws a complete frame."
   @spec update(t, [tuple]) :: :ok
@@ -19,4 +20,8 @@ defmodule Badge.Display do
   @doc "Releases a previously registered font."
   @spec deregister_font(t, atom) :: :ok
   def deregister_font({backend, display}, name), do: backend.deregister_font(display, name)
+
+  @doc "Replaces the decorations drawn over every page; see `c:Badge.Skin.decor/0`."
+  @spec decor(t, [tuple]) :: :ok
+  def decor({backend, display}, specs), do: backend.decor(display, specs)
 end

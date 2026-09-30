@@ -33,6 +33,10 @@ defmodule Badge.Sim.Display do
   @impl Badge.Display
   def deregister_font(display, name), do: GenServer.call(display, {:deregister_font, name})
 
+  # Decorations run in the badge's LVGL driver, which the simulator does not have.
+  @impl Badge.Display
+  def decor(_display, _specs), do: :ok
+
   @impl true
   def init(:ok) do
     {:ok,

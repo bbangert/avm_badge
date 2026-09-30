@@ -24,6 +24,15 @@ defmodule Badge.SkinTest do
     ]
   end
 
+  describe "decorations" do
+    test "only Neon Dusk has any, a travelling border among them" do
+      assert Dark.decor() == []
+      assert Win95.decor() == []
+      assert Macintosh.decor() == []
+      assert Enum.any?(NeonDusk.decor(), &match?({:border, _, _, _}, &1))
+    end
+  end
+
   describe "the list" do
     test "starts with the default" do
       assert hd(Skin.all()) == Skin.default()
@@ -151,6 +160,24 @@ defmodule Badge.SkinTest do
             end
 
           assert bottom <= Theme.content_top()
+        end
+      end
+
+      test "decorations are specs the LVGL driver reads" do
+        for spec <- @skin.decor() do
+          case spec do
+            {:border, thickness, speed, colours} ->
+              assert thickness in 1..8 and speed >= 0
+              assert length(colours) in 1..8
+              assert Enum.all?(colours, &(&1 in 0..0xFFFFFF))
+
+            {:beam, colour, period, height, opacity} ->
+              assert colour in 0..0xFFFFFF and period > 0 and height in 1..16 and
+                       opacity in 0..255
+
+            {:glitch, colours, min_ms, max_ms} ->
+              assert length(colours) in 1..8 and min_ms > 0 and max_ms >= min_ms
+          end
         end
       end
 

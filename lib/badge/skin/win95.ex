@@ -79,6 +79,9 @@ defmodule Badge.Skin.Win95 do
 
   # A groove: shadow above, highlight below.
   @impl true
+  def decor, do: []
+
+  @impl true
   def rule(x, y, w) do
     [{:rect, x, y, w, 1, @grey}, {:rect, x, y + 1, w, 1, @white}]
   end

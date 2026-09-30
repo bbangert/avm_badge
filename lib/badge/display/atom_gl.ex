@@ -29,6 +29,10 @@ defmodule Badge.Display.AtomGL do
     :ok
   end
 
+  # AtomGL repaints whole frames and has no layer to run decorations on.
+  @impl true
+  def decor(_port, _specs), do: :ok
+
   # init_seq_type "alt_gamma_2" matches this panel; rotation 3 needs the patch noted in Badge.Hardware.
   defp display_opts(spi) do
     [

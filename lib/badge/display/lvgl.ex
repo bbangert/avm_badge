@@ -55,6 +55,12 @@ defmodule Badge.Display.Lvgl do
   @impl true
   def deregister_font(_painter, _name), do: :ok
 
+  @impl true
+  def decor(painter, specs) do
+    send(painter, {:decor, specs})
+    :ok
+  end
+
   @doc "Internal, DMA and PSRAM memory as the driver sees it, and its refresh count."
   @spec stats(pid) :: tuple
   def stats(painter) do
@@ -87,12 +93,18 @@ defmodule Badge.Display.Lvgl do
     receive do
       {:frame, items} -> loop(port, paint(port, state, latest(port, items)))
       {:font, id, bytes} -> font(port, id, bytes, state)
+      {:decor, specs} -> decor(port, specs, state)
       {:stats, from, ref} -> stats(port, from, ref, state)
     end
   end
 
   defp font(port, id, bytes, state) do
     send_batch(port, [{:font, id, :uf, bytes}], @retries)
+    loop(port, state)
+  end
+
+  defp decor(port, specs, state) do
+    send_batch(port, [{:decor, specs}], @retries)
     loop(port, state)
   end
 

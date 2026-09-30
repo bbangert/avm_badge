@@ -51,6 +51,9 @@ defmodule Badge.UI do
 
   @compile {:no_warn_undefined, :atomvm}
 
+  # The skin whose decorations the display is running, in this process's dictionary.
+  @decor_key :badge_ui_decor
+
   # Ticker rate. A page renders at its own `refresh/0`, which must be a multiple of this.
   @base_interval 100
 
@@ -326,6 +329,10 @@ defmodule Badge.UI do
     Backlight.sleep()
     Pixels.sleep()
 
+    # Nothing is seen asleep, so the decorations stop; the first frame awake brings them back.
+    Display.decor(state.display, [])
+    :erlang.put(@decor_key, nil)
+
     %{state | asleep: true, idle: 0}
   end
 
@@ -449,9 +456,25 @@ defmodule Badge.UI do
   end
 
   defp render(%{display: display, page: page, page_state: page_state, status: status}) do
+    sync_decor(display)
+
     items = page.render(page_state) ++ frame(page, page_state, status)
 
     :ok = Display.update(display, items)
+  end
+
+  # The skin's decorations, sent again only when the skin changes.
+  defp sync_decor(display) do
+    skin = Skin.current()
+
+    case :erlang.get(@decor_key) do
+      ^skin ->
+        :ok
+
+      _other ->
+        Display.decor(display, skin.decor())
+        :erlang.put(@decor_key, skin)
+    end
   end
 
   # A page without the title bar still needs the background, which goes last.

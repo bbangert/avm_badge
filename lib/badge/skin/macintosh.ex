@@ -84,6 +84,9 @@ defmodule Badge.Skin.Macintosh do
   end
 
   @impl true
+  def decor, do: []
+
+  @impl true
   def rule(x, y, w), do: [{:rect, x, y, w, 1, @black}]
 
   # Centred on a white gap in the stripes left of the status cluster.
