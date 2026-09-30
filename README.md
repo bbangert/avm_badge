@@ -14,23 +14,16 @@ microcontrollers, and is written in Elixir.
   [asdf](https://asdf-vm.com/) (`asdf plugin add erlang && asdf plugin add
   elixir`) are both good choices
 
-- **`curl`** — `mix badge.base` downloads the VM release with it, falling
-  back to an authenticated [`gh`](https://cli.github.com/)
+- **`curl`** — `mix badge.base` downloads the VM release with it. macOS and
+  most Linux distributions already have it. Without `curl` it uses an
+  authenticated [`gh`](https://cli.github.com/) instead (`brew install gh`
+  on macOS, then `gh auth login`)
 
-On macOS:
-
-    brew install gh
-    gh auth login
-
-On Debian or Ubuntu:
-
-    # gh: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
-    gh auth login
-
-esptool is **not** needed: the flash tasks run it inside an embedded Python
-through [Pythonx](https://hex.pm/packages/pythonx), which downloads Python and
-esptool on first use. ESP-IDF is **not** needed to build or flash the firmware
-either — see [Advanced](#advanced) for the two things that do want it.
+That is all. esptool is **not** needed: the flash tasks run it inside an
+embedded Python through [Pythonx](https://hex.pm/packages/pythonx), which
+downloads Python and esptool the first time a task needs them. ESP-IDF is
+**not** needed to build or flash the firmware either — see
+[Advanced](#advanced) for the two things that do want it.
 
 ## Getting started
 
@@ -43,9 +36,13 @@ Plug the badge in over USB, then:
     mix badge.assets --flash   # once per board: fonts, icons, splash logo
     mix atomvm.esp32.flash     # the firmware itself, every time
 
+The first of these to flash downloads Python and esptool, so it needs a
+network connection and takes a minute longer. Later runs reuse them.
+
 The serial port is auto-detected, so do not pass `--port`. It appears as
 `/dev/cu.usbmodem*` on macOS and `/dev/ttyACM*` on Linux, and the path changes
-between sessions because the board re-enumerates.
+between sessions because the board re-enumerates. On Linux your user needs to
+be in the `dialout` group (or your distribution's equivalent) to open it.
 
 To watch it boot, open the console; the task resets the board and follows it
 through the reset:
@@ -54,6 +51,10 @@ through the reset:
 
 You should see the AtomVM banner, then `Badge: starting`, then the home grid
 on the panel. The six shape keys open the pages; the arrows page the grid.
+
+To get the badge online, open Settings (the diamond key), go to the WiFi tab,
+pick a network and type its passphrase. The badge remembers it. The clock,
+chat and Settings → Update all need a network.
 
 `mix badge.assets --flash` writes the assets partition, which holds the extra
 fonts, the splash logo and the rickroll frames. It is **not** updated over the
@@ -72,18 +73,25 @@ takes over the terminal and flashes badges as they are plugged in, several
 at a time. Each board gets a column: it is written in one go (base image,
 assets, firmware), watched until the boot log says `Badge: starting`, then
 the column turns green with a big OK or red with the error. Unplug it and
-the column goes away. Missing tools are installed on the first run, through
-`mise` when it is on `PATH` and otherwise as above; a C compiler is needed
-once, for the `muontrap` wrapper that keeps every child process contained. With
-`BADGE_NH_KEY`/`BADGE_NH_SECRET` or `AVM_BADGE_SERVER_URL` set and ESP-IDF
-sourced, it provisions NVS as well.
+the column goes away. Unlike the mix tasks, the station runs a standalone
+`esptool` on your `PATH`. If there is none, it installs one on the first run,
+through `mise`, `brew` or `pipx`, whichever it finds. A C compiler is needed
+once, for the `muontrap` wrapper that keeps every child process contained.
+With `BADGE_NH_KEY`/`BADGE_NH_SECRET` or `AVM_BADGE_SERVER_URL` set and
+ESP-IDF sourced, it provisions NVS as well.
 
 ### Without a board
 
     iex -S mix     # the firmware against fake hardware, panel at
                    # http://localhost:3240
-    mix test       # 1313 tests on the host
+    mix test       # the whole suite, on the host
     mix sim.check  # renders every page once, no browser
+
+The simulator draws the badge itself: click its keys or type. On a wide
+window a panel beside it shows the screen large, the log, or both. After
+editing code, press **Reload and reboot** to recompile and restart the badge
+on the new code, with no need to restart `iex`. A compile error shows in the
+log and leaves the badge off until the next reload compiles.
 
 ## How it fits together
 
