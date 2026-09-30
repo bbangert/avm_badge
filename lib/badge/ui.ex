@@ -56,7 +56,7 @@ defmodule Badge.UI do
 
   @compile {:no_warn_undefined, :atomvm}
 
-  # The skin whose decorations the display is running, in this process's dictionary.
+  # The decorations the display is running, in this process's dictionary.
   @decor_key :badge_ui_decor
 
   # Ticker rate. A page renders at its own `refresh/0`, which must be a multiple of this.
@@ -482,24 +482,24 @@ defmodule Badge.UI do
   end
 
   defp render(%{display: display, page: page, page_state: page_state, status: status}) do
-    sync_decor(display)
+    sync_decor(display, page, page_state)
 
     items = page.render(page_state) ++ frame(page, page_state, status)
 
     :ok = Display.update(display, items)
   end
 
-  # The skin's decorations, sent again only when the skin changes.
-  defp sync_decor(display) do
-    skin = Skin.current()
+  # The decorations the skin gives this page, sent again only when they change.
+  defp sync_decor(display, page, page_state) do
+    wanted = Skin.decor(Skin.current(), page.chrome?(page_state), page.border?(page_state))
 
     case :erlang.get(@decor_key) do
-      ^skin ->
+      ^wanted ->
         :ok
 
       _other ->
-        Display.decor(display, skin.decor())
-        :erlang.put(@decor_key, skin)
+        Display.decor(display, wanted)
+        :erlang.put(@decor_key, wanted)
     end
   end
 

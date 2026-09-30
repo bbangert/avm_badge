@@ -65,9 +65,26 @@ defmodule Badge.Skin do
       gradient line, such as the rule under the title bar, that breathes
       between `min_percent` and full brightness, or slides along itself
 
-  An empty list is none.
+  An empty list is none. A line belongs to the title bar, so it shows only
+  where the bar does, and a border only on a page that asks for one; see
+  `decor/3`.
   """
   @callback decor() :: [tuple]
+
+  @doc """
+  The decorations of `skin` for a page: lines only with the title bar
+  (`chrome?`), borders only where the page asks (`border?`), the rest always.
+  """
+  @spec decor(module, boolean, boolean) :: [tuple]
+  def decor(skin, chrome?, border?) do
+    for spec <- skin.decor(), shown?(spec, chrome?, border?), do: spec
+  end
+
+  defp shown?({:line, _x, _y, _w, _h, _colours, _mode, _period, _floor}, chrome?, _border?),
+    do: chrome?
+
+  defp shown?({:border, _thickness, _speed, _colours}, _chrome?, border?), do: border?
+  defp shown?(_spec, _chrome?, _border?), do: true
 
   @doc "Every skin, in the order they are picked through."
   def all, do: @all

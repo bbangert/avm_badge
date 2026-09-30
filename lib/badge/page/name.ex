@@ -112,10 +112,14 @@ defmodule Badge.Page.Name do
   def fonts(%{mode: :show, screen: @live_screen}), do: [@big_font]
   def fonts(_state), do: []
 
-  # The live screen has the panel to itself.
+  # The live screen has the panel to itself, framed by the skin's border if it has one.
   @impl true
   def chrome?(%{mode: :show, screen: @live_screen}), do: false
   def chrome?(_state), do: true
+
+  @impl true
+  def border?(%{mode: :show, screen: @live_screen}), do: true
+  def border?(_state), do: false
 
   @impl true
   def title, do: "Name"

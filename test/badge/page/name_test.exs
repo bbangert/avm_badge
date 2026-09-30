@@ -1118,6 +1118,12 @@ defmodule Badge.Page.NameTest do
       assert for({:text, _x, _y, :dogica, _c, _b, _row} <- items, do: 1) == []
     end
 
+    test "asks for the skin's border, and only on this screen" do
+      assert Name.border?(live(%{name: "Gus"}))
+      refute Name.border?(showing(%{name: "Gus"}))
+      refute Name.border?(press(live(%{name: "Gus"}), {:char, ?e}))
+    end
+
     test "hides the title bar, and only on this screen" do
       refute Name.chrome?(live(%{name: "Gus"}))
       assert Name.chrome?(showing(%{name: "Gus"}))

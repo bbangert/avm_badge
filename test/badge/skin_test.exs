@@ -33,6 +33,17 @@ defmodule Badge.SkinTest do
       assert Enum.any?(NeonDusk.decor(), &match?({:border, _, _, _}, &1))
     end
 
+    test "a page gets lines only with its title bar, and a border only if it asks" do
+      kinds = fn chrome?, border? ->
+        for spec <- Skin.decor(NeonDusk, chrome?, border?), do: elem(spec, 0)
+      end
+
+      assert :lists.usort(kinds.(true, false)) == [:beam, :glitch, :line]
+      assert :lists.usort(kinds.(false, true)) == [:beam, :border, :glitch]
+      assert :lists.usort(kinds.(false, false)) == [:beam, :glitch]
+      assert Skin.decor(Dark, true, true) == []
+    end
+
     test "Neon Dusk's horizon pulses where the chrome draws it" do
       lines = for {:line, _, y, _, h, _, :pulse, _, _} <- NeonDusk.decor(), do: {y, h}
 

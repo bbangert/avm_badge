@@ -9,7 +9,8 @@ defmodule Badge.Page do
 
   `use Badge.Page` supplies `handle_key/2`, `tick/1`, a 100 ms `refresh/0`, a
   placeholder `icon/0`, ignoring `handle_info/2` and `handle_ir/3`, a `fonts/1` that asks
-  for none, a `chrome?/1` that keeps the title bar, and a no-op `leave/1` for pages that
+  for none, a `chrome?/1` that keeps the title bar, a `border?/1` that asks for no border,
+  and a no-op `leave/1` for pages that
   need none of them, all overridable. Sub-pages inside
   a container never reach the home grid, so they leave `icon/0` alone.
   """
@@ -94,6 +95,13 @@ defmodule Badge.Page do
   @callback chrome?(state) :: boolean
 
   @doc """
+  Whether the skin's border decoration, if it has one, frames this state.
+
+  Borders are for showpiece screens, so a page asks for one; see `c:Badge.Skin.decor/0`.
+  """
+  @callback border?(state) :: boolean
+
+  @doc """
   Releases anything the page owns, just before `Badge.UI` switches away.
 
   A page is not a process, so a page that spawned one or claimed a pin has
@@ -131,6 +139,9 @@ defmodule Badge.Page do
       def chrome?(_state), do: true
 
       @impl true
+      def border?(_state), do: false
+
+      @impl true
       def leave(_state), do: :ok
 
       defoverridable handle_key: 2,
@@ -141,7 +152,8 @@ defmodule Badge.Page do
                      handle_info: 2,
                      handle_ir: 3,
                      fonts: 1,
-                     chrome?: 1
+                     chrome?: 1,
+                     border?: 1
     end
   end
 end
