@@ -319,6 +319,19 @@ defmodule Badge.Page.ShareTest do
       assert press(ticked, {:edit, :newline}).shared == [:name]
     end
 
+    test "space and x toggle a field just as enter does" do
+      for key <- [{:char, ?\s}, {:char, ?x}, {:char, ?X}] do
+        ticked = choosing() |> press({:move, :down}) |> press(key)
+
+        assert ticked.shared == [:name, :company], "#{inspect(key)} did not tick"
+        assert press(ticked, key).shared == [:name], "#{inspect(key)} did not clear"
+      end
+    end
+
+    test "other characters leave the fields alone" do
+      assert Page.handle_key({:char, ?a}, press(choosing(), {:move, :down})) == :ignore
+    end
+
     test "the name cannot be cleared" do
       assert press(choosing(), {:edit, :newline}).shared == [:name]
     end
