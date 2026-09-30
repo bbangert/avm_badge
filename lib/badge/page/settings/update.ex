@@ -192,6 +192,11 @@ defmodule Badge.Page.Settings.Update do
     Readout.right_row("update", offer <> " available", @update_y, Theme.select())
   end
 
+  # The agent downloads a requested update itself, and reports no percentage.
+  defp update_row(%{status: %{state: :downloading, percent: nil}}) do
+    Readout.right_row("update", "downloading", @update_y, Theme.accent())
+  end
+
   defp update_row(%{status: %{state: :downloading, percent: percent}}) do
     Readout.right_row("update", percent_text(percent), @update_y, Theme.accent())
   end
@@ -211,7 +216,7 @@ defmodule Badge.Page.Settings.Update do
   defp update_row(_state), do: []
 
   # Fill first, so the track shows through as the remainder.
-  defp bar(%{status: %{state: :downloading, percent: percent}}) do
+  defp bar(%{status: %{state: :downloading, percent: percent}}) when is_integer(percent) do
     [
       {:rect, @bar_x, @bar_y, div(@bar_w * percent, 100), @bar_h, Theme.accent()},
       {:rect, @bar_x, @bar_y, @bar_w, @bar_h, Theme.dim()}
