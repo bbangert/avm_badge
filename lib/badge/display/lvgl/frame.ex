@@ -9,7 +9,10 @@ defmodule Badge.Display.Lvgl.Frame do
   `{:fx_label, x, y, font, fg, bg, text, {effect, :in | :out, steps, ms, row,
   from_left, block}}`: text that plays a decrypt, rain, wipe or slide effect
   on itself, a step every `ms`. Being unchanged from frame to frame, either
-  costs nothing once it is on the panel. Each item becomes an
+  costs nothing once it is on the panel. Any item can also be wrapped as
+  `{:motion, item, {mx, my, :in | :out, delay_ms, ms, ease}}`: LVGL glides it
+  in from `mx, my` away once `delay_ms` has passed, or out to there and hides
+  it, eased `:linear`, `:ease_out`, `:overshoot` or `:bounce`. Each item becomes an
   LVGL object whose id is its z-order, 0 at the bottom, so the last item,
   the background, is object 0. An item equal to last frame's item at the
   same place costs nothing; a changed one sends only the properties that
@@ -35,7 +38,7 @@ defmodule Badge.Display.Lvgl.Frame do
 
   @doc "A state with nothing drawn; its first frame resets the panel."
   @spec new() :: map
-  def new, do: %{items: [], nodes: [], images: %{}, next_image: 0, fresh: true}
+  def new, do: %{items: [], nodes: [], images: %{}, recent: [], next_image: 0, fresh: true}
 
   @doc """
   The operations that turn the previous frame into `items`, and the new state.
@@ -47,8 +50,18 @@ defmodule Badge.Display.Lvgl.Frame do
   def frame(state, items) do
     bottom_up = :lists.reverse(items)
 
-    {nodes, ops, uploads, images, next_image} =
-      walk(bottom_up, state.items, state.nodes, 0, state.images, state.next_image, [], [], [])
+    {nodes, ops, uploads, {images, recent}, next_image} =
+      walk(
+        bottom_up,
+        state.items,
+        state.nodes,
+        0,
+        {state.images, state.recent},
+        state.next_image,
+        [],
+        [],
+        []
+      )
 
     count = length(nodes)
     deletes = deletes(length(state.nodes) - 1, count, [])
@@ -62,6 +75,7 @@ defmodule Badge.Display.Lvgl.Frame do
        | items: bottom_up,
          nodes: nodes,
          images: images,
+         recent: recent,
          next_image: next_image,
          fresh: false
      }}
@@ -117,7 +131,8 @@ defmodule Badge.Display.Lvgl.Frame do
   defp change(i, _prev, {type, props}, ops),
     do: [{:set, i, props}, {:new, i, lvgl_type(type)} | ops]
 
-  # An effect label is an ordinary LVGL label playing an effect.
+  # An effect label is an ordinary LVGL label playing an effect; a moving object is its own kind.
+  defp lvgl_type({:moving, type}), do: lvgl_type(type)
   defp lvgl_type(:fx), do: :label
   defp lvgl_type(type), do: type
 
@@ -178,6 +193,21 @@ defmodule Badge.Display.Lvgl.Frame do
     {{:fx, props}, images, next, uploads}
   end
 
+  defp node({:motion, item, {mx, my, direction, delay, ms, ease}}, images, next, uploads) do
+    {{type, props}, images, next, uploads} = node(item, images, next, uploads)
+
+    motion = [
+      mx: mx,
+      my: my,
+      mdir: if(direction == :out, do: 1, else: 0),
+      mdelay: delay,
+      mms: ms,
+      mease: ease_id(ease)
+    ]
+
+    {{{:moving, type}, props ++ motion}, images, next, uploads}
+  end
+
   defp node({:image, x, y, _bg, {:rgba8888, w, h, pixels}}, images, next, uploads) do
     {src, images, next, uploads} = image(w, h, pixels, images, next, uploads)
     props = [x: x, y: y, w: w, h: h, src: src, sx: @scale_one, sy: @scale_one, ox: 0, oy: 0]
@@ -213,6 +243,11 @@ defmodule Badge.Display.Lvgl.Frame do
   defp node(_item, images, next, uploads),
     do: {{:box, [x: 0, y: 0, w: 0, h: 0, bg: 0]}, images, next, uploads}
 
+  defp ease_id(:ease_out), do: 1
+  defp ease_id(:overshoot), do: 2
+  defp ease_id(:bounce), do: 3
+  defp ease_id(_linear), do: 0
+
   defp effect_id(:decrypt), do: 1
   defp effect_id(:rain), do: 2
   defp effect_id(:wipe), do: 3
@@ -244,9 +279,31 @@ defmodule Badge.Display.Lvgl.Frame do
   defp widen(<<byte, rest::binary>>, acc), do: widen(rest, <<acc::binary, byte::utf8>>)
 
   # One upload per distinct picture, however many items draw it.
-  defp image(w, h, pixels, images, next, uploads) do
-    key = {w, h, :erlang.crc32(pixels)}
+  # The same picture drawn many times costs one fingerprint: a recent binary is matched by comparison.
+  @recent 8
 
+  defp image(w, h, pixels, {images, recent}, next, uploads) do
+    {key, recent} = fingerprint(w, h, pixels, recent)
+    {src, images, next, uploads} = register(key, w, h, pixels, images, next, uploads)
+    {src, {images, recent}, next, uploads}
+  end
+
+  defp fingerprint(w, h, pixels, recent) do
+    case seen(pixels, recent) do
+      nil ->
+        key = {w, h, :erlang.crc32(pixels)}
+        {key, :lists.sublist([{pixels, key} | recent], @recent)}
+
+      key ->
+        {key, recent}
+    end
+  end
+
+  defp seen(_pixels, []), do: nil
+  defp seen(pixels, [{pixels, key} | _rest]), do: key
+  defp seen(pixels, [_other | rest]), do: seen(pixels, rest)
+
+  defp register(key, w, h, pixels, images, next, uploads) do
     case Map.get(images, key) do
       nil ->
         {next, Map.put(images, key, next), next + 1,
@@ -262,6 +319,7 @@ defmodule Badge.Display.Lvgl.Frame do
   defp used([{:image, [{:x, _}, {:y, _}, {:w, _}, {:h, _}, {:src, src} | _]} | rest], acc),
     do: used(rest, [src | acc])
 
+  defp used([{{:moving, :image}, props} | rest], acc), do: used([{:image, props} | rest], acc)
   defp used([_node | rest], acc), do: used(rest, acc)
 
   defp frees(images, used) do

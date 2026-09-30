@@ -165,6 +165,50 @@ defmodule Badge.Display.Lvgl.FrameTest do
     end
   end
 
+  describe "motion" do
+    test "adds LVGL's glide to any item, as an object of its own kind" do
+      item = {:motion, {:rect, 10, 20, 5, 5, 0xFF0000}, {8, 0, :in, 300, 200, :overshoot}}
+      {ops, _state} = Frame.frame(Frame.new(), [item])
+
+      assert [{:reset}, {:new, 0, :box}, {:set, 0, props}] = ops
+
+      assert props == [
+               x: 10,
+               y: 20,
+               w: 5,
+               h: 5,
+               bg: 0xFF0000,
+               mx: 8,
+               my: 0,
+               mdir: 0,
+               mdelay: 300,
+               mms: 200,
+               mease: 2
+             ]
+    end
+
+    test "a moving image keeps its picture alive" do
+      pixels = <<1, 2, 3, 255>>
+      image = {:image, 0, 0, 0, {:rgba8888, 1, 1, pixels}}
+      {_ops, state} = Frame.frame(Frame.new(), [{:motion, image, {0, 4, :out, 0, 100, :linear}}])
+      {ops, _state} = Frame.frame(state, [{:motion, image, {0, 4, :out, 0, 100, :linear}}])
+
+      assert ops == []
+      assert map_size(state.images) == 1
+    end
+  end
+
+  describe "fingerprints" do
+    test "one picture drawn many times is uploaded once" do
+      pixels = :binary.copy(<<7, 7, 7, 255>>, 64)
+      items = for x <- 1..20, do: {:image, x, 0, 0, {:rgba8888, 8, 8, pixels}}
+      {ops, state} = Frame.frame(Frame.new(), items)
+
+      assert length(for {:img, _, _, _, _, _} <- ops, do: 1) == 1
+      assert [{^pixels, _key}] = state.recent
+    end
+  end
+
   describe "scaled, cropped images" do
     test "scale by whole factors from the crop's corner" do
       pixels = :binary.copy(<<0, 0, 0, 255>>, 4)
