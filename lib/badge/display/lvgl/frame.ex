@@ -209,8 +209,34 @@ defmodule Badge.Display.Lvgl.Frame do
   end
 
   defp node({:image, x, y, _bg, {:rgba8888, w, h, pixels}}, images, next, uploads) do
-    {src, images, next, uploads} = image(w, h, pixels, images, next, uploads)
+    {src, images, next, uploads} = image(w, h, pixels, 1, images, next, uploads)
     props = [x: x, y: y, w: w, h: h, src: src, sx: @scale_one, sy: @scale_one, ox: 0, oy: 0]
+
+    {{:image, props}, images, next, uploads}
+  end
+
+  # An even scale is done once, when the picture is uploaded, so it draws as a plain copy.
+  defp node(
+         {:scaled_cropped_image, x, y, w, h, _bg, src_x, src_y, scale, scale, _opts,
+          {:rgba8888, iw, ih, pixels}},
+         images,
+         next,
+         uploads
+       )
+       when is_integer(scale) and scale >= 1 do
+    {src, images, next, uploads} = image(iw, ih, pixels, scale, images, next, uploads)
+
+    props = [
+      x: x,
+      y: y,
+      w: w,
+      h: h,
+      src: src,
+      sx: @scale_one,
+      sy: @scale_one,
+      ox: -src_x * scale,
+      oy: -src_y * scale
+    ]
 
     {{:image, props}, images, next, uploads}
   end
@@ -222,7 +248,7 @@ defmodule Badge.Display.Lvgl.Frame do
          next,
          uploads
        ) do
-    {src, images, next, uploads} = image(iw, ih, pixels, images, next, uploads)
+    {src, images, next, uploads} = image(iw, ih, pixels, 1, images, next, uploads)
 
     props = [
       x: x,
@@ -282,9 +308,12 @@ defmodule Badge.Display.Lvgl.Frame do
   # The same picture drawn many times costs one fingerprint: a recent binary is matched by comparison.
   @recent 8
 
-  defp image(w, h, pixels, {images, recent}, next, uploads) do
+  defp image(w, h, pixels, scale, {images, recent}, next, uploads) do
     {key, recent} = fingerprint(w, h, pixels, recent)
-    {src, images, next, uploads} = register(key, w, h, pixels, images, next, uploads)
+
+    {src, images, next, uploads} =
+      register({key, scale}, w, h, scale, pixels, images, next, uploads)
+
     {src, {images, recent}, next, uploads}
   end
 
@@ -303,16 +332,19 @@ defmodule Badge.Display.Lvgl.Frame do
   defp seen(pixels, [{pixels, key} | _rest]), do: key
   defp seen(pixels, [_other | rest]), do: seen(pixels, rest)
 
-  defp register(key, w, h, pixels, images, next, uploads) do
+  defp register(key, w, h, scale, pixels, images, next, uploads) do
     case Map.get(images, key) do
       nil ->
         {next, Map.put(images, key, next), next + 1,
-         [{:img, next, :rgba8888, w, h, pixels} | uploads]}
+         [upload(next, w, h, pixels, scale) | uploads]}
 
       id ->
         {id, images, next, uploads}
     end
   end
+
+  defp upload(id, w, h, pixels, 1), do: {:img, id, :rgba8888, w, h, pixels}
+  defp upload(id, w, h, pixels, scale), do: {:img, id, :rgba8888, w, h, pixels, scale}
 
   defp used([], acc), do: acc
 

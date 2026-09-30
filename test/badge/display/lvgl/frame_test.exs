@@ -210,12 +210,33 @@ defmodule Badge.Display.Lvgl.FrameTest do
   end
 
   describe "scaled, cropped images" do
-    test "scale by whole factors from the crop's corner" do
-      pixels = :binary.copy(<<0, 0, 0, 255>>, 4)
-      item = {:scaled_cropped_image, 10, 20, 8, 8, 0, 1, 1, 4, 4, [], {:rgba8888, 2, 2, pixels}}
+    @pixels :binary.copy(<<0, 0, 0, 255>>, 4)
+
+    test "an even scale is uploaded enlarged once, then drawn from the crop's corner unscaled" do
+      item = {:scaled_cropped_image, 10, 20, 8, 8, 0, 1, 1, 4, 4, [], {:rgba8888, 2, 2, @pixels}}
       {ops, _state} = Frame.frame(Frame.new(), [item])
 
-      assert {:set, 0, [x: 10, y: 20, w: 8, h: 8, src: 0, sx: 1024, sy: 1024, ox: -1, oy: -1]} =
+      assert {:img, 0, :rgba8888, 2, 2, @pixels, 4} in ops
+
+      assert {:set, 0, [x: 10, y: 20, w: 8, h: 8, src: 0, sx: 256, sy: 256, ox: -4, oy: -4]} =
+               List.last(ops)
+    end
+
+    test "the same picture at another scale is a separate upload" do
+      twice = {:scaled_cropped_image, 0, 0, 4, 4, 0, 0, 0, 2, 2, [], {:rgba8888, 2, 2, @pixels}}
+      thrice = {:scaled_cropped_image, 0, 0, 6, 6, 0, 0, 0, 3, 3, [], {:rgba8888, 2, 2, @pixels}}
+      {ops, _state} = Frame.frame(Frame.new(), [twice, thrice])
+
+      assert length(for {:img, _, _, _, _, _, _} <- ops, do: 1) == 2
+    end
+
+    test "uneven scales are left to LVGL" do
+      item = {:scaled_cropped_image, 0, 0, 4, 6, 0, 0, 0, 2, 3, [], {:rgba8888, 2, 2, @pixels}}
+      {ops, _state} = Frame.frame(Frame.new(), [item])
+
+      assert {:img, 0, :rgba8888, 2, 2, @pixels} in ops
+
+      assert {:set, 0, [x: 0, y: 0, w: 4, h: 6, src: 0, sx: 512, sy: 768, ox: 0, oy: 0]} =
                List.last(ops)
     end
   end
