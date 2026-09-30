@@ -228,6 +228,8 @@ defmodule Badge.Update.Link do
     {:noreply, %{state | percent: percent}}
   end
 
+  def handle_info({:nh_ota, _pid, :started}, state), do: {:noreply, state}
+
   def handle_info({:nh_ota, _pid, {:ok, slot}}, state) do
     :io.format(~c"Update: written to ~s~n", [slot])
 
@@ -407,6 +409,8 @@ defmodule Badge.Update.Link do
       host: host(),
       updates: :manual,
       reboot: :manual,
+      # The agent only runs on the Update tab, so it cannot prove new firmware in time.
+      firmware_trial: :off,
       firmware: {:metadata, state.metadata},
       console: true,
       extensions: :all
